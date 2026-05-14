@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -28,9 +29,11 @@ export default function RootLayout({
       className={`${roboto.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <div className="flex min-h-screen">
-          {children}
-        </div>
+        <Providers>
+          <div className="flex min-h-screen">
+            {children}
+          </div>
+        </Providers>
       </body>
     </html>
   );
