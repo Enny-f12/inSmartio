@@ -1,23 +1,14 @@
+// app/(dashboard)/users/page.tsx
 "use client";
 
+import { useState } from "react";
 import { Plus, Eye } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { DataTable, ColumnDef } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
+import UserDetail, { User } from "@/components/users/UserDetail";
 
-type UserType   = "Expert" | "Client" | "TAS";
-type UserStatus = "Active" | "Tier 1" | "Tier 2" | "Tier 3" | "Pending" | "Suspended";
-
-interface User {
-  id: number;
-  name: string;
-  type: UserType;
-  status: UserStatus;
-  joined: string;
-  jobs: number | "N/A";
-}
-
-const statusVariant: Record<UserStatus, "green" | "purple" | "yellow" | "red" | "gray"> = {
+const statusVariant: Record<string, "green" | "purple" | "yellow" | "red" | "gray"> = {
   Active:    "green",
   "Tier 1":  "purple",
   "Tier 2":  "purple",
@@ -41,49 +32,63 @@ const mockUsers: User[] = [
 
 const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
 
-const columns: ColumnDef<User>[] = [
-  {
-    key: "name",
-    header: "Name",
-    render: (u) => <span className="font-semibold text-text-main">{u.name}</span>,
-  },
-  {
-    key: "type",
-    header: "Type",
-    render: (u) => <span className="text-text-muted">{u.type}</span>,
-  },
-  {
-    key: "status",
-    header: "Status",
-    render: (u) => <StatusBadge label={u.status} variant={statusVariant[u.status]} />,
-  },
-  {
-    key: "joined",
-    header: "Joined",
-    render: (u) => <span className="text-text-muted">{u.joined}</span>,
-  },
-  {
-    key: "jobs",
-    header: "Jobs",
-    render: (u) => <span className="text-text-muted">{u.jobs}</span>,
-  },
-  {
-    key: "actions",
-    header: "Actions",
-    render: () => (
-      <button className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors" title="View user">
-        <Eye size={17} strokeWidth={1.8} />
-      </button>
-    ),
-  },
-];
-
 export default function UsersPage() {
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  if (selectedUser) {
+    return (
+      <div className="flex flex-col flex-1">
+        <Topbar title="User Management" />
+        <UserDetail user={selectedUser} onBack={() => setSelectedUser(null)} />
+      </div>
+    );
+  }
+
+  const columns: ColumnDef<User>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (u) => <span className="font-semibold text-text-main">{u.name}</span>,
+    },
+    {
+      key: "type",
+      header: "Type",
+      render: (u) => <span className="text-text-muted">{u.type}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (u) => <StatusBadge label={u.status} variant={statusVariant[u.status] ?? "gray"} />,
+    },
+    {
+      key: "joined",
+      header: "Joined",
+      render: (u) => <span className="text-text-muted">{u.joined}</span>,
+    },
+    {
+      key: "jobs",
+      header: "Jobs",
+      render: (u) => <span className="text-text-muted">{u.jobs}</span>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (u) => (
+        <button
+          onClick={() => setSelectedUser(u)}
+          className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
+          title="View user"
+        >
+          <Eye size={17} strokeWidth={1.8} />
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="User Management" />
 
-      {/* ── Page sub-header ── */}
       <div className="flex items-center justify-between px-8 py-5">
         <p className="text-sm text-text-muted">Manage all users</p>
         <button className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
@@ -92,7 +97,6 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* ── Table ── */}
       <main className="flex-1 px-8 pb-8">
         <DataTable
           data={mockUsers}
