@@ -1,133 +1,50 @@
+// components/payments/Payouttabs.tsx
 "use client";
 
+import { Search } from "lucide-react";
 import { useState } from "react";
-import { SlidersHorizontal, Download } from "lucide-react";
-import { FilterDropdown } from "@/components/ui/FilterDropdown";
-import { PayoutBadge } from "./PaymentBadges";
-import { mockPayouts, PAGE_SIZE } from "./types";
-
-const FILTER_OPTIONS = ["All", "Expert", "TAS", "Paid", "Pending", "Failed"] as const;
-
-function TH({ children }: { children: string }) {
-  return (
-    <th className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-      {children}
-    </th>
-  );
-}
-
-function TD({ children, bold }: { children: React.ReactNode; bold?: boolean }) {
-  return (
-    <td className={`px-5 py-4 text-[13.5px] ${bold ? "font-semibold text-text-main" : "text-text-muted"}`}>
-      {children}
-    </td>
-  );
-}
+import { mockPayouts } from "./types";
 
 export default function PayoutsTab() {
-  const [filter, setFilter] = useState<typeof FILTER_OPTIONS[number]>("All");
-  const [page,   setPage]   = useState(1);
+  const [search, setSearch] = useState("");
 
-  const filtered = mockPayouts.filter(p =>
-    filter === "All" || p.status === filter || p.role === filter
+  const filtered = mockPayouts.filter((p) =>
+    p.recipient.toLowerCase().includes(search.toLowerCase())
   );
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
   return (
     <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-
-      {/* Toolbar */}
       <div className="px-6 pt-5 pb-4 border-b border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <SlidersHorizontal size={15} className="text-text-muted" />
-          <span className="text-sm font-semibold text-text-main">Filter</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <FilterDropdown
-            value={filter}
-            options={FILTER_OPTIONS}
-            onChange={v => { setFilter(v); setPage(1); }}
+        <div className="relative">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text" placeholder="Search recipient..."
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
           />
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors ml-auto">
-            <Download size={14} /> Export
-          </button>
         </div>
       </div>
-
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-background">
-              <TH>Recipient</TH>
-              <TH>Role</TH>
-              <TH>Bank</TH>
-              <TH>Amount</TH>
-              <TH>Date</TH>
-              <TH>Status</TH>
+              {["Recipient", "Type", "Amount", "Status", "Date"].map((h) => (
+                <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {paginated.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-14 text-sm text-text-muted">
-                  No results found.
-                </td>
-              </tr>
-            ) : paginated.map(p => (
+            {filtered.map((p) => (
               <tr key={p.id} className="hover:bg-background transition-colors">
-                <TD bold>{p.recipient}</TD>
-                <TD>{p.role}</TD>
-                <TD>{p.bank}</TD>
-                <TD bold>{p.amount}</TD>
-                <TD>{p.date}</TD>
-                <td className="px-5 py-4">
-                  <PayoutBadge status={p.status} />
-                </td>
+                <td className="px-5 py-4 text-[13.5px] font-semibold text-text-main">{p.recipient}</td>
+                <td className="px-5 py-4 text-[13.5px] text-text-muted">{p.type}</td>
+                <td className="px-5 py-4 text-[13.5px] font-medium text-text-main">{p.amount}</td>
+                <td className="px-5 py-4 text-[13.5px] text-text-muted">{p.status}</td>
+                <td className="px-5 py-4 text-[13.5px] text-text-muted">{p.date}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-background">
-        <p className="text-[12px] text-text-muted">
-          {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
-        </p>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
-              className={`w-8 h-8 rounded-lg text-[12px] font-medium transition-all ${
-                p === page
-                  ? "btn-primary"
-                  : "border border-border bg-surface text-text-muted hover:bg-background"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
       </div>
     </div>
   );
