@@ -25,13 +25,13 @@ function MiniDropdown({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] border border-border bg-background text-text-muted hover:bg-surface transition-colors min-w-[110px]"
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] border border-border bg-background text-text-muted hover:bg-surface transition-colors min-w-27.5"
       >
         <span className="flex-1 text-left">{value || placeholder}</span>
         <ChevronDown size={13} className="text-text-muted" />
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 rounded-xl overflow-hidden py-1 bg-surface border border-border shadow-lg min-w-[130px]">
+        <div className="absolute top-full mt-1 left-0 z-50 rounded-xl overflow-hidden py-1 bg-surface border border-border shadow-lg min-w-32.5">
           {options.map((opt) => (
             <button
               key={opt}
@@ -77,7 +77,7 @@ export default function TransactionsTab() {
 
         <div className="flex items-center gap-3 flex-wrap">
           {/* Search + Search By */}
-          <div className="relative flex-1 min-w-[180px]">
+          <div className="relative flex-1 min-w-45">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
               type="text"
