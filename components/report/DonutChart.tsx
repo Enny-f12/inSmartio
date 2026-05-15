@@ -4,21 +4,21 @@ import type { DonutSegment } from "@/components/report/types";
 interface DonutChartProps {
   segments: DonutSegment[];
   title: string;
+  size?: number; // default 240, dashboard uses 280
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-function buildArcs(segments: DonutSegment[]) {
-  const SIZE = 240;
+function buildArcs(segments: DonutSegment[], SIZE: number) {
   const cx = SIZE / 2;
   const cy = SIZE / 2;
-  const R  = 90;
-  const r  = 52;
+  const R  = SIZE * 0.375;   // 90 / 240 ≈ 0.375
+  const r  = SIZE * 0.2167;  // 52 / 240 ≈ 0.2167
 
-  // Pre-compute cumulative start angles immutably
   const startAngles = segments.reduce<number[]>((acc, seg, i) => {
-    const prev  = i === 0 ? -90 : acc[i - 1] + (segments[i - 1].value / 100) * 360;
-    return [...acc, i === 0 ? -90 : prev];
+    if (i === 0) return [-90];
+    const prev = acc[i - 1] + (segments[i - 1].value / 100) * 360;
+    return [...acc, prev];
   }, []);
 
   return segments.map((seg, i) => {
@@ -53,21 +53,22 @@ function buildArcs(segments: DonutSegment[]) {
   });
 }
 
-export default function DonutChart({ segments, title }: DonutChartProps) {
-  const SIZE = 240;
-  const arcs = buildArcs(segments);
+export default function DonutChart({ segments, title, size = 240 }: DonutChartProps) {
+  const arcs = buildArcs(segments, size);
 
   return (
-    <div className="flex items-center gap-10">
+    <div className="flex items-center gap-12">
       {/* Donut */}
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
         {arcs.map((arc) => (
           <g key={arc.label}>
             <path d={arc.d} fill={arc.color} />
             <text
               x={arc.lx} y={arc.ly + 4}
-              textAnchor="middle" fontSize={11}
-              fontWeight="600" fill="#fff"
+              textAnchor="middle"
+              fontSize={size > 240 ? 13 : 11}
+              fontWeight="600"
+              fill="#fff"
             >
               {arc.value}%
             </text>
@@ -77,15 +78,15 @@ export default function DonutChart({ segments, title }: DonutChartProps) {
 
       {/* Legend */}
       <div>
-        <p className="text-[15px] font-semibold text-text-main mb-4">{title}</p>
-        <div className="space-y-3">
+        <p className="text-[15px] font-semibold text-text-main mb-5">{title}</p>
+        <div className="space-y-4">
           {segments.map((seg) => (
-            <div key={seg.label} className="flex items-center justify-between gap-8 text-[13px]">
+            <div key={seg.label} className="flex items-center justify-between gap-12 text-[13px]">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ background: seg.color }} />
-                <span className="text-text-main">{seg.label}:</span>
+                <span className="font-medium text-text-main">{seg.label}:</span>
               </div>
-              <span className="font-semibold text-text-main">{seg.value}%</span>
+              <span className="text-text-muted">{seg.value}%</span>
             </div>
           ))}
         </div>
