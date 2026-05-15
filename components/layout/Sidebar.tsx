@@ -16,7 +16,7 @@ const navItems = [
   { label: "Verifications",  href: "/verifications", icon: ShieldCheck },
   { label: "Jobs",           href: "/jobs",          icon: Briefcase },
   { label: "TAS Management", href: "/tas",           icon: Crown },
-  { label: "Payments",       href: "/payment",       icon: CreditCard },
+  { label: "Payments",       href: "/payments",       icon: CreditCard },
   { label: "Disputes",       href: "/dispute",       icon: Scale },
   { label: "Reports",        href: "/report",        icon: BarChart2 },
   { label: "Settings",       href: "/settings",      icon: Settings },
