@@ -17,7 +17,7 @@ interface AgentDetailProps {
 
 function SectionLabel({ text }: { text: string }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-widest mb-4 text-text-muted">
+    <p className="text-[11px] font-bold uppercase tracking-widest mb-4 text-text-muted pt-6">
       {text}
     </p>
   );
@@ -75,7 +75,7 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
             <AgentBadge status={agent.status} />
           </InfoRow>
 
-          <div className="my-6 border-t border-border" />
+          <div className="py-3 border-t border-border" />
 
           {/* Performance Metrics */}
           <SectionLabel text="Performance Metrics" />
@@ -86,7 +86,7 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
           <InfoRow icon={PiggyBank}  label="Available Balance:"            value={agent.availableBalance} />
           <InfoRow icon={Hourglass}  label="Pending Balance:"              value={agent.pendingBalance} />
 
-          <div className="my-6 border-t border-border" />
+          <div className="py-3 border-t border-border" />
 
           {/* Recruited Experts table */}
           <div className="overflow-x-auto">
