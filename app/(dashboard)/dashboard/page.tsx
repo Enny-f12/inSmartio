@@ -1,4 +1,3 @@
-// app/(dashboard)/dashboard/page.tsx
 "use client";
 
 import { Users, ShieldCheck, DollarSign, TrendingUp } from "lucide-react";
@@ -6,44 +5,50 @@ import Topbar from "@/components/layout/Navbar";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
 
-// ── Stat cards ───────────────────────────────────────────────
 const stats = [
   {
     label: "Total Users",
     value: "2,451",
+    change: "+12% this month",
     icon: Users,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-50",
+    iconColor: "#2563eb",
+    iconBg: "#eff6ff",
+    accent: "#2563eb",
   },
   {
     label: "Verified Experts",
     value: "186",
+    change: "+4 this week",
     icon: ShieldCheck,
-    iconColor: "text-green-500",
-    iconBg: "bg-green-50",
+    iconColor: "#16a34a",
+    iconBg: "#f0fdf4",
+    accent: "#16a34a",
   },
   {
     label: "Revenue",
     value: "₦2.4M",
+    change: "+18% vs last month",
     icon: DollarSign,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-50",
+    iconColor: "#d97706",
+    iconBg: "#fffbeb",
+    accent: "#d97706",
   },
   {
     label: "Growth",
     value: "+24%",
+    change: "vs last quarter",
     icon: TrendingUp,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-50",
+    iconColor: "#7c3aed",
+    iconBg: "#f5f3ff",
+    accent: "#7c3aed",
   },
 ];
 
-// ── Chart data ───────────────────────────────────────────────
 const userGrowthData = {
   title: "Monthly User Growth",
   yLabel: "Total Users",
   color: "#7C3AED",
-  data:   [1200, 2000, 3500, 4500, 6200, 8000, 9800, 12100],
+  data: [1200, 2000, 3500, 4500, 6200, 8000, 9800, 12100],
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
   xLabel: "Month",
 };
@@ -52,7 +57,7 @@ const revenueData = {
   title: "Revenue Trend Report",
   yLabel: "Revenue (₦)",
   color: "#2563eb",
-  data:   [800, 2000, 3000, 4500, 5000, 6000, 7500, 8500, 9500, 10500, 11500, 12200],
+  data: [800, 2000, 3000, 4500, 5000, 6000, 7500, 8500, 9500, 10500, 11500, 12200],
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   xLabel: "Month",
 };
@@ -64,42 +69,57 @@ const donutSegments = [
   { label: "Housekeeping",          value: 18, color: "#7B3F9E" },
 ];
 
-// ── Page ─────────────────────────────────────────────────────
+const card: React.CSSProperties = {
+  borderRadius: "16px",
+  border: "1px solid var(--color-border)",
+  backgroundColor: "var(--color-surface)",
+  padding: "20px 24px",
+};
+
 export default function DashboardPage() {
   return (
-    <div className="flex flex-col flex-1">
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
       <Topbar title="Dashboard" />
 
-      <main className="flex-1 px-8 py-6 space-y-6">
+      <main style={{ flex: 1, padding: "24px 32px", display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        {/* ── Stat cards ── */}
-        <div className="flex gap-4">
-          {stats.map(({ label, value, icon: Icon, iconColor, iconBg }) => (
+        {/* ── 4 Stat cards ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
+          {stats.map(({ label, value, change, icon: Icon, iconColor, iconBg, accent }) => (
             <div
               key={label}
-              className="flex-1 rounded-2xl border border-border bg-surface px-6 py-5 flex flex-col items-center gap-1"
+              style={{ ...card, borderTop: `3px solid ${accent}`, display: "flex", flexDirection: "column", gap: "10px" }}
             >
-              <div className={`w-9 h-9 rounded-full ${iconBg} flex items-center justify-center mb-1`}>
-                <Icon size={18} className={iconColor} strokeWidth={1.8} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {label}
+                </p>
+                <div style={{ width: 36, height: 36, borderRadius: "10px", backgroundColor: iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={17} color={iconColor} strokeWidth={1.8} />
+                </div>
               </div>
-              <p className="text-[22px] font-bold text-text-main">{value}</p>
-              <p className="text-[12px] text-text-muted">{label}</p>
+              <p style={{ fontSize: "26px", fontWeight: 700, color: "var(--color-text-main)", lineHeight: 1 }}>
+                {value}
+              </p>
+              <p style={{ fontSize: "11px", fontWeight: 500, color: "#16a34a" }}>
+                ▲ {change}
+              </p>
             </div>
           ))}
         </div>
 
-        {/* ── Two line charts side by side ── */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-border bg-surface px-6 py-5">
+        {/* ── 2 Line charts side by side ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={card}>
             <DashboardLineChart {...userGrowthData} />
           </div>
-          <div className="rounded-2xl border border-border bg-surface px-6 py-5">
+          <div style={card}>
             <DashboardLineChart {...revenueData} />
           </div>
         </div>
 
-        {/* ── Donut chart + legend ── */}
-        <div className="rounded-2xl border border-border bg-surface px-8 py-6">
+        {/* ── Donut chart ── */}
+        <div style={{ ...card, padding: "24px 32px" }}>
           <DonutChart segments={donutSegments} title="Top Service Category" size={280} />
         </div>
 

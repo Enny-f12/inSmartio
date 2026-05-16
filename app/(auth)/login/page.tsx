@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { login, resetAuthStatus } from "@/lib/redux/authSlice";
 
 import cleanerImage1 from "@/public/login/login-1.jpg";
 import cleanerImage2 from "@/public/login/login-2.png";
@@ -10,15 +15,20 @@ import cleanerImage2 from "@/public/login/login-2.png";
 const slides = [cleanerImage1, cleanerImage2];
 
 export default function LoginPage() {
+  const dispatch = useAppDispatch();
+  const router = useRouter();
+
+  const { status, error: authError } = useAppSelector((state) => state.auth);
+  const isLoading = status === "loading";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [twoFa, setTwoFa] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // Slideshow
   useEffect(() => {
     const interval = setInterval(() => {
       setIsAnimating(true);
@@ -30,24 +40,35 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // React to login outcome — fire toast once then reset status back to idle
+  useEffect(() => {
+    if (status === "succeeded") {
+      toast.success("Welcome back!", {
+        description: "Redirecting to dashboard...",
+      });
+      router.push("/dashboard");
+    }
+
+    if (status === "failed" && authError) {
+      toast.error("Login failed", {
+        description: authError,
+      });
+      // Reset so this doesn't re-fire on any future re-render
+      dispatch(resetAuthStatus());
+    }
+  }, [status, authError, router, dispatch]);
+
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (!email || !password) {
-      setError("Please fill in your email and password.");
+      toast.warning("Missing fields", {
+        description: "Please fill in your email and password.",
+      });
       return;
     }
 
-    setIsLoading(true);
-    try {
-      await new Promise((res) => setTimeout(res, 1500));
-      setError("Invalid credentials. Please try again.");
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    dispatch(login({ email, password }));
   };
 
   return (
@@ -96,14 +117,6 @@ export default function LoginPage() {
             <h1 className="text-lg font-bold text-center mb-7 text-text-main">
               Admin Dashboard
             </h1>
-
-            {/* Error */}
-            {error && (
-              <div className="flex items-center gap-2 text-xs px-3 py-2.5 rounded-lg mb-5 bg-red-50 border border-red-200 text-red-700">
-                <AlertCircle size={14} />
-                {error}
-              </div>
-            )}
 
             <form onSubmit={handleLogin} noValidate>
 

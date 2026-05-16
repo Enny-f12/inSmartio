@@ -1,19 +1,21 @@
 // components/users/UserDetail.tsx
 "use client";
 
-import Image from "next/image";
-import { ArrowLeft, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Trash2, BriefcaseIcon } from "lucide-react";
 import { StatusBadge } from "@/components/ui/Badge";
 
 export type UserStatus = "Active" | "Tier 1" | "Tier 2" | "Tier 3" | "Pending" | "Suspended";
 
 export interface User {
-  id: number;
+  id: string;
+  avatarSeed: number;
   name: string;
+  email: string;
+  username: string;
+  phone?: string;
   type: "Expert" | "Client" | "TAS";
   status: UserStatus;
   joined: string;
-  jobs: number | "N/A";
 }
 
 const statusVariant: Record<UserStatus, "green" | "purple" | "yellow" | "red" | "gray"> = {
@@ -25,138 +27,103 @@ const statusVariant: Record<UserStatus, "green" | "purple" | "yellow" | "red" | 
   Suspended: "red",
 };
 
-const avatarUrl = (id: number) =>
-  `https://images.unsplash.com/photo-${
-    [
-      "1500648767791-00dcc994a43e",
-      "1507003211169-0a1dd7228f2d",
-      "1494790108377-be9c29b29330",
-      "1527980965255-d3b416303d12",
-      "1438761681033-6461ffad8d80",
-      "1472099645785-5658abf4ff4e",
-      "1544005313-94ddf0286df2",
-      "1531427186611-4d4c8a799b10",
-      "1534528741775-53994a69daeb",
-      "1506794778202-cad84cf45f1d",
-    ][id % 10]
-  }?w=200&h=200&fit=crop&crop=face&auto=format`;
-
-interface UserJob {
-  id: string;
-  info: string;
-  payment: string;
-  notes: string;
-  review: string;
-}
-
-const mockUserJobs: UserJob[] = [
-  { id: "Job-001", info: "Plumbing repair - Ikeja",     payment: "₦18,500", notes: "Completed 20/03/2026", review: "Excellent job done." },
-  { id: "Job-002", info: "Electrical fix - Surulere",   payment: "₦25,000", notes: "In-progress",          review: "-"                  },
-  { id: "Job-003", info: "Bathroom renovation - Lekki", payment: "₦12,000", notes: "Completed 15/03/2026", review: "Excellent job done." },
+// ── Initials avatar colors ────────────────────────────────────
+const avatarColors = [
+  "#2563eb", "#16a34a", "#d97706", "#7c3aed",
+  "#db2777", "#0891b2", "#dc2626", "#65a30d",
 ];
 
-export default function UserDetail({ user, onBack }: { user: User; onBack: () => void }) {
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
+const getInitials = (name: string) =>
+  name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
-      {/* ── Scrollable body ── */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+const getColor = (seed: number) => avatarColors[seed % avatarColors.length];
+
+interface UserDetailProps {
+  user: User;
+  onBack: () => void;
+  onDelete?: () => void;
+}
+
+export default function UserDetail({ user, onBack, onDelete }: UserDetailProps) {
+  const rows: [string, string][] = [
+    ["Name:",         user.name],
+    ["Username:",     user.username],
+    ["Phone:",        user.phone ?? "—"],
+    ["Email:",        user.email],
+    ["User Type",     user.type],
+    ["Verification:", user.status.startsWith("Tier") ? user.status : "—"],
+    ["Joined:",       user.joined],
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "28px 40px" }}>
 
         {/* ── Back + Suspend ── */}
-        <div className="flex items-center justify-between mb-6">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "28px" }}>
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-[13.5px] font-medium text-text-main hover:text-primary transition-colors"
+            style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer" }}
           >
             <ArrowLeft size={16} />
             {user.name}
           </button>
-          <button className="px-5 py-1.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors">
+          <button style={{ padding: "6px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" }}>
             Suspend
           </button>
         </div>
 
-        {/* ── Profile: avatar + info ── */}
-        <div className="flex items-start gap-2 mb-8">
+        {/* ── Profile ── */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "32px", marginBottom: "36px" }}>
 
-          {/* Avatar — fixed 80×80, circular */}
-          <div style={{ width: 80, height: 80, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "1px solid var(--border)" }}>
-            <Image
-              src={avatarUrl(user.id)}
-              alt={user.name}
-              width={80}
-              height={80}
-              style={{ width: 80, height: 80, objectFit: "cover" }}
-            />
+          {/* Initials avatar */}
+          <div style={{
+            width: 100, height: 100, borderRadius: "50%", flexShrink: 0,
+            backgroundColor: getColor(user.avatarSeed),
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#fff", fontSize: "28px", fontWeight: 700, letterSpacing: "0.02em",
+          }}>
+            {getInitials(user.name)}
           </div>
 
           {/* Info rows */}
-          <div className="flex-1 text-[13px] space-y-2.5 pt-1">
-            {[
-              ["Name:",         user.name],
-              ["Phone:",        "+234 801 234 5678"],
-              ["Email:",        `${user.name.toLowerCase().replace(/[\s.]/g, "")}@email.com`],
-              ["Location:",     "Ikeja, Lagos"],
-              ["User Type",     user.type],
-              ["Verification:", user.status.startsWith("Tier") ? user.status : "—"],
-              ["Joined:",       user.joined],
-            ].map(([label, value]) => (
-              <div key={label} className="flex gap-2">
-                <span className="w-28 shrink-0 text-text-muted">{label}</span>
-                <span className="text-text-main">{value}</span>
+          <div style={{ flex: 1, paddingTop: "4px" }}>
+            {rows.map(([label, value]) => (
+              <div key={label} style={{ display: "flex", gap: "8px", marginBottom: "10px", fontSize: "13px" }}>
+                <span style={{ width: "110px", flexShrink: 0, color: "var(--color-text-muted)" }}>{label}</span>
+                <span style={{ color: "var(--color-text-main)" }}>{value}</span>
               </div>
             ))}
-            <div className="flex gap-2 items-center">
-              <span className="w-28 shrink-0 text-text-muted">Status:</span>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+              <span style={{ width: "110px", flexShrink: 0, color: "var(--color-text-muted)" }}>Status:</span>
               <StatusBadge label={user.status} variant={statusVariant[user.status]} />
             </div>
           </div>
         </div>
 
-        {/* ── Divider ── */}
-        <div className="border-t border-border mb-8" />
+        <div style={{ borderTop: "1px solid var(--color-border)", marginBottom: "28px" }} />
 
-        {/* ── Jobs table ── */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                {["Jobs", "Job Info", "Payments", "Notes", "Reviews"].map((h) => (
-                  <th key={h} className="text-left pb-3 text-[13px] font-medium text-text-muted pr-8 last:pr-0">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {mockUserJobs.map((job) => (
-                <tr key={job.id} className="hover:bg-background transition-colors">
-                  <td className="py-4 text-[13.5px] font-semibold text-text-main pr-8">{job.id}</td>
-                  <td className="py-4 text-[13.5px] text-text-muted pr-8">{job.info}</td>
-                  <td className="py-4 text-[13.5px] text-text-main pr-8">{job.payment}</td>
-                  <td className="py-4 text-[13.5px] text-text-muted pr-8">{job.notes}</td>
-                  <td className="py-4 text-[13.5px] text-text-muted">{job.review}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* ── Jobs section ── */}
+        <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "16px" }}>Jobs</p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: "10px", color: "var(--color-text-muted)" }}>
+          <BriefcaseIcon size={36} strokeWidth={1.2} />
+          <p style={{ fontSize: "13px" }}>No jobs found for this user.</p>
         </div>
-
-        <button className="mt-4 text-[13px] font-medium text-primary hover:opacity-70 transition-opacity">
-          Load More
-        </button>
 
       </div>
 
       {/* ── Sticky action bar ── */}
-      <div className="shrink-0 flex border-t border-border bg-surface">
-        <button className="flex-1 flex items-center justify-center gap-2 py-4 text-[13px] font-medium text-text-muted hover:bg-background transition-colors border-r border-border">
+      <div style={{ flexShrink: 0, display: "flex", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+        <button style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "16px", fontSize: "13px", fontWeight: 500, color: "var(--color-text-muted)", background: "none", border: "none", borderRight: "1px solid var(--color-border)", cursor: "pointer" }}>
           <ShieldCheck size={15} /> Verify Tier 2
         </button>
-        <button className="flex-1 py-4 text-[13px] font-medium text-text-muted hover:bg-background transition-colors border-r border-border">
+        <button style={{ flex: 1, padding: "16px", fontSize: "13px", fontWeight: 500, color: "var(--color-text-muted)", background: "none", border: "none", borderRight: "1px solid var(--color-border)", cursor: "pointer" }}>
           Suspend User
         </button>
-        <button className="flex-1 flex items-center justify-center gap-2 py-4 text-[13px] font-medium text-red-500 hover:bg-red-50 transition-colors">
+        <button
+          onClick={onDelete}
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "16px", fontSize: "13px", fontWeight: 500, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}
+        >
           <Trash2 size={15} /> Delete Account
         </button>
       </div>
