@@ -1,48 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { Users, ShieldCheck, DollarSign, TrendingUp } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
-
-const stats = [
-  {
-    label: "Total Users",
-    value: "2,451",
-    change: "+12% this month",
-    icon: Users,
-    iconColor: "#2563eb",
-    iconBg: "#eff6ff",
-    accent: "#2563eb",
-  },
-  {
-    label: "Verified Experts",
-    value: "186",
-    change: "+4 this week",
-    icon: ShieldCheck,
-    iconColor: "#16a34a",
-    iconBg: "#f0fdf4",
-    accent: "#16a34a",
-  },
-  {
-    label: "Revenue",
-    value: "₦2.4M",
-    change: "+18% vs last month",
-    icon: DollarSign,
-    iconColor: "#d97706",
-    iconBg: "#fffbeb",
-    accent: "#d97706",
-  },
-  {
-    label: "Growth",
-    value: "+24%",
-    change: "vs last quarter",
-    icon: TrendingUp,
-    iconColor: "#7c3aed",
-    iconBg: "#f5f3ff",
-    accent: "#7c3aed",
-  },
-];
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { fetchUsers } from "@/lib/redux/usersSlice";
 
 const userGrowthData = {
   title: "Monthly User Growth",
@@ -77,6 +41,56 @@ const card: React.CSSProperties = {
 };
 
 export default function DashboardPage() {
+  const dispatch = useAppDispatch();
+  const { list, listStatus } = useAppSelector((s) => s.users);
+
+  useEffect(() => {
+    if (listStatus === "idle") dispatch(fetchUsers());
+  }, [dispatch, listStatus]);
+
+  // ── Real counts from API ─────────────────────────────────
+  const isLoading  = listStatus === "loading" || listStatus === "idle";
+  const totalUsers = listStatus === "succeeded" ? list.length.toLocaleString() : isLoading ? "..." : "—";
+
+  const stats = [
+    {
+      label:     "Total Users",
+      value:     totalUsers,           // ← real from GET /api/users
+      change:    "+12% this month",
+      icon:      Users,
+      iconColor: "#2563eb",
+      iconBg:    "#eff6ff",
+      accent:    "#2563eb",
+    },
+    {
+      label:     "Verified Experts",
+      value:     "186",               // ← mock, no endpoint yet
+      change:    "+4 this week",
+      icon:      ShieldCheck,
+      iconColor: "#16a34a",
+      iconBg:    "#f0fdf4",
+      accent:    "#16a34a",
+    },
+    {
+      label:     "Revenue",
+      value:     "₦2.4M",
+      change:    "+18% vs last month",
+      icon:      DollarSign,
+      iconColor: "#d97706",
+      iconBg:    "#fffbeb",
+      accent:    "#d97706",
+    },
+    {
+      label:     "Growth",
+      value:     "+24%",
+      change:    "vs last quarter",
+      icon:      TrendingUp,
+      iconColor: "#7c3aed",
+      iconBg:    "#f5f3ff",
+      accent:    "#7c3aed",
+    },
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
       <Topbar title="Dashboard" />
