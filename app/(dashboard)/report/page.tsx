@@ -10,10 +10,10 @@ import { reportConfigs } from "@/components/report/types";
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState<ReportType>("User Growth Report");
-  const [format,     setFormat]     = useState<FormatType>("PDF");
-  const [dateFrom,   setDateFrom]   = useState("01/03/2026");
-  const [dateTo,     setDateTo]     = useState("31/03/2026");
-  const [generated,  setGenerated]  = useState(true);
+  const [format, setFormat] = useState<FormatType>("PDF");
+  const [dateFrom, setDateFrom] = useState("01/03/2026");
+  const [dateTo, setDateTo] = useState("31/03/2026");
+  const [generated, setGenerated] = useState(true);
 
   const handleReportType = (v: ReportType) => {
     setReportType(v);
@@ -42,10 +42,10 @@ export default function ReportsPage() {
         {generated ? (
           <ReportCard config={reportConfigs[reportType]} />
         ) : (
-          <div className="rounded-2xl border border-border bg-surface p-16 flex items-center justify-center">
-            <p className="text-[14px] text-text-muted">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "80px" }}>
+            <p style={{ fontSize: "14px", color: "var(--color-text-muted)" }}>
               Select a report type and date range, then click{" "}
-              <strong className="text-text-main">Generate</strong>.
+              <strong style={{ color: "var(--color-text-main)" }}>Generate</strong>.
             </p>
           </div>
         )}

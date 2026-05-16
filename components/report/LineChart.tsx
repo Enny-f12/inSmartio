@@ -1,4 +1,4 @@
-// components/reports/LineChart.tsx
+// components/report/LineChart.tsx
 
 interface LineChartProps {
   data: number[];
@@ -8,7 +8,7 @@ interface LineChartProps {
 }
 
 export default function LineChart({ data, labels, yLabel, title }: LineChartProps) {
-  const W = 560, H = 300;
+  const W = 600, H = 300;
   const padL = 72, padR = 32, padT = 32, padB = 56;
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
@@ -31,31 +31,37 @@ export default function LineChart({ data, labels, yLabel, title }: LineChartProp
 
   return (
     <div>
-      <p className="text-[14px] font-semibold text-center text-text-main mb-4">{title}</p>
+      <p style={{ fontSize: "14px", fontWeight: 600, textAlign: "center", color: "var(--color-text-main)", marginBottom: "16px" }}>
+        {title}
+      </p>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
-        style={{ maxWidth: W, display: "block", margin: "0 auto" }}
+        style={{ display: "block", margin: "0 auto" }}
       >
-        {/* Grid + Y-axis ticks */}
+        {/* Grid + Y ticks */}
         {Array.from({ length: yTicks + 1 }, (_, i) => {
           const val = minV + (range / yTicks) * i;
           const y   = yOf(val);
           return (
             <g key={i}>
-              <line
-                x1={padL} y1={y} x2={padL + chartW} y2={y}
-                stroke="#e5e7eb" strokeWidth={1}
-              />
-              <text
-                x={padL - 8} y={y + 4}
-                textAnchor="end" fontSize={10} fill="#6b7280"
-              >
+              <line x1={padL} y1={y} x2={padL + chartW} y2={y} stroke="#e5e7eb" strokeWidth={1} />
+              <text x={padL - 8} y={y + 4} textAnchor="end" fontSize={10} fill="#6b7280">
                 {fmtY(Math.round(val))}
               </text>
             </g>
           );
         })}
+
+        {/* Vertical grid lines */}
+        {data.map((_, i) => (
+          <line
+            key={i}
+            x1={xOf(i)} y1={padT}
+            x2={xOf(i)} y2={padT + chartH}
+            stroke="#e5e7eb" strokeWidth={1}
+          />
+        ))}
 
         {/* Y-axis label */}
         <text
@@ -66,22 +72,15 @@ export default function LineChart({ data, labels, yLabel, title }: LineChartProp
           {yLabel}
         </text>
 
-        {/* X-axis labels */}
+        {/* X labels */}
         {labels.map((lbl, i) => (
-          <text
-            key={lbl}
-            x={xOf(i)} y={H - 20}
-            textAnchor="middle" fontSize={10} fill="#6b7280"
-          >
+          <text key={lbl} x={xOf(i)} y={H - 24} textAnchor="middle" fontSize={10} fill="#6b7280">
             {lbl}
           </text>
         ))}
 
-        {/* X-axis title */}
-        <text
-          x={padL + chartW / 2} y={H - 4}
-          textAnchor="middle" fontSize={10} fill="#6b7280"
-        >
+        {/* X axis title */}
+        <text x={padL + chartW / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="#6b7280">
           Weeks
         </text>
 

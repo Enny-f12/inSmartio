@@ -1,4 +1,4 @@
-// components/reports/ReportControls.tsx
+// components/report/ReportControls.tsx
 "use client";
 
 import { Download } from "lucide-react";
@@ -25,12 +25,15 @@ export default function ReportControls({
   onGenerate, onExport,
 }: Props) {
   return (
-    <div className="space-y-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-      {/* Row 1: Report Type + Format + Export */}
-      <div className="flex items-center gap-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold text-text-main whitespace-nowrap">Report Type:</span>
+      {/* ── Row 1: Report Type + Format + Export ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+        {/* Report Type */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
+            Report Type:
+          </span>
           <FilterDropdown
             value={reportType}
             options={REPORT_TYPES}
@@ -38,8 +41,11 @@ export default function ReportControls({
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold text-text-main">Format:</span>
+        {/* Format */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
+            Format:
+          </span>
           <FilterDropdown
             value={format}
             options={FORMATS}
@@ -47,19 +53,22 @@ export default function ReportControls({
           />
         </div>
 
-        {/* Export — pushed to far right */}
+        {/* Export — pushed far right */}
         <button
           onClick={onExport}
-          className="btn-primary ml-auto flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold"
+          className="btn-primary"
+          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}
         >
           <Download size={15} />
           Export
         </button>
       </div>
 
-      {/* Row 2: Date Range + Generate */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-[13px] font-semibold text-text-main whitespace-nowrap">Date Range:</span>
+      {/* ── Row 2: Date Range + Generate ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
+          Date Range:
+        </span>
 
         <FilterDropdown
           value={dateFrom}
@@ -67,7 +76,7 @@ export default function ReportControls({
           onChange={onDateFrom}
         />
 
-        <span className="text-[13px] text-text-muted">to</span>
+        <span style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>to</span>
 
         <FilterDropdown
           value={dateTo}
@@ -77,7 +86,7 @@ export default function ReportControls({
 
         <button
           onClick={onGenerate}
-          className="px-8 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-amber-500 hover:bg-amber-600 transition-colors"
+          style={{ padding: "10px 32px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#F9A826", border: "none", cursor: "pointer" }}
         >
           Generate
         </button>
