@@ -1,5 +1,3 @@
-// components/payments/types.ts
-
 export type PayTab = "Transactions" | "Escrow Releases" | "Payouts" | "Refunds";
 export const PAY_TABS: PayTab[] = ["Transactions", "Escrow Releases", "Payouts", "Refunds"];
 
@@ -27,7 +25,7 @@ export interface Payout {
   recipient: string;
   type: string;
   amount: string;
-  status: string;
+  status: "Paid" | "Pending" | "Failed";
   date: string;
 }
 
@@ -45,7 +43,7 @@ export const mockEscrowReleases: EscrowRelease[] = [
 ];
 
 export const mockPayouts: Payout[] = [
-  { id: "p1", recipient: "Adebayo S.", type: "Expert",  amount: "₦16,650",  status: "Paid",    date: "16/03/2026" },
-  { id: "p2", recipient: "Chidi E.",   type: "TAS",     amount: "₦245,000", status: "Paid",    date: "22/03/2026" },
-  { id: "p3", recipient: "Mary K.",    type: "Expert",  amount: "₦45,000",  status: "Pending", date: "12/03/2026" },
+  { id: "p1", recipient: "Adebayo S.", type: "Expert", amount: "₦16,650",  status: "Paid",    date: "16/03/2026" },
+  { id: "p2", recipient: "Chidi E.",   type: "TAS",    amount: "₦245,000", status: "Paid",    date: "22/03/2026" },
+  { id: "p3", recipient: "Mary K.",    type: "Expert", amount: "₦45,000",  status: "Pending", date: "12/03/2026" },
 ];

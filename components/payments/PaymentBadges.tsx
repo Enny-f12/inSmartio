@@ -1,6 +1,6 @@
-import type { PayoutRow } from "./types";
+import type { Payout } from "./types";
 
-type PayoutStatus = PayoutRow["status"];
+type PayoutStatus = Payout["status"];
 
 const payoutStyles: Record<PayoutStatus, string> = {
   Paid:    "bg-green-100 text-green-700",
