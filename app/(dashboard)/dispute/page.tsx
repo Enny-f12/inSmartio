@@ -32,150 +32,147 @@ export default function DisputesPage() {
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
+  if (selected) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <Topbar title="Disputes Resolution" />
+        <DisputeDetail dispute={selected} onBack={() => setSelected(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <Topbar title="Disputes Resolution" />
 
       <div className="flex-1 overflow-y-auto bg-background">
-        {selected ? (
-          <DisputeDetail dispute={selected} onBack={() => setSelected(null)} />
-        ) : (
-          <div className="px-8 py-6 space-y-5">
+        <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: "20px" }}>
 
-            {/* ── Stat cards ── */}
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: "Open",        value: stats.open        },
-                { label: "In Progress", value: stats.inProgress  },
-                { label: "Resolved",    value: stats.resolved    },
-              ].map((s) => (
-                <div
-                  key={s.label}
-                  className="rounded-2xl px-8 py-5 text-center bg-surface border border-border"
-                >
-                  <p className="text-[13px] text-text-muted mb-1">{s.label}</p>
-                  <p className="text-[28px] font-bold text-text-main">{s.value}</p>
-                </div>
-              ))}
+          {/* ── Stat cards — 3 side by side ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+            {[
+              { label: "Open",        value: stats.open        },
+              { label: "In Progress", value: stats.inProgress  },
+              { label: "Resolved",    value: stats.resolved    },
+            ].map((s) => (
+              <div
+                key={s.label}
+                style={{ borderRadius: "16px", padding: "20px 32px", textAlign: "center", backgroundColor: "#ffffff", border: "1px solid var(--color-border)" }}
+              >
+                <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "4px" }}>{s.label}</p>
+                <p style={{ fontSize: "28px", fontWeight: 700, color: "var(--color-text-main)" }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Table card ── */}
+          <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
+
+            {/* Search + Export */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "20px 24px 16px", borderBottom: "1px solid var(--color-border)" }}>
+              <div style={{ position: "relative", flex: 1 }}>
+                <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+                <input
+                  type="text"
+                  placeholder="Search name..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+                />
+              </div>
+              <button style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" }}>
+                <Download size={14} /> Export
+              </button>
             </div>
 
-            {/* ── Table card ── */}
-            <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-
-              {/* Search + Export */}
-              <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b border-border">
-                <div className="relative flex-1">
-                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input
-                    type="text"
-                    placeholder="Search name..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-                  />
-                </div>
-                <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors">
-                  <Download size={14} /> Export
-                </button>
-              </div>
-
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-background">
-                      {["Case ID", "Job ID", "Parties", "Issue", "Priority", "Actions"].map((h) => (
-                        <th
-                          key={h}
-                          className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted"
-                        >
-                          {h}
-                        </th>
-                      ))}
+            {/* Table */}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                    {["Case ID", "Job ID", "Parties", "Issue", "Priority", "Actions"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>
+                        No disputes found.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {paginated.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-14 text-sm text-text-muted">
-                          No disputes found.
+                  ) : (
+                    paginated.map((dispute) => (
+                      <tr key={dispute.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                        <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{dispute.id}</td>
+                        <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{dispute.jobId}</td>
+                        <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{dispute.parties}</td>
+                        <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{dispute.issue}</td>
+                        <td style={{ padding: "16px 20px" }}>
+                          <PriorityLabel priority={dispute.priority} />
+                        </td>
+                        <td style={{ padding: "16px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <button
+                              onClick={() => setSelected(dispute)}
+                              style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}
+                              title="View dispute"
+                            >
+                              <Eye size={17} strokeWidth={1.8} />
+                            </button>
+                            <button
+                              onClick={() => setSelected(dispute)}
+                              style={{ fontSize: "13px", fontWeight: 500, padding: "4px 12px", borderRadius: "8px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}
+                            >
+                              Resolve
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ) : (
-                      paginated.map((dispute) => (
-                        <tr key={dispute.id} className="hover:bg-background transition-colors">
-                          <td className="px-5 py-4 text-[13.5px] font-semibold text-text-main">
-                            {dispute.id}
-                          </td>
-                          <td className="px-5 py-4 text-[13.5px] text-text-muted">{dispute.jobId}</td>
-                          <td className="px-5 py-4 text-[13.5px] text-text-muted">{dispute.parties}</td>
-                          <td className="px-5 py-4 text-[13.5px] text-text-muted">{dispute.issue}</td>
-                          <td className="px-5 py-4">
-                            <PriorityLabel priority={dispute.priority} />
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setSelected(dispute)}
-                                className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
-                                title="View dispute"
-                              >
-                                <Eye size={17} strokeWidth={1.8} />
-                              </button>
-                              <button
-                                onClick={() => setSelected(dispute)}
-                                className="text-[13px] font-medium px-3 py-1 rounded-lg text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
-                              >
-                                Resolve
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-background">
-                <p className="text-[12px] text-text-muted">
-                  {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-[12px] font-medium transition-all ${
-                        p === page
-                          ? "btn-primary"
-                          : "border border-border bg-surface text-text-muted hover:bg-background"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
 
+            {/* Pagination */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+                {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={p === page ? "btn-primary" : ""}
+                    style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "none", cursor: "pointer" }}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+
+        </div>
       </div>
     </div>
   );
