@@ -79,7 +79,7 @@ export default function FaqManagement({ onBack }: { onBack: () => void }) {
       title="FAQ Management"
       onBack={onBack}
       action={
-        <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
+        <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 px-4 mb-5 py-2.5 rounded-xl text-[13px] font-semibold">
           <Plus size={15} /> Add
         </button>
       }

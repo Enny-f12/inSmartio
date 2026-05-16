@@ -3,19 +3,28 @@
 
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Upload, Eye, CheckCircle2, Calendar } from "lucide-react";
+import Image from "next/image";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell, FieldInput } from "./SettingsShared";
 import { initialBanners } from "@/components/settings/types";
 import type { Banner } from "@/components/settings/types";
 
+// ── Unsplash images per banner ────────────────────────────
+const BANNER_IMAGES: Record<string, string> = {
+  "b1": "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=120&h=80&fit=crop&auto=format",
+  "b2": "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=120&h=80&fit=crop&auto=format",
+  "b3": "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=120&h=80&fit=crop&auto=format",
+  "b4": "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=120&h=80&fit=crop&auto=format",
+};
+
 function CreateBannerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [title,      setTitle]      = useState("Hire Verified Experts");
-  const [subtitle,   setSubtitle]   = useState("Work with trusted professionals reviewed by real users.");
-  const [ctaText,    setCtaText]    = useState("Hire Now");
-  const [ctaLink,    setCtaLink]    = useState("/insmartio");
-  const [startDate,  setStartDate]  = useState("");
-  const [endDate,    setEndDate]    = useState("");
-  const [activate,   setActivate]   = useState(true);
+  const [title,     setTitle]     = useState("Hire Verified Experts");
+  const [subtitle,  setSubtitle]  = useState("Work with trusted professionals reviewed by real users.");
+  const [ctaText,   setCtaText]   = useState("Hire Now");
+  const [ctaLink,   setCtaLink]   = useState("/insmartio");
+  const [startDate, setStartDate] = useState("");
+  const [endDate,   setEndDate]   = useState("");
+  const [activate,  setActivate]  = useState(true);
 
   return (
     <Modal open onClose={onClose} title="Create Promotional Banner" size="lg">
@@ -104,41 +113,58 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
         </button>
       }
     >
-      <div className="space-y-3">
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "20px" }}>
         {banners.map((banner) => (
-          <div key={banner.id} className="flex items-center gap-4 px-5 py-4 rounded-2xl border border-border bg-surface hover:bg-background transition-colors">
-            {/* Placeholder image */}
-            <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 text-primary text-[10px] font-medium">
-              IMG
+          <div key={banner.id} style={{ display: "flex", alignItems: "center", gap: "24px", padding: "20px 24px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
+
+            {/* Banner image */}
+            <div style={{ width: 90, height: 68, borderRadius: "10px", overflow: "hidden", flexShrink: 0, border: "1px solid var(--color-border)" }}>
+              {BANNER_IMAGES[banner.id] ? (
+                <Image
+                  src={BANNER_IMAGES[banner.id]}
+                  alt={banner.title}
+                  width={90}
+                  height={68}
+                  style={{ width: 90, height: 68, objectFit: "cover" }}
+                />
+              ) : (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 500, color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)" }}>
+                  IMG
+                </div>
+              )}
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0">
-              <p className="text-[13.5px] font-semibold text-text-main">{banner.title}</p>
-              <p className="text-[12px] text-text-muted truncate">{banner.subtitle}</p>
-              <div className="flex items-center gap-4 mt-1">
-                <span className="flex items-center gap-1 text-[11px] text-text-muted">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "3px" }}>{banner.title}</p>
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: "6px" }}>{banner.subtitle}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--color-text-muted)" }}>
                   <Calendar size={11} /> {banner.dateRange}
                 </span>
-                <span className="flex items-center gap-1 text-[11px] text-text-muted">
+                <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--color-text-muted)" }}>
                   <Eye size={11} /> {banner.clicks} clicks
                 </span>
               </div>
             </div>
 
             {/* Status */}
-            <span className={`text-[12px] font-medium px-3 py-1 rounded-full ${banner.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+            <span style={{
+              fontSize: "12px", fontWeight: 500, padding: "4px 12px", borderRadius: "999px",
+              backgroundColor: banner.status === "Active" ? "#dcfce7" : "#f3f4f6",
+              color: banner.status === "Active" ? "#15803d" : "#6b7280",
+            }}>
               {banner.status}
             </span>
 
             {/* Actions */}
-            <div className="flex items-center gap-2">
-              <button className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
                 <Pencil size={15} strokeWidth={1.8} />
               </button>
               <button
                 onClick={() => setBanners((p) => p.filter((b) => b.id !== banner.id))}
-                className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#f87171" }}
               >
                 <Trash2 size={15} strokeWidth={1.8} />
               </button>

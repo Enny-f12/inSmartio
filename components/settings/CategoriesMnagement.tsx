@@ -262,7 +262,7 @@ export default function CategoriesManagement({ onBack }: { onBack: () => void })
       title="Categories Management"
       onBack={onBack}
       action={
-        <button onClick={() => setAddOpen(true)} className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
+        <button onClick={() => setAddOpen(true)} className="btn-primary flex items-center gap-2 px-4 mb-5 py-2.5 rounded-xl text-[13px] font-semibold">
           <Plus size={15} /> Add
         </button>
       }
