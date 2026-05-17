@@ -16,7 +16,7 @@ export function SubPageShell({ title, onBack, action, children }: SubPageShellPr
   return (
     <div className="flex flex-col flex-1">
       <Topbar title="Settings" />
-      <main className="flex-1 px-8 py-6">
+      <main className="flex-1 px-4 sm:px-8 py-6">
         {/* Sub-header */}
         <div className="flex items-center justify-between mb-6">
           <button

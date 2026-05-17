@@ -92,7 +92,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       title="Admin Management"
       onBack={onBack}
       action={
-        <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
+        <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", whiteSpace: "nowrap", marginBottom: "5px" }}>
           <Plus size={15} /> Add Admin
         </button>
       }
@@ -111,43 +111,57 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
 
       {listStatus === "succeeded" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <style>{`
+            .admin-card { display: flex; flex-direction: column; gap: 12px; }
+            .admin-card-top { display: flex; align-items: center; gap: 12px; }
+            .admin-card-bottom { display: flex; align-items: center; justify-content: space-between; padding-left: 48px; }
+            @media (min-width: 640px) {
+              .admin-card { flex-direction: row; align-items: center; gap: 16px; }
+              .admin-card-top { flex: 1; }
+              .admin-card-bottom { padding-left: 0; }
+            }
+          `}</style>
           {list.length === 0 && (
             <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "var(--color-text-muted)" }}>No admins found.</p>
           )}
           {list.map((admin) => (
-            <div key={admin.id} style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
-              <AdminAvatar name={admin.name} />
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
-                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{admin.name}</p>
-                  <span style={{ fontSize: "11px", fontWeight: 500, padding: "2px 8px", borderRadius: "999px", backgroundColor: admin.status === "active" ? "#dcfce7" : "#f3f4f6", color: admin.status === "active" ? "#15803d" : "#6b7280" }}>
-                    {admin.status}
-                  </span>
+            <div key={admin.id} style={{ padding: "16px 20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
+              <div className="admin-card">
+                {/* Top: avatar + info */}
+                <div className="admin-card-top">
+                  <AdminAvatar name={admin.name} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+                      <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{admin.name}</p>
+                      <span style={{ fontSize: "11px", fontWeight: 500, padding: "2px 8px", borderRadius: "999px", backgroundColor: admin.status === "active" ? "#dcfce7" : "#f3f4f6", color: admin.status === "active" ? "#15803d" : "#6b7280" }}>
+                        {admin.status}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{admin.email}</p>
+                    <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                      Role: {admin.role} · Joined {new Date(admin.createdAt).toLocaleDateString("en-GB")}
+                    </p>
+                  </div>
                 </div>
-                <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{admin.email}</p>
-                <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "2px" }}>
-                  Role: {admin.role} · Joined {new Date(admin.createdAt).toLocaleDateString("en-GB")}
-                </p>
-              </div>
 
-              {/* 2FA status */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: admin.twoFactorAuth ? "#16a34a" : "#9ca3af" }}>
-                {admin.twoFactorAuth ? <ShieldCheck size={14} /> : <ShieldOff size={14} />}
-                <span>2FA {admin.twoFactorAuth ? "On" : "Off"}</span>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <button onClick={() => handleToggle2FA(admin.id, admin.twoFactorAuth, admin.name)} title="Toggle 2FA" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-                  {admin.twoFactorAuth ? <ShieldOff size={15} strokeWidth={1.8} /> : <ShieldCheck size={15} strokeWidth={1.8} />}
-                </button>
-                <button onClick={() => { setEditTarget(admin.id); setEditForm({ name: admin.name, email: admin.email }); }} title="Edit" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-                  <Pencil size={15} strokeWidth={1.8} />
-                </button>
-                <button onClick={() => setDeleteTarget(admin.id)} title="Delete" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#f87171" }}>
-                  <Trash2 size={15} strokeWidth={1.8} />
-                </button>
+                {/* Bottom: 2FA status + actions */}
+                <div className="admin-card-bottom">
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: admin.twoFactorAuth ? "#16a34a" : "#9ca3af" }}>
+                    {admin.twoFactorAuth ? <ShieldCheck size={14} /> : <ShieldOff size={14} />}
+                    <span>2FA {admin.twoFactorAuth ? "On" : "Off"}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <button onClick={() => handleToggle2FA(admin.id, admin.twoFactorAuth, admin.name)} title="Toggle 2FA" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                      {admin.twoFactorAuth ? <ShieldOff size={15} strokeWidth={1.8} /> : <ShieldCheck size={15} strokeWidth={1.8} />}
+                    </button>
+                    <button onClick={() => { setEditTarget(admin.id); setEditForm({ name: admin.name, email: admin.email }); }} title="Edit" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                      <Pencil size={15} strokeWidth={1.8} />
+                    </button>
+                    <button onClick={() => setDeleteTarget(admin.id)} title="Delete" style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#f87171" }}>
+                      <Trash2 size={15} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
