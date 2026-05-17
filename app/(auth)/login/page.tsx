@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
+import Link from "next/link";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { login, resetAuthStatus } from "@/lib/redux/authSlice";
 
@@ -96,9 +96,9 @@ export default function LoginPage() {
 
           {/* Brand */}
           <div className="text-center mb-6 sm:mb-8">
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-primary">
-              inSmartio
-            </p>
+             <Link href="/" className="shrink-0">
+              <Image src="/logo/insmartio.png" alt="inSmartio Logo" width={120} height={35} style={{ height: "auto", width: "auto" }} priority />
+            </Link>
           </div>
 
           {/* Card — no border/shadow on mobile, card style on sm+ */}

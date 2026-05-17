@@ -10,6 +10,7 @@ import BannerManagement       from "@/components/settings/BannerManagement";
 import AnnouncementManagement from "@/components/settings/AnnouncementManagement";
 import CommissionSettings     from "@/components/settings/CommisionSettings";
 import NotificationTemplates  from "@/components/settings/Notification";
+import AdminManagement        from "@/components/settings/AdminManagement";
 import type { SettingsView }  from "@/components/settings/types";
 
 function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   if (view === "announcements") return <AnnouncementManagement onBack={() => setView("main")} />;
   if (view === "commission")    return <CommissionSettings      onBack={() => setView("main")} />;
   if (view === "notifications") return <NotificationTemplates  onBack={() => setView("main")} />;
+  if (view === "admins")        return <AdminManagement        onBack={() => setView("main")} />;
 
   return (
     <div className="flex flex-col flex-1">
@@ -61,6 +63,16 @@ export default function SettingsPage() {
           <div className="rounded-2xl border border-border bg-surface overflow-hidden">
             <MenuItem label="Commission Settings"    onClick={() => setView("commission")} />
             <MenuItem label="Notification Templates" onClick={() => setView("notifications")} />
+          </div>
+        </div>
+
+        {/* Admin */}
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-3 mt-4">
+            Admin
+          </p>
+          <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+            <MenuItem label="Admin Management" onClick={() => setView("admins")} />
           </div>
         </div>
 
