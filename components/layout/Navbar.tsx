@@ -1,7 +1,8 @@
 // components/layout/Navbar.tsx
 "use client";
 
-import { Bell, ChevronDown, PanelLeftOpen } from "lucide-react";
+import { Bell, ChevronDown, PanelLeftOpen, Menu } from "lucide-react";
+import Image from "next/image";
 import { useSidebar } from "@/context/SidebarContext";
 
 interface TopbarProps {
@@ -9,23 +10,51 @@ interface TopbarProps {
 }
 
 export default function Topbar({ title }: TopbarProps) {
-  const { collapsed, toggle } = useSidebar();
+  const { collapsed, toggle, setMobileOpen } = useSidebar();
 
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between h-16 px-6 bg-surface border-b border-border shrink-0">
+      <style>{`
+        .nav-mobile-only { display: flex; }
+        @media (min-width: 768px) { .nav-mobile-only { display: none !important; } }
+        .nav-desktop-only { display: none; }
+        @media (min-width: 768px) { .nav-desktop-only { display: flex; } }
+      `}</style>
 
-      {/* ── Left: expand toggle (collapsed only) + title ── */}
+      {/* ── Left: hamburger (mobile) + expand toggle (desktop collapsed) + title ── */}
       <div className="flex items-center gap-3">
+
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="nav-mobile-only p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
+        >
+          <Menu size={20} strokeWidth={1.8} />
+        </button>
+
+        {/* Expand toggle — desktop, collapsed state only */}
         {collapsed && (
           <button
             onClick={toggle}
             aria-label="Expand sidebar"
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
+            className="nav-desktop-only p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
           >
             <PanelLeftOpen size={19} strokeWidth={1.8} />
           </button>
         )}
-        <h1 className="text-[19px] font-bold text-text-main">{title}</h1>
+
+        {/* Logo — mobile only */}
+        <Image
+          src="/logo/fav.png"
+          alt="inSmartio"
+          width={36}
+          height={36}
+          className="nav-mobile-only"
+          style={{ height: "auto", objectFit: "contain" }}
+        />
+
+        <h1 className="text-[17px] sm:text-[19px] font-bold text-text-main">{title}</h1>
       </div>
 
       {/* ── Right: bell + admin ── */}
@@ -44,7 +73,7 @@ export default function Topbar({ title }: TopbarProps) {
             <p className="text-[13px] font-semibold leading-tight text-text-main">Admin</p>
             <p className="text-[11px] text-text-muted">admin@helpme.com</p>
           </div>
-          <ChevronDown size={14} className="text-text-muted" />
+          <ChevronDown size={14} className="text-text-muted hidden sm:block" />
         </button>
 
       </div>
