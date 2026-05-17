@@ -16,17 +16,17 @@ const slides = [cleanerImage1, cleanerImage2];
 
 export default function LoginPage() {
   const dispatch = useAppDispatch();
-  const router = useRouter();
+  const router   = useRouter();
 
   const { status, error: authError } = useAppSelector((state) => state.auth);
   const isLoading = status === "loading";
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [twoFa, setTwoFa] = useState("");
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
+  const [twoFa,        setTwoFa]        = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [isAnimating,  setIsAnimating]  = useState(false);
 
   // Slideshow
   useEffect(() => {
@@ -40,42 +40,34 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // React to login outcome — fire toast once then reset status back to idle
+  // Login outcome
   useEffect(() => {
     if (status === "succeeded") {
-      toast.success("Welcome back!", {
-        description: "Redirecting to dashboard...",
-      });
+      toast.success("Welcome back!", { description: "Redirecting to dashboard..." });
       router.push("/dashboard");
     }
-
     if (status === "failed" && authError) {
-      toast.error("Login failed", {
-        description: authError,
-      });
-      // Reset so this doesn't re-fire on any future re-render
+      toast.error("Login failed", { description: authError });
       dispatch(resetAuthStatus());
     }
   }, [status, authError, router, dispatch]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!email || !password) {
-      toast.warning("Missing fields", {
-        description: "Please fill in your email and password.",
-      });
+      toast.warning("Missing fields", { description: "Please fill in your email and password." });
       return;
     }
-
     dispatch(login({ email, password }));
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
-      <div className="flex w-full max-w-6xl min-h-150 rounded-2xl overflow-hidden shadow-ambient border border-border">
-
-        {/* ── LEFT: Image Slideshow Panel ── */}
+    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 sm:p-6">
+      <div
+        className="flex w-full max-w-6xl rounded-2xl overflow-hidden shadow-ambient border border-border"
+        style={{ minHeight: "min(600px, 90vh)" }}
+      >
+        {/* ── LEFT: Slideshow — hidden on mobile, shows md+ ── */}
         <div className="relative hidden md:flex flex-col justify-end flex-[0_0_52%] overflow-hidden">
           {slides.map((src, i) => (
             <div
@@ -89,12 +81,9 @@ export default function LoginPage() {
                 fill
                 className="object-cover"
                 style={{
-                  animation:
-                    i === currentSlide
-                      ? isAnimating
-                        ? "swayOut 2s ease-in-out forwards"
-                        : "swayIn 2s ease-in-out forwards"
-                      : "none",
+                  animation: i === currentSlide
+                    ? isAnimating ? "swayOut 2s ease-in-out forwards" : "swayIn 2s ease-in-out forwards"
+                    : "none",
                 }}
                 priority={i === 0}
               />
@@ -102,26 +91,26 @@ export default function LoginPage() {
           ))}
         </div>
 
-        {/* ── RIGHT: Form Panel ── */}
-        <div className="flex flex-1 flex-col justify-center items-center px-10 py-14 bg-surface">
+        {/* ── RIGHT: Form Panel — full width on mobile ── */}
+        <div className="flex flex-1 flex-col justify-center items-center px-5 py-10 sm:px-10 sm:py-14 bg-surface">
 
           {/* Brand */}
-          <div className="text-center mb-8">
-            <p className="text-3xl font-extrabold tracking-tight text-primary">
+          <div className="text-center mb-6 sm:mb-8">
+            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-primary">
               inSmartio
             </p>
           </div>
 
           {/* Card */}
-          <div className="w-full max-w-md rounded-2xl p-9 bg-white border border-border shadow-sm">
-            <h1 className="text-lg font-bold text-center mb-7 text-text-main">
+          <div className="w-full max-w-md rounded-2xl p-6 sm:p-9 bg-white border border-border shadow-sm">
+            <h1 className="text-base sm:text-lg font-bold text-center mb-5 sm:mb-7 text-text-main">
               Admin Dashboard
             </h1>
 
             <form onSubmit={handleLogin} noValidate>
 
               {/* Email */}
-              <div className="mb-5">
+              <div className="mb-4 sm:mb-5">
                 <label htmlFor="email" className="block text-[13px] font-medium mb-1.5 text-text-main">
                   Email
                 </label>
@@ -163,14 +152,14 @@ export default function LoginPage() {
               </div>
 
               {/* Forgot password */}
-              <div className="flex justify-end mb-5">
+              <div className="flex justify-end mb-4 sm:mb-5">
                 <a href="#" className="text-xs text-primary opacity-80 hover:opacity-100 transition-opacity">
                   Forgot password?
                 </a>
               </div>
 
               {/* 2FA */}
-              <div className="mb-7">
+              <div className="mb-6 sm:mb-7">
                 <label htmlFor="twofa" className="block text-[13px] font-medium mb-1.5 text-text-main">
                   2FA Code{" "}
                   <span className="text-text-muted font-normal">(optional)</span>
@@ -193,14 +182,10 @@ export default function LoginPage() {
                 disabled={isLoading}
                 className="btn-primary w-full rounded-xl py-3.5 text-[15px] font-semibold tracking-wide disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Logging in...
-                  </>
-                ) : (
-                  "Login"
-                )}
+                {isLoading
+                  ? <><Loader2 size={16} className="animate-spin" /> Logging in...</>
+                  : "Login"
+                }
               </button>
 
             </form>
