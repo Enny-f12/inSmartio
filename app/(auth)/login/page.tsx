@@ -62,9 +62,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 sm:p-6">
+    <div className="min-h-screen w-full flex items-center justify-center bg-background px-4 py-8 sm:p-6">
       <div
-        className="flex w-full max-w-6xl rounded-2xl overflow-hidden shadow-ambient border border-border"
+        className="flex w-full max-w-6xl rounded-2xl overflow-hidden sm:shadow-ambient sm:border sm:border-border"
         style={{ minHeight: "min(600px, 90vh)" }}
       >
         {/* ── LEFT: Slideshow — hidden on mobile, shows md+ ── */}
@@ -101,8 +101,8 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Card */}
-          <div className="w-full max-w-md rounded-2xl p-6 sm:p-9 bg-white border border-border shadow-sm">
+          {/* Card — no border/shadow on mobile, card style on sm+ */}
+          <div className="w-full max-w-md rounded-2xl p-0 sm:p-9 sm:bg-white sm:border sm:border-border sm:shadow-sm">
             <h1 className="text-base sm:text-lg font-bold text-center mb-5 sm:mb-7 text-text-main">
               Admin Dashboard
             </h1>
@@ -180,7 +180,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="btn-primary w-full rounded-xl py-3.5 text-[15px] font-semibold tracking-wide disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="btn-primary w-full rounded-xl py-3.5 text-[15px] font-semibold tracking-wide disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center mt-4 sm:mt-0 gap-2"
               >
                 {isLoading
                   ? <><Loader2 size={16} className="animate-spin" /> Logging in...</>
