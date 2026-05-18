@@ -8,7 +8,6 @@ import VerificationModal from "@/components/verifications/VerificationModal";
 import { StatusBadge } from "@/components/ui/Badge";
 import type { Expert, Tier } from "@/components/verifications/types";
 
-// ── Mock data ────────────────────────────────────────────────
 const mockExperts: Expert[] = [
   {
     id: 1, name: "Emeka O.", phone: "+234 801 234 5678", email: "emeka@email.com",
@@ -104,13 +103,13 @@ const mockExperts: Expert[] = [
 
 const TIERS: Tier[] = ["Tier 1", "Tier 2", "Tier 3"];
 const PAGE_SIZE = 10;
-const TOTAL_PENDING = 45; // mock total across all tiers
+const TOTAL_PENDING = 45;
 
 export default function VerificationsPage() {
   const [activeTier, setActiveTier] = useState<Tier>("Tier 1");
-  const [search, setSearch]         = useState("");
-  const [page, setPage]             = useState(1);
-  const [selected, setSelected]     = useState<Expert | null>(null);
+  const [search,     setSearch]     = useState("");
+  const [page,       setPage]       = useState(1);
+  const [selected,   setSelected]   = useState<Expert | null>(null);
 
   const filtered = mockExperts.filter((e) =>
     e.appliedTier === activeTier &&
@@ -121,28 +120,48 @@ export default function VerificationsPage() {
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col flex-1">
+    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <Topbar title="Verifications" />
 
-      <main className="flex-1 px-8 py-6 space-y-5">
+      <style>{`
+        .ver-main { padding: 16px; gap: 16px; }
+        .ver-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+        .ver-tiers { display: flex; gap: 8px; width: 100%; }
+        .ver-tier-btn { flex: 1; text-align: center; }
+        .ver-table { display: none; }
+        .ver-cards { display: flex; flex-direction: column; gap: 10px; }
+        .ver-pagination { flex-direction: column; gap: 8px; align-items: flex-start; }
+        @media (min-width: 640px) {
+          .ver-main { padding: 24px 32px; gap: 20px; }
+          .ver-header { flex-direction: row; align-items: center; }
+          .ver-tiers { width: auto; }
+          .ver-tier-btn { flex: none; }
+          .ver-table { display: block; }
+          .ver-cards { display: none; }
+          .ver-pagination { flex-direction: row; align-items: center; }
+        }
+      `}</style>
 
-        {/* ── Sub-header: pending count + tier tabs ── */}
-        <div className="flex items-center justify-between">
-          <span className="px-4 py-1.5 rounded-lg text-[13px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+      <main className="ver-main" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+
+        {/* Sub-header */}
+        <div className="ver-header" style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", whiteSpace: "nowrap" }}>
             {TOTAL_PENDING} pending
           </span>
-
-          <div className="flex items-center gap-2">
+          <div className="ver-tiers">
             {TIERS.map((tier) => (
               <button
                 key={tier}
+                className="ver-tier-btn"
                 onClick={() => { setActiveTier(tier); setPage(1); }}
-                className={`
-                  px-5 py-2 rounded-xl text-[13px] font-semibold transition-all
-                  ${tier === activeTier
-                    ? "bg-green-600 text-white border-transparent"
-                    : "bg-surface text-text-muted border border-border hover:bg-background"}
-                `}
+                style={{
+                  padding: "8px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+                  border: tier === activeTier ? "none" : "1px solid var(--color-border)",
+                  backgroundColor: tier === activeTier ? "#16a34a" : "var(--color-surface)",
+                  color: tier === activeTier ? "#fff" : "var(--color-text-muted)",
+                  cursor: "pointer",
+                }}
               >
                 {tier}
               </button>
@@ -150,112 +169,94 @@ export default function VerificationsPage() {
           </div>
         </div>
 
-        {/* ── Table card ── */}
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+        {/* Table card */}
+        <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
 
-          {/* Search bar */}
-          <div className="px-6 py-4 border-b border-border">
-            <div className="relative">
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          {/* Search */}
+          <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+            <div style={{ position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
               <input
                 type="text"
                 placeholder="Search name..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
               />
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          {/* ── Desktop table ── */}
+          <div className="ver-table" style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr className="border-b border-border bg-background">
+                <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
                   {["Name", "Submitted", "Status", "Documents", "Actions"].map((h) => (
-                    <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center py-14 text-sm text-text-muted">
-                      No verifications found.
+                  <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No verifications found.</td></tr>
+                ) : paginated.map((expert) => (
+                  <tr key={expert.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    <td style={{ padding: "16px 24px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{expert.name}</td>
+                    <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{expert.submitted}</td>
+                    <td style={{ padding: "16px 24px" }}><StatusBadge label="Pending" variant="yellow" /></td>
+                    <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{expert.docsVerified}/{expert.docsTotal}</td>
+                    <td style={{ padding: "16px 24px" }}>
+                      <button onClick={() => setSelected(expert)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                        <Eye size={17} strokeWidth={1.8} />
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  paginated.map((expert) => (
-                    <tr key={expert.id} className="hover:bg-background transition-colors">
-                      <td className="px-6 py-4 text-[13.5px] font-semibold text-text-main">
-                        {expert.name}
-                      </td>
-                      <td className="px-6 py-4 text-[13.5px] text-text-muted">
-                        {expert.submitted}
-                      </td>
-                      <td className="px-6 py-4">
-                        <StatusBadge label="Pending" variant="yellow" />
-                      </td>
-                      <td className="px-6 py-4 text-[13.5px] text-text-muted">
-                        {expert.docsVerified}/{expert.docsTotal}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => setSelected(expert)}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors"
-                          title="View details"
-                        >
-                          <Eye size={17} strokeWidth={1.8} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
 
+          {/* ── Mobile cards ── */}
+          <div className="ver-cards" style={{ padding: "12px" }}>
+            {paginated.length === 0 ? (
+              <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No verifications found.</p>
+            ) : paginated.map((expert) => (
+              <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>{expert.name}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <StatusBadge label="Pending" variant="yellow" />
+                    <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{expert.submitted}</span>
+                    <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Docs: {expert.docsVerified}/{expert.docsTotal}</span>
+                  </div>
+                </div>
+                <button onClick={() => setSelected(expert)} style={{ padding: "8px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}>
+                  <Eye size={16} strokeWidth={1.8} />
+                </button>
+              </div>
+            ))}
+          </div>
+
           {/* Pagination */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-background">
-            <p className="text-[12px] text-text-muted">
+          <div className="ver-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+            <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
               Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {TOTAL_PENDING} results
             </p>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Prev</button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-lg text-[12px] font-medium transition-all ${
-                    p === page
-                      ? "btn-primary"
-                      : "border border-border bg-surface text-text-muted hover:bg-background"
-                  }`}
-                >
+                <button key={p} onClick={() => setPage(p)} className={p === page ? "btn-primary" : ""} style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
                   {p}
                 </button>
               ))}
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Modal */}
       {selected && (
         <VerificationModal
           expert={selected}
