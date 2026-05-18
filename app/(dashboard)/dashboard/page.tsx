@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/immutability */
 "use client";
 
 import { useEffect } from "react";
@@ -7,7 +6,7 @@ import Topbar from "@/components/layout/Navbar";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchUsers } from "@/lib/redux/usersSlice";
+import { fetchUsers, fetchAdminStats } from "@/lib/redux/usersSlice";
 
 const userGrowthData = {
   title: "Monthly User Growth",
@@ -43,20 +42,37 @@ const card: React.CSSProperties = {
 
 export default function DashboardPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus } = useAppSelector((s) => s.users);
+  const { list, listStatus, adminStats, statsStatus } = useAppSelector((s) => s.users);
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchUsers());
   }, [dispatch, listStatus]);
 
+  useEffect(() => {
+    if (statsStatus === "idle") dispatch(fetchAdminStats());
+  }, [dispatch, statsStatus]);
+
+  // Log real shape so we can map fields properly
+  useEffect(() => {
+    if (statsStatus === "succeeded" && adminStats) {
+      console.log("📊 Admin stats shape:", adminStats);
+    }
+  }, [statsStatus, adminStats]);
+
   const isLoading  = listStatus === "loading" || listStatus === "idle";
   const totalUsers = listStatus === "succeeded" ? list.length.toLocaleString() : isLoading ? "..." : "—";
 
+  // Pull from adminStats once we know the shape — using flexible key access
+  const s = adminStats as Record<string, unknown> | null;
+  const statRevenue  = s ? (s.totalRevenue ?? s.revenue ?? s.totalEarnings ?? "₦2.4M") as string : "₦2.4M";
+  const statExperts  = s ? (s.verifiedExperts ?? s.experts ?? s.totalExperts ?? "186") as string : "186";
+  const statGrowth   = s ? (s.growth ?? s.growthRate ?? s.userGrowth ?? "+24%") as string : "+24%";
+
   const stats = [
-    { label: "Total Users",      value: totalUsers, change: "+12% this month",    icon: Users,       iconColor: "#2563eb", iconBg: "#eff6ff", accent: "#2563eb" },
-    { label: "Verified Experts", value: "186",      change: "+4 this week",       icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#f0fdf4", accent: "#16a34a" },
-    { label: "Revenue",          value: "₦2.4M",    change: "+18% vs last month", icon: DollarSign,  iconColor: "#d97706", iconBg: "#fffbeb", accent: "#d97706" },
-    { label: "Growth",           value: "+24%",     change: "vs last quarter",    icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#f5f3ff", accent: "#7c3aed" },
+    { label: "Total Users",      value: totalUsers,                            change: "+12% this month",    icon: Users,       iconColor: "#2563eb", iconBg: "#eff6ff", accent: "#2563eb" },
+    { label: "Verified Experts", value: String(statExperts),                   change: "+4 this week",       icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#f0fdf4", accent: "#16a34a" },
+    { label: "Revenue",          value: String(statRevenue),                   change: "+18% vs last month", icon: DollarSign,  iconColor: "#d97706", iconBg: "#fffbeb", accent: "#d97706" },
+    { label: "Growth",           value: String(statGrowth),                    change: "vs last quarter",    icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#f5f3ff", accent: "#7c3aed" },
   ];
 
   return (
@@ -149,25 +165,24 @@ function DonutSVGOnly({ segments, size = 200 }: { segments: typeof donutSegments
   const R = size * 0.375, r = size * 0.2167;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-  let startAngle = -90;
-  const arcs = segments.map((seg) => {
-    const sweep = (seg.value / 100) * 360;
-    const endAngle = startAngle + sweep;
-    const large = sweep > 180 ? 1 : 0;
-    const x1 = cx + R * Math.cos(toRad(startAngle));
-    const y1 = cy + R * Math.sin(toRad(startAngle));
-    const x2 = cx + R * Math.cos(toRad(endAngle));
-    const y2 = cy + R * Math.sin(toRad(endAngle));
-    const xi1 = cx + r * Math.cos(toRad(startAngle));
-    const yi1 = cy + r * Math.sin(toRad(startAngle));
-    const xi2 = cx + r * Math.cos(toRad(endAngle));
-    const yi2 = cy + r * Math.sin(toRad(endAngle));
-    const mid = startAngle + sweep / 2;
-    const lr = (R + r) / 2;
-    const d = `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`;
-    const result = { ...seg, d, lx: cx + lr * Math.cos(toRad(mid)), ly: cy + lr * Math.sin(toRad(mid)) };
-    startAngle = endAngle;
-    return result;
+  // Pre-compute start angles without mutation
+  const startAngles = segments.map((_, i) =>
+    segments.slice(0, i).reduce((sum, s) => sum + (s.value / 100) * 360, -90)
+  );
+
+  const arcs = segments.map((seg, i) => {
+    const start    = startAngles[i];
+    const sweep    = (seg.value / 100) * 360;
+    const end      = start + sweep;
+    const large    = sweep > 180 ? 1 : 0;
+    const x1  = cx + R * Math.cos(toRad(start));  const y1  = cy + R * Math.sin(toRad(start));
+    const x2  = cx + R * Math.cos(toRad(end));    const y2  = cy + R * Math.sin(toRad(end));
+    const xi1 = cx + r * Math.cos(toRad(start));  const yi1 = cy + r * Math.sin(toRad(start));
+    const xi2 = cx + r * Math.cos(toRad(end));    const yi2 = cy + r * Math.sin(toRad(end));
+    const mid = start + sweep / 2;
+    const lr  = (R + r) / 2;
+    const d   = `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`;
+    return { ...seg, d, lx: cx + lr * Math.cos(toRad(mid)), ly: cy + lr * Math.sin(toRad(mid)) };
   });
 
   return (

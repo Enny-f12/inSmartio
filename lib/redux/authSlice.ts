@@ -22,10 +22,12 @@ export const login = createAsyncThunk(
   async (payload: LoginPayload, { rejectWithValue }) => {
     try {
       const data = await adminLogin(payload);
+      // ── path: "/" ensures cookie is readable on ALL routes ──
       Cookies.set("token", data.token, {
-        expires: 7,
+        expires:  7,
+        path:     "/",          // ← critical fix
         sameSite: "strict",
-        secure: process.env.NODE_ENV === "production",
+        secure:   process.env.NODE_ENV === "production",
       });
       return data;
     } catch (err) {
@@ -46,10 +48,8 @@ const authSlice = createSlice({
       state.admin = null;
       state.status = "idle";
       state.error = null;
-      Cookies.remove("token");
+      Cookies.remove("token", { path: "/" }); // ← match path on remove
     },
-    // Call this after showing an error toast so status goes back to idle
-    // and the same error doesn't re-trigger on re-renders
     resetAuthStatus: (state) => {
       state.status = "idle";
       state.error = null;
@@ -58,17 +58,17 @@ const authSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(login.pending, (state) => {
-        state.status = "loading";
-        state.error = null;
+        state.status  = "loading";
+        state.error   = null;
       })
       .addCase(login.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.token = action.payload.token;
-        state.admin = action.payload.data;
+        state.token  = action.payload.token;
+        state.admin  = action.payload.data;
       })
       .addCase(login.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload as string;
+        state.error  = action.payload as string;
       });
   },
 });

@@ -1,48 +1,51 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
-import { getAllUsers, getUserById, deleteUser, registerUser, type ApiUser, type RegisterUserPayload } from "@/lib/api/usersApi";
+import {
+  getAllUsers, getUserById, registerUser, deleteUser,
+  suspendUser, getAdminStats,
+  type ApiUser, type RegisterUserPayload, type AdminStats,
+} from "@/lib/api/usersApi";
 
 interface UsersState {
-  list: ApiUser[];
-  listStatus: "idle" | "loading" | "succeeded" | "failed";
-  listError: string | null;
-  selected: ApiUser | null;
-  selectedStatus: "idle" | "loading" | "succeeded" | "failed";
-  deleteStatus: "idle" | "loading" | "succeeded" | "failed";
-  deleteError: string | null;
+  list:          ApiUser[];
+  listStatus:    "idle" | "loading" | "succeeded" | "failed";
+  listError:     string | null;
+  selected:      ApiUser | null;
+  selectedStatus:"idle" | "loading" | "succeeded" | "failed";
+  mutateStatus:  "idle" | "loading" | "succeeded" | "failed";
+  adminStats:    AdminStats | null;
+  statsStatus:   "idle" | "loading" | "succeeded" | "failed";
 }
 
 const initialState: UsersState = {
-  list: [],
-  listStatus: "idle",
-  listError: null,
-  selected: null,
+  list:           [],
+  listStatus:     "idle",
+  listError:      null,
+  selected:       null,
   selectedStatus: "idle",
-  deleteStatus: "idle",
-  deleteError: null,
+  mutateStatus:   "idle",
+  adminStats:     null,
+  statsStatus:    "idle",
 };
+
+const errMsg = (err: unknown, fallback: string) =>
+  axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
+
+// ── Existing thunks ───────────────────────────────────────
 
 export const fetchUsers = createAsyncThunk(
   "users/fetchAll",
   async (_, { rejectWithValue }) => {
     try { return await getAllUsers(); }
-    catch (err) {
-      return rejectWithValue(axios.isAxiosError(err)
-        ? err.response?.data?.message ?? "Failed to fetch users"
-        : "Failed to fetch users");
-    }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch users")); }
   }
 );
 
 export const fetchUserById = createAsyncThunk(
   "users/fetchById",
-  async (id: string, { rejectWithValue }) => {
-    try { return await getUserById(id); }
-    catch (err) {
-      return rejectWithValue(axios.isAxiosError(err)
-        ? err.response?.data?.message ?? "Failed to fetch user"
-        : "Failed to fetch user");
-    }
+  async ({ id, type }: { id: string; type?: string }, { rejectWithValue }) => {
+    try { return await getUserById(id, type); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch user")); }
   }
 );
 
@@ -50,58 +53,96 @@ export const addUser = createAsyncThunk(
   "users/add",
   async (payload: RegisterUserPayload, { rejectWithValue }) => {
     try { return await registerUser(payload); }
-    catch (err) {
-      return rejectWithValue(axios.isAxiosError(err)
-        ? err.response?.data?.message ?? "Failed to add user"
-        : "Failed to add user");
-    }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to register user")); }
   }
 );
 
 export const removeUser = createAsyncThunk(
-  "users/delete",
+  "users/remove",
   async (id: string, { rejectWithValue }) => {
     try { await deleteUser(id); return id; }
-    catch (err) {
-      return rejectWithValue(axios.isAxiosError(err)
-        ? err.response?.data?.message ?? "Failed to delete user"
-        : "Failed to delete user");
-    }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to delete user")); }
   }
 );
+
+// ── New admin thunks ──────────────────────────────────────
+
+export const suspendUserThunk = createAsyncThunk(
+  "users/suspend",
+  async ({ type, id }: { type: string; id: string }, { rejectWithValue }) => {
+    try { await suspendUser(type, id); return id; }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to suspend user")); }
+  }
+);
+
+export const fetchAdminStats = createAsyncThunk(
+  "users/adminStats",
+  async (_, { rejectWithValue }) => {
+    try { return await getAdminStats(); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch stats")); }
+  }
+);
+
+// ── Slice ─────────────────────────────────────────────────
 
 const usersSlice = createSlice({
   name: "users",
   initialState,
   reducers: {
     clearSelected: (state) => {
-      state.selected = null;
+      state.selected       = null;
       state.selectedStatus = "idle";
+    },
+    resetMutateStatus: (state) => {
+      state.mutateStatus = "idle";
     },
   },
   extraReducers: (builder) => {
+    // fetchUsers
     builder
-      .addCase(fetchUsers.pending, (state) => { state.listStatus = "loading"; state.listError = null; })
+      .addCase(fetchUsers.pending,   (state) => { state.listStatus = "loading"; state.listError = null; })
       .addCase(fetchUsers.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
-      .addCase(fetchUsers.rejected, (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
+      .addCase(fetchUsers.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
 
+    // fetchUserById
     builder
-      .addCase(fetchUserById.pending, (state) => { state.selectedStatus = "loading"; state.selected = null; })
+      .addCase(fetchUserById.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
       .addCase(fetchUserById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
-      .addCase(fetchUserById.rejected, (state) => { state.selectedStatus = "failed"; });
+      .addCase(fetchUserById.rejected,  (state) => { state.selectedStatus = "failed"; });
 
+    // addUser
     builder
-      .addCase(addUser.fulfilled, (state, action) => {
-        state.list.unshift(action.payload);
-      });
+      .addCase(addUser.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(addUser.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; state.list.unshift(action.payload); })
+      .addCase(addUser.rejected,  (state) => { state.mutateStatus = "failed"; });
 
+    // removeUser
     builder
+      .addCase(removeUser.pending,   (state) => { state.mutateStatus = "loading"; })
       .addCase(removeUser.fulfilled, (state, action) => {
+        state.mutateStatus = "succeeded";
         state.list = state.list.filter((u) => u.id !== action.payload);
-        if (state.selected?.id === action.payload) { state.selected = null; state.selectedStatus = "idle"; }
-      });
+      })
+      .addCase(removeUser.rejected,  (state) => { state.mutateStatus = "failed"; });
+
+    // suspendUser
+    builder
+      .addCase(suspendUserThunk.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(suspendUserThunk.fulfilled, (state, action) => {
+        state.mutateStatus = "succeeded";
+        // optimistically update status in list
+        const user = state.list.find((u) => u.id === action.payload);
+        if (user) user.status = "suspended";
+      })
+      .addCase(suspendUserThunk.rejected, (state) => { state.mutateStatus = "failed"; });
+
+    // adminStats
+    builder
+      .addCase(fetchAdminStats.pending,   (state) => { state.statsStatus = "loading"; })
+      .addCase(fetchAdminStats.fulfilled, (state, action) => { state.statsStatus = "succeeded"; state.adminStats = action.payload; })
+      .addCase(fetchAdminStats.rejected,  (state) => { state.statsStatus = "failed"; });
   },
 });
 
-export const { clearSelected } = usersSlice.actions;
+export const { clearSelected, resetMutateStatus } = usersSlice.actions;
 export default usersSlice.reducer;

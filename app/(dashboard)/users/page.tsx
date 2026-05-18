@@ -104,7 +104,7 @@ export default function UsersPage() {
   };
 
   const handleViewUser = (userId: string) => {
-    dispatch(fetchUserById(userId));
+    dispatch(fetchUserById({ id: userId }));
   };
 
   const handleDelete = () => {
