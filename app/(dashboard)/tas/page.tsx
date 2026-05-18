@@ -1,3 +1,4 @@
+// app/(dashboard)/tas/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -10,34 +11,42 @@ import type { TASTab, ActiveAgent } from "@/components/tas/types";
 const TABS: TASTab[] = ["Applications", "Active TAS Agents"];
 
 export default function TASManagementPage() {
-  const [activeTab,      setActiveTab]      = useState<TASTab>("Applications");
-  const [selectedAgent,  setSelectedAgent]  = useState<ActiveAgent | null>(null);
+  const [activeTab,     setActiveTab]     = useState<TASTab>("Applications");
+  const [selectedAgent, setSelectedAgent] = useState<ActiveAgent | null>(null);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <Topbar title="TAS Management" />
 
-      <div className="flex-1 px-8 py-5 overflow-y-auto bg-background">
+      <style>{`
+        .tas-outer { padding: 16px; }
+        .tas-inner { padding: 0; gap: 16px; }
+        @media (min-width: 640px) {
+          .tas-outer { padding: 20px 32px; }
+          .tas-inner { padding: 0; gap: 20px; }
+        }
+      `}</style>
+
+      <div className="tas-outer" style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-background)" }}>
         {selectedAgent ? (
-          /* ── Detail view: full content area, no tab bar ── */
-          <AgentDetail
-            agent={selectedAgent}
-            onBack={() => setSelectedAgent(null)}
-          />
+          <AgentDetail agent={selectedAgent} onBack={() => setSelectedAgent(null)} />
         ) : (
-          /* ── List views: tab bar + content ── */
-          <div className="p-8 space-y-5">
+          <div className="tas-inner" style={{ display: "flex", flexDirection: "column" }}>
             {/* Tab switcher */}
-            <div className="flex items-center gap-2">
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {TABS.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-5 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-                    tab === activeTab
-                      ? "btn-primary"
-                      : "bg-transparent border border-border text-text-muted hover:bg-surface"
-                  }`}
+                  className={tab === activeTab ? "btn-primary" : ""}
+                  style={{
+                    padding: "8px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+                    border: tab === activeTab ? "none" : "1px solid var(--color-border)",
+                    backgroundColor: tab === activeTab ? undefined : "transparent",
+                    color: tab === activeTab ? undefined : "var(--color-text-muted)",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
                 >
                   {tab}
                 </button>
@@ -45,9 +54,7 @@ export default function TASManagementPage() {
             </div>
 
             {activeTab === "Applications" && <ApplicationsTab />}
-            {activeTab === "Active TAS Agents" && (
-              <ActiveAgentsTab onSelectAgent={setSelectedAgent} />
-            )}
+            {activeTab === "Active TAS Agents" && <ActiveAgentsTab onSelectAgent={setSelectedAgent} />}
           </div>
         )}
       </div>

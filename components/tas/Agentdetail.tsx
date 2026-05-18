@@ -37,7 +37,7 @@ function InfoRow({
   return (
     <div className="flex items-center gap-3 text-[13px] mb-3">
       <Icon size={14} className="text-text-muted shrink-0" />
-      <span className="w-48 shrink-0 text-text-muted">{label}</span>
+      <span className="agent-info-row-label shrink-0 text-text-muted" style={{ width: "160px" }}>{label}</span>
       {children ?? <span className="text-text-main">{value}</span>}
     </div>
   );
@@ -48,7 +48,15 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
 
   return (
     <>
-      <div className="p-8">
+      <style>{`
+        .agent-detail-wrap { padding: 16px; }
+        .agent-info-row-label { width: 160px !important; }
+        @media (min-width: 640px) {
+          .agent-detail-wrap { padding: 32px; }
+          .agent-info-row-label { width: 192px !important; }
+        }
+      `}</style>
+      <div className="agent-detail-wrap">
 
         {/* ── Back ── */}
         <button
@@ -125,23 +133,21 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
 
         </div>
 
-        {/* ── Sticky action bar ── */}
-        <div
-          className="flex items-center mt-6"
-          style={{ borderTop: "1px solid var(--color-border)" }}
+        {/* ── Action bar ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", borderTop: "1px solid var(--color-border)", marginTop: "24px" }}
+          className="sm:flex sm:items-center"
         >
           <button
             onClick={() => setAdjustTierAgent(agent)}
-            className="btn-primary flex-1 py-4 text-[13px] font-semibold rounded-none first:rounded-bl-2xl"
-            style={{ borderRight: "1px solid var(--color-border)" }}
+            className="btn-primary"
+            style={{ padding: "16px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", borderRight: "1px solid var(--color-border)", borderBottom: "1px solid var(--color-border)" }}
           >
             Adjust Tier
           </button>
           {["Suspend TAS", "Force Payout", "Add Note"].map((label, i, arr) => (
             <button
               key={label}
-              className="flex-1 py-4 text-[13px] font-medium text-text-muted hover:bg-surface transition-colors"
-              style={{ borderRight: i < arr.length - 1 ? "1px solid var(--color-border)" : "none" }}
+              style={{ padding: "16px", fontSize: "13px", fontWeight: 500, color: "var(--color-text-muted)", background: "none", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--color-border)" : "none", borderBottom: "1px solid var(--color-border)", cursor: "pointer" }}
             >
               {label}
             </button>

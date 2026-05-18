@@ -8,7 +8,7 @@ import {
 import Modal from "@/components/ui/Modal";
 import type { Application } from "@/components/tas/types";
 
-interface ApplicationModalProps {
+export interface ApplicationModalProps {
   app: Application | null;
   onClose: () => void;
 }
