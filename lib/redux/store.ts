@@ -5,6 +5,8 @@ import usersReducer      from "./usersSlice";
 import categoriesReducer from "./categoriesSlice";
 import jobsReducer       from "./jobSlice";
 import adminReducer      from "./adminSlice";
+import disputeReducer    from "./disputeSlice";
+import bannerReducer     from "./bannerSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +16,8 @@ export const store = configureStore({
     categories: categoriesReducer,
     jobs:       jobsReducer,
     admin:      adminReducer,
+    disputes:   disputeReducer,
+    banners:    bannerReducer,
   },
 });
 
