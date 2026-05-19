@@ -1,7 +1,8 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
+import axiosInstance from "@/lib/api/axiosInstance";
 import {
-  getAllUsers, getUserById, registerUser, deleteUser,
+  getAllUsers, getUserById, registerUser, 
   suspendUser, getAdminStats,
   type ApiUser, type RegisterUserPayload, type AdminStats,
 } from "@/lib/api/usersApi";
@@ -59,8 +60,11 @@ export const addUser = createAsyncThunk(
 
 export const removeUser = createAsyncThunk(
   "users/remove",
-  async (id: string, { rejectWithValue }) => {
-    try { await deleteUser(id); return id; }
+  async ({ type, id }: { type: string; id: string }, { rejectWithValue }) => {
+    try {
+      await axiosInstance.delete(`/admin/users/${type}/${id}`);
+      return id;
+    }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to delete user")); }
   }
 );
