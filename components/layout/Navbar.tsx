@@ -88,7 +88,7 @@ export default function Topbar({ title }: TopbarProps) {
           </div>
           <div className="nav-admin-detail" style={{ textAlign: "left" }}>
             <p style={{ fontSize: "13px", fontWeight: 600, lineHeight: 1.2, color: "var(--color-text-main)" }}>Admin</p>
-            <p style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>admin@helpme.com</p>
+            <p style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>admin@insmartio.com</p>
           </div>
           <ChevronDown size={14} style={{ color: "var(--color-text-muted)" }} className="nav-admin-detail" />
         </button>

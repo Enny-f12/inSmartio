@@ -26,10 +26,11 @@ export interface CreateBannerPayload {
   ctaLink:       string;
   startDate:     string;
   endDate:       string;
+  // no status — backend sets this separately via update
 }
 
 export interface UpdateBannerPayload extends Partial<CreateBannerPayload> {
-  status?: string; // "active" | "inactive"
+  status?: string; // "active" | "inactive" — only allowed on PUT
 }
 
 export interface BulkCreateBannerPayload {
