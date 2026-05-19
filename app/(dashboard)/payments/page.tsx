@@ -11,13 +11,12 @@ import RefundsTab        from "@/components/payments/Refundstab";
 import type { PayTab }   from "@/components/payments/types";
 import { PAY_TABS }      from "@/components/payments/types";
 
-// ── Stat card — sits inside shared container with dividers ──
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="flex-1 min-w-0 px-6 py-5 text-center">
-      <p className="text-[11px] font-bold uppercase tracking-widest mb-2 text-text-muted">{label}</p>
-      <p className="text-[22px] font-bold text-text-main">{value}</p>
-      <p className="text-[12px] mt-0.5 text-text-muted">{sub}</p>
+    <div className="stat-card">
+      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", marginBottom: "6px" }}>{label}</p>
+      <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", lineHeight: 1.2 }}>{value}</p>
+      <p style={{ fontSize: "12px", marginTop: "2px", color: "var(--color-text-muted)" }}>{sub}</p>
     </div>
   );
 }
@@ -26,49 +25,71 @@ export default function PaymentsPage() {
   const [activeTab, setActiveTab] = useState<PayTab>("Transactions");
 
   return (
-    <div className="flex flex-col flex-1">
+    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <Topbar title="Payments & Payouts" />
 
-      <main className="flex-1 px-8 py-6 space-y-5 bg-background overflow-y-auto">
+      <style>{`
+        .pay-main     { padding: 12px; gap: 14px; }
+        .pay-overview-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+        .stat-cards   { display: grid; grid-template-columns: repeat(2, 1fr); border-radius: 16px; border: 1px solid var(--color-border); background: var(--color-surface); overflow: hidden; }
+        .stat-card    { padding: 14px 16px; border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+        .stat-card:nth-child(2n) { border-right: none; }
+        .stat-card:nth-last-child(-n+2) { border-bottom: none; }
+        .pay-tabs     { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .pay-tabs::-webkit-scrollbar { display: none; }
+        .pay-tabs-inner { display: flex; gap: 8px; width: max-content; }
 
-        {/* Transaction Overview — only on Transactions tab */}
-        {activeTab === "Transactions" && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[15px] font-semibold text-text-main">Transaction Overview</p>
-              <button className="btn-primary flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold">
-                <Download size={15} /> Export
-              </button>
-            </div>
+        @media (min-width: 640px) {
+          .pay-main     { padding: 20px 32px; gap: 20px; }
+          .pay-overview-header { flex-direction: row; align-items: center; }
+          .stat-cards   { display: flex; }
+          .stat-card    { flex: 1; text-align: center; border-right: 1px solid var(--color-border); border-bottom: none; }
+          .stat-card:last-child { border-right: none; }
+          .pay-tabs     { overflow-x: visible; }
+          .pay-tabs-inner { width: auto; flex-wrap: wrap; }
+        }
+      `}</style>
 
-            {/* Shared container with vertical dividers between cards */}
-            <div className="flex rounded-2xl border border-border bg-surface divide-x divide-border">
-              <StatCard label="Escrow"  value="₦4.2M" sub="Held"        />
-              <StatCard label="Payouts" value="₦3.8M" sub="Processed"   />
-              <StatCard label="Revenue" value="₦420K" sub="Platform"    />
-              <StatCard label="Pending" value="₦125K" sub="To Release"  />
-            </div>
-          </div>
-        )}
+      <main className="pay-main" style={{ flex: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--color-background)", overflowY: "auto" }}>
 
-        {/* Tab switcher */}
-        <div className="flex items-center gap-2">
-          {PAY_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-xl text-[13px] font-semibold transition-all ${
-                tab === activeTab
-                  ? "btn-primary"
-                  : "bg-transparent border border-border text-text-muted hover:bg-surface"
-              }`}
-            >
-              {tab}
+        {/* Transaction Overview — always visible */}
+        <div>
+          <div className="pay-overview-header" style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+            <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-text-main)" }}>Transaction Overview</p>
+            <button className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
+              <Download size={15} /> Export
             </button>
-          ))}
+          </div>
+          <div className="stat-cards">
+            <StatCard label="Escrow"  value="₦4.2M" sub="Held"       />
+            <StatCard label="Payouts" value="₦3.8M" sub="Processed"  />
+            <StatCard label="Revenue" value="₦420K" sub="Platform"   />
+            <StatCard label="Pending" value="₦125K" sub="To Release" />
+          </div>
         </div>
 
-        {/* Tab content */}
+        {/* Tab switcher */}
+        <div className="pay-tabs">
+          <div className="pay-tabs-inner">
+            {PAY_TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={tab === activeTab ? "btn-primary" : ""}
+                style={{
+                  padding: "8px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+                  border: tab === activeTab ? "none" : "1px solid var(--color-border)",
+                  backgroundColor: tab === activeTab ? undefined : "transparent",
+                  color: tab === activeTab ? undefined : "var(--color-text-muted)",
+                  cursor: "pointer", whiteSpace: "nowrap",
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {activeTab === "Transactions"    && <TransactionsTab />}
         {activeTab === "Escrow Releases" && <EscrowReleasesTab />}
         {activeTab === "Payouts"         && <PayoutsTab />}

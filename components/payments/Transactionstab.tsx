@@ -22,21 +22,19 @@ function MiniDropdown({
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div style={{ position: "relative" }} ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] border border-border bg-background text-text-muted hover:bg-surface transition-colors min-w-27.5"
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "12px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}
       >
-        <span className="flex-1 text-left">{value || placeholder}</span>
-        <ChevronDown size={13} className="text-text-muted" />
+        <span style={{ flex: 1, textAlign: "left" }}>{value || placeholder}</span>
+        <ChevronDown size={13} />
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 rounded-xl overflow-hidden py-1 bg-surface border border-border shadow-lg min-w-32.5">
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50, borderRadius: "12px", overflow: "hidden", padding: "4px 0", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", minWidth: "120px" }}>
           {options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              className="w-full px-4 py-2 text-[13px] text-left text-text-main hover:bg-background transition-colors"
+            <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
+              style={{ width: "100%", padding: "8px 16px", fontSize: "13px", textAlign: "left", color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer" }}
             >
               {opt}
             </button>
@@ -44,6 +42,24 @@ function MiniDropdown({
         </div>
       )}
     </div>
+  );
+}
+
+// Status color helper
+function statusColor(status: string) {
+  const s = status.toLowerCase();
+  if (s === "completed" || s === "success") return { color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0" };
+  if (s === "pending") return { color: "#d97706", background: "#fffbeb", border: "1px solid #fde68a" };
+  if (s === "failed" || s === "rejected") return { color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca" };
+  return { color: "var(--color-text-muted)", background: "var(--color-background)", border: "1px solid var(--color-border)" };
+}
+
+function StatusPill({ status }: { status: string }) {
+  const s = statusColor(status);
+  return (
+    <span style={{ ...s, fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
+      {status}
+    </span>
   );
 }
 
@@ -64,103 +80,146 @@ export default function TransactionsTab() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
   return (
-    <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+    <>
+      <style>{`
+        .txn-toolbar-row1 { display: flex; flex-direction: column; gap: 8px; }
+        .txn-toolbar-row2 { display: flex; flex-direction: column; gap: 8px; }
+        .txn-amount-row   { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .txn-date-row     { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .txn-table-wrap   { display: none; }
+        .txn-cards        { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .txn-pagination   { flex-direction: column; gap: 8px; align-items: flex-start; }
 
-      {/* Filter toolbar */}
-      <div className="px-6 pt-5 pb-4 border-b border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <SlidersHorizontal size={15} className="text-text-muted" />
-          <span className="text-sm font-semibold text-text-main">Filter</span>
+        @media (min-width: 540px) {
+          .txn-toolbar-row1 { flex-direction: row; align-items: center; }
+          .txn-toolbar-row2 { flex-direction: row; align-items: center; flex-wrap: wrap; }
+        }
+        @media (min-width: 768px) {
+          .txn-table-wrap { display: block; }
+          .txn-cards      { display: none; }
+          .txn-pagination { flex-direction: row; align-items: center; }
+        }
+      `}</style>
+
+      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+
+        {/* Filter toolbar */}
+        <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <SlidersHorizontal size={15} style={{ color: "var(--color-text-muted)" }} />
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)" }}>Filter</span>
+          </div>
+
+          {/* Row 1: Search + Search By */}
+          <div className="txn-toolbar-row1" style={{ marginBottom: "8px" }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+              <input
+                type="text" placeholder="Search..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+              />
+            </div>
+            <MiniDropdown options={SEARCH_BY_OPTIONS} value={searchBy} onChange={setSearchBy} placeholder="Search By" />
+          </div>
+
+          {/* Row 2: Amount + Date */}
+          <div className="txn-toolbar-row2">
+            <div className="txn-amount-row">
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Amount:</span>
+              <MiniDropdown options={["₦0", "₦5K", "₦10K", "₦50K"]} value={amtMin} onChange={setAmtMin} placeholder="Min" />
+              <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>–</span>
+              <MiniDropdown options={["₦10K", "₦50K", "₦100K", "₦500K"]} value={amtMax} onChange={setAmtMax} placeholder="Max" />
+            </div>
+            <div className="txn-date-row">
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Date:</span>
+              <MiniDropdown options={["01/03/2026", "01/02/2026", "01/01/2026"]} value={dateFrom} onChange={setDateFrom} placeholder="From" />
+              <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>–</span>
+              <MiniDropdown options={["31/03/2026", "28/02/2026", "31/01/2026"]} value={dateTo} onChange={setDateTo} placeholder="To" />
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Search + Search By */}
-          <div className="relative flex-1 min-w-45">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="text"
-              placeholder="Search user..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-            />
-          </div>
-
-          <MiniDropdown
-            options={SEARCH_BY_OPTIONS}
-            value={searchBy}
-            onChange={setSearchBy}
-            placeholder="Search By"
-          />
-
-          {/* Amount range */}
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-medium text-text-muted whitespace-nowrap">Amount:</span>
-            <MiniDropdown options={["₦0", "₦5K", "₦10K", "₦50K"]} value={amtMin} onChange={setAmtMin} placeholder="enter min" />
-            <span className="text-[12px] text-text-muted">To</span>
-            <MiniDropdown options={["₦10K", "₦50K", "₦100K", "₦500K"]} value={amtMax} onChange={setAmtMax} placeholder="enter max" />
-          </div>
-
-          {/* Date range */}
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-medium text-text-muted whitespace-nowrap">Date Range:</span>
-            <MiniDropdown
-              options={["01/03/2026", "01/02/2026", "01/01/2026"]}
-              value={dateFrom}
-              onChange={setDateFrom}
-              placeholder="from"
-            />
-            <span className="text-[12px] text-text-muted">To</span>
-            <MiniDropdown
-              options={["31/03/2026", "28/02/2026", "31/01/2026"]}
-              value={dateTo}
-              onChange={setDateTo}
-              placeholder="to"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-background">
-              {["Date", "Type", "User", "Amount", "Status", "Ref"].map((h) => (
-                <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {paginated.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-14 text-sm text-text-muted">No transactions found.</td></tr>
-            ) : paginated.map((t) => (
-              <tr key={t.id} className="hover:bg-background transition-colors">
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{t.date}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-main">{t.type}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{t.user}</td>
-                <td className="px-5 py-4 text-[13.5px] font-medium text-text-main">{t.amount}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{t.status}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{t.ref}</td>
+        {/* Desktop table */}
+        <div className="txn-table-wrap" style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                {["Date", "Type", "User", "Amount", "Status", "Ref"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-background">
-        <p className="text-[12px] text-text-muted">Showing 1 to {Math.min(PAGE_SIZE, filtered.length)} of 100 results</p>
-        <div className="flex items-center gap-1.5">
-          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <button key={p} onClick={() => setPage(p)} className={`w-8 h-8 rounded-lg text-[12px] font-medium transition-all ${p === page ? "btn-primary" : "border border-border bg-surface text-text-muted hover:bg-background"}`}>{p}</button>
-          ))}
-          <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+            </thead>
+            <tbody>
+              {paginated.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No transactions found.</td></tr>
+              ) : paginated.map((t) => (
+                <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{t.date}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-main)" }}>{t.type}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{t.user}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{t.amount}</td>
+                  <td style={{ padding: "16px 20px" }}><StatusPill status={t.status} /></td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{t.ref}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+
+        {/* Mobile cards */}
+        <div className="txn-cards">
+          {paginated.length === 0 ? (
+            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No transactions found.</p>
+          ) : paginated.map((t) => (
+            <div key={t.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6px", gap: "8px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{t.type}</p>
+                  <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{t.user}</p>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>{t.amount}</p>
+                  <StatusPill status={t.status} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "12px", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid var(--color-border)" }}>
+                <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{t.date}</span>
+                <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Ref: {t.ref}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        <div className="txn-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+          <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+            {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+              Prev
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button key={p} onClick={() => setPage(p)} className={p === page ? "btn-primary" : ""}
+                style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
+                {p}
+              </button>
+            ))}
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
+              Next
+            </button>
+          </div>
+        </div>
+
       </div>
-    </div>
+    </>
   );
 }

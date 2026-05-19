@@ -5,6 +5,21 @@ import { Search } from "lucide-react";
 import { useState } from "react";
 import { mockEscrowReleases } from "./types";
 
+function StatusPill({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const style =
+    s === "released" || s === "completed"
+      ? { color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0" }
+      : s === "pending"
+      ? { color: "#d97706", background: "#fffbeb", border: "1px solid #fde68a" }
+      : { color: "var(--color-text-muted)", background: "var(--color-background)", border: "1px solid var(--color-border)" };
+  return (
+    <span style={{ ...style, fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
+      {status}
+    </span>
+  );
+}
+
 export default function EscrowReleasesTab() {
   const [search, setSearch] = useState("");
 
@@ -14,39 +29,76 @@ export default function EscrowReleasesTab() {
   );
 
   return (
-    <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-      <div className="px-6 pt-5 pb-4 border-b border-border">
-        <div className="relative">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text" placeholder="Search..."
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-          />
+    <>
+      <style>{`
+        .escrow-table { display: none; }
+        .escrow-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        @media (min-width: 640px) {
+          .escrow-table { display: block; overflow-x: auto; }
+          .escrow-cards { display: none; }
+        }
+      `}</style>
+
+      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+
+        {/* Search */}
+        <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ position: "relative" }}>
+            <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+            <input
+              type="text" placeholder="Search expert or job ID..."
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+            />
+          </div>
         </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-background">
-              {["Job ID", "Expert", "Amount", "Status", "Date"].map((h) => (
-                <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.map((e) => (
-              <tr key={e.id} className="hover:bg-background transition-colors">
-                <td className="px-5 py-4 text-[13.5px] font-semibold text-text-main">{e.jobId}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{e.expert}</td>
-                <td className="px-5 py-4 text-[13.5px] font-medium text-text-main">{e.amount}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{e.status}</td>
-                <td className="px-5 py-4 text-[13.5px] text-text-muted">{e.date}</td>
+
+        {/* Desktop table */}
+        <div className="escrow-table">
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                {["Job ID", "Expert", "Amount", "Status", "Date"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((e) => (
+                <tr key={e.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{e.jobId}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{e.expert}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{e.amount}</td>
+                  <td style={{ padding: "16px 20px" }}><StatusPill status={e.status} /></td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{e.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="escrow-cards">
+          {filtered.length === 0 ? (
+            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No results found.</p>
+          ) : filtered.map((e) => (
+            <div key={e.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px", gap: "8px" }}>
+                <div>
+                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{e.jobId}</p>
+                  <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{e.expert}</p>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>{e.amount}</p>
+                  <StatusPill status={e.status} />
+                </div>
+              </div>
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid var(--color-border)" }}>{e.date}</p>
+            </div>
+          ))}
+        </div>
+
       </div>
-    </div>
+    </>
   );
 }
