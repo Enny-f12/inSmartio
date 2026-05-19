@@ -11,6 +11,19 @@ import type { Faq, FaqCategory } from "@/components/settings/types";
 
 const FAQ_CATS = ["All", "Clients", "Experts", "TAS"] as const;
 
+function CategoryBadge({ category }: { category: string }) {
+  const colors: Record<string, React.CSSProperties> = {
+    Clients: { color: "#2563eb", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe" },
+    Experts: { color: "#15803d", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" },
+    TAS:     { color: "#7c3aed", backgroundColor: "#f5f3ff", border: "1px solid #ddd6fe" },
+  };
+  return (
+    <span style={{ ...colors[category], fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
+      {category}
+    </span>
+  );
+}
+
 function EditFaqModal({ faq, onClose, onSave }: {
   faq: Faq | null;
   onClose: () => void;
@@ -20,33 +33,30 @@ function EditFaqModal({ faq, onClose, onSave }: {
   const [category, setCategory] = useState<string>(faq?.category ?? "Clients");
 
   const footer = (
-    <>
-      <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors">
+    <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+      <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" }}>
         Cancel
       </button>
       <button
         onClick={() => { onSave(question, category as Exclude<FaqCategory, "All">); onClose(); }}
-        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors"
+        className="btn-primary"
+        style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}
       >
-        Upload
+        Save
       </button>
-    </>
+    </div>
   );
 
   return (
-    <Modal open onClose={onClose} title="Edit Category" footer={footer}>
-      <div className="space-y-4">
+    <Modal open onClose={onClose} title={faq ? "Edit FAQ" : "Add FAQ"} footer={footer}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         <div>
-          <label className="block text-[13px] font-medium text-text-main mb-1.5">Question:</label>
-          <FieldInput placeholder="How do i post a job?" value={question} onChange={(e) => setQuestion(e.target.value)} />
+          <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "6px" }}>Question:</label>
+          <FieldInput placeholder="How do I post a job?" value={question} onChange={(e) => setQuestion(e.target.value)} />
         </div>
         <div>
-          <label className="block text-[13px] font-medium text-text-main mb-1.5">Category</label>
-          <FilterDropdown
-            value={category}
-            options={["Clients", "Experts", "TAS"]}
-            onChange={setCategory}
-          />
+          <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "6px" }}>Category</label>
+          <FilterDropdown value={category} options={["Clients", "Experts", "TAS"]} onChange={setCategory} />
         </div>
       </div>
     </Modal>
@@ -54,11 +64,11 @@ function EditFaqModal({ faq, onClose, onSave }: {
 }
 
 export default function FaqManagement({ onBack }: { onBack: () => void }) {
-  const [faqs, setFaqs]         = useState<Faq[]>(initialFaqs);
-  const [search, setSearch]     = useState("");
+  const [faqs, setFaqs]           = useState<Faq[]>(initialFaqs);
+  const [search, setSearch]       = useState("");
   const [catFilter, setCatFilter] = useState("All");
-  const [editFaq, setEditFaq]   = useState<Faq | null>(null);
-  const [showAdd, setShowAdd]   = useState(false);
+  const [editFaq, setEditFaq]     = useState<Faq | null>(null);
+  const [showAdd, setShowAdd]     = useState(false);
 
   const filtered = faqs.filter((f) => {
     const matchSearch = f.question.toLowerCase().includes(search.toLowerCase());
@@ -75,67 +85,104 @@ export default function FaqManagement({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <SubPageShell
-      title="FAQ Management"
-      onBack={onBack}
-      action={
-        <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 px-4 mb-5 py-2.5 rounded-xl text-[13px] font-semibold">
-          <Plus size={15} /> Add
-        </button>
-      }
-    >
-      <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-        {/* Filter */}
-        <div className="px-6 pt-5 pb-4 border-b border-border">
-          <div className="flex items-center gap-2 mb-4">
-            <SlidersHorizontal size={15} className="text-text-muted" />
-            <span className="text-sm font-semibold text-text-main">Filter</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="text" placeholder="Search name..."
-                value={search} onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-              />
+    <>
+      <style>{`
+        .faq-toolbar  { flex-direction: column; gap: 8px; }
+        .faq-table    { display: none; }
+        .faq-cards    { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+
+        @media (min-width: 480px) {
+          .faq-toolbar { flex-direction: row; align-items: center; }
+        }
+        @media (min-width: 640px) {
+          .faq-table   { display: table; width: 100%; border-collapse: collapse; }
+          .faq-cards   { display: none; }
+        }
+      `}</style>
+
+      <SubPageShell
+        title="FAQ Management"
+        onBack={onBack}
+        action={
+          <button onClick={() => setShowAdd(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", marginBottom: "20px" }}>
+            <Plus size={15} /> Add FAQ
+          </button>
+        }
+      >
+        <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+
+          {/* Filter toolbar */}
+          <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <SlidersHorizontal size={15} style={{ color: "var(--color-text-muted)" }} />
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)" }}>Filter</span>
             </div>
-            <FilterDropdown value={catFilter} options={FAQ_CATS} onChange={setCatFilter} />
+            <div className="faq-toolbar" style={{ display: "flex" }}>
+              <div style={{ position: "relative", flex: 1 }}>
+                <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+                <input
+                  type="text" placeholder="Search questions..."
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+                />
+              </div>
+              <FilterDropdown value={catFilter} options={FAQ_CATS} onChange={setCatFilter} />
+            </div>
           </div>
+
+          {/* Desktop table */}
+          <table className="faq-table">
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                {["Question", "Category", "Actions"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={3} style={{ textAlign: "center", padding: "48px", fontSize: "14px", color: "var(--color-text-muted)" }}>No FAQs found.</td></tr>
+              ) : filtered.map((faq) => (
+                <tr key={faq.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-main)" }}>{faq.question}</td>
+                  <td style={{ padding: "16px 24px" }}><CategoryBadge category={faq.category} /></td>
+                  <td style={{ padding: "16px 24px" }}>
+                    <button onClick={() => setEditFaq(faq)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                      <Pencil size={16} strokeWidth={1.8} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Mobile cards */}
+          <div className="faq-cards">
+            {filtered.length === 0 ? (
+              <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No FAQs found.</p>
+            ) : filtered.map((faq) => (
+              <div key={faq.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: "13.5px", color: "var(--color-text-main)", marginBottom: "8px", lineHeight: 1.5 }}>{faq.question}</p>
+                  <CategoryBadge category={faq.category} />
+                </div>
+                <button onClick={() => setEditFaq(faq)} style={{ padding: "8px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}>
+                  <Pencil size={15} strokeWidth={1.8} />
+                </button>
+              </div>
+            ))}
+          </div>
+
         </div>
 
-        {/* Table */}
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-background">
-              {["Question", "Category", "Actions"].map((h) => (
-                <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.map((faq) => (
-              <tr key={faq.id} className="hover:bg-background transition-colors">
-                <td className="px-6 py-4 text-[13.5px] text-text-main">{faq.question}</td>
-                <td className="px-6 py-4 text-[13.5px] text-text-muted">{faq.category}</td>
-                <td className="px-6 py-4">
-                  <button onClick={() => setEditFaq(faq)} className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors">
-                    <Pencil size={16} strokeWidth={1.8} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {(editFaq || showAdd) && (
-        <EditFaqModal
-          faq={editFaq}
-          onClose={() => { setEditFaq(null); setShowAdd(false); }}
-          onSave={(q, cat) => handleSave(editFaq?.id ?? null, q, cat)}
-        />
-      )}
-    </SubPageShell>
+        {(editFaq || showAdd) && (
+          <EditFaqModal
+            faq={editFaq}
+            onClose={() => { setEditFaq(null); setShowAdd(false); }}
+            onSave={(q, cat) => handleSave(editFaq?.id ?? null, q, cat)}
+          />
+        )}
+      </SubPageShell>
+    </>
   );
 }
