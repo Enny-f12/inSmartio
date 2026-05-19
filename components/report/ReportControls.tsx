@@ -25,73 +25,62 @@ export default function ReportControls({
   onGenerate, onExport,
 }: Props) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+    <>
+      <style>{`
+        .rc-wrap   { display: flex; flex-direction: column; gap: 12px; border-radius: 16px; border: 1px solid var(--color-border); background: #fff; padding: 16px; }
+        .rc-row1   { display: flex; flex-direction: column; gap: 10px; }
+        .rc-field  { display: flex; align-items: center; gap: 10px; }
+        .rc-label  { font-size: 13px; font-weight: 600; color: var(--color-text-main); white-space: nowrap; min-width: 88px; }
+        .rc-row2   { display: flex; flex-direction: column; gap: 10px; }
+        .rc-date-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .rc-actions  { display: flex; gap: 10px; }
+        .rc-generate { flex: 1; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; color: #fff; background: #F9A826; border: none; cursor: pointer; }
+        .rc-export   { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
 
-      {/* ── Row 1: Report Type + Format + Export ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-        {/* Report Type */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
-            Report Type:
-          </span>
-          <FilterDropdown
-            value={reportType}
-            options={REPORT_TYPES}
-            onChange={(v) => onReportType(v as ReportType)}
-          />
+        @media (min-width: 640px) {
+          .rc-wrap   { padding: 20px 24px; gap: 16px; }
+          .rc-row1   { flex-direction: row; align-items: center; }
+          .rc-label  { min-width: auto; }
+          .rc-row2   { flex-direction: row; align-items: center; }
+          .rc-date-row { flex-wrap: nowrap; }
+          .rc-actions  { margin-left: auto; }
+          .rc-generate { flex: none; padding: 10px 32px; }
+          .rc-export   { flex: none; padding: 10px 20px; }
+        }
+      `}</style>
+
+      <div className="rc-wrap">
+
+        {/* Row 1: Report Type + Format */}
+        <div className="rc-row1">
+          <div className="rc-field">
+            <span className="rc-label">Report Type:</span>
+            <FilterDropdown value={reportType} options={REPORT_TYPES} onChange={(v) => onReportType(v as ReportType)} />
+          </div>
+          <div className="rc-field">
+            <span className="rc-label">Format:</span>
+            <FilterDropdown value={format} options={FORMATS} onChange={(v) => onFormat(v as FormatType)} />
+          </div>
         </div>
 
-        {/* Format */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
-            Format:
-          </span>
-          <FilterDropdown
-            value={format}
-            options={FORMATS}
-            onChange={(v) => onFormat(v as FormatType)}
-          />
+        {/* Row 2: Date Range + Generate + Export */}
+        <div className="rc-row2">
+          <div className="rc-date-row">
+            <span className="rc-label">Date Range:</span>
+            <FilterDropdown value={dateFrom} options={DATE_FROM_OPTIONS} onChange={onDateFrom} />
+            <span style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>to</span>
+            <FilterDropdown value={dateTo} options={DATE_TO_OPTIONS} onChange={onDateTo} />
+          </div>
+
+          <div className="rc-actions">
+            <button onClick={onGenerate} className="rc-generate">Generate</button>
+            <button onClick={onExport} className="btn-primary rc-export">
+              <Download size={15} /> Export
+            </button>
+          </div>
         </div>
 
-        {/* Export — pushed far right */}
-        <button
-          onClick={onExport}
-          className="btn-primary"
-          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}
-        >
-          <Download size={15} />
-          Export
-        </button>
       </div>
-
-      {/* ── Row 2: Date Range + Generate ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>
-          Date Range:
-        </span>
-
-        <FilterDropdown
-          value={dateFrom}
-          options={DATE_FROM_OPTIONS}
-          onChange={onDateFrom}
-        />
-
-        <span style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>to</span>
-
-        <FilterDropdown
-          value={dateTo}
-          options={DATE_TO_OPTIONS}
-          onChange={onDateTo}
-        />
-
-        <button
-          onClick={onGenerate}
-          style={{ padding: "10px 32px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#F9A826", border: "none", cursor: "pointer" }}
-        >
-          Generate
-        </button>
-      </div>
-
-    </div>
+    </>
   );
 }

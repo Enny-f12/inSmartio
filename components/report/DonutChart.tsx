@@ -4,7 +4,7 @@ import type { DonutSegment } from "@/components/report/types";
 interface DonutChartProps {
   segments: DonutSegment[];
   title: string;
-  size?: number; // default 240, dashboard uses 280
+  size?: number;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -12,8 +12,8 @@ const toRad = (deg: number) => (deg * Math.PI) / 180;
 function buildArcs(segments: DonutSegment[], SIZE: number) {
   const cx = SIZE / 2;
   const cy = SIZE / 2;
-  const R  = SIZE * 0.375;   // 90 / 240 ≈ 0.375
-  const r  = SIZE * 0.2167;  // 52 / 240 ≈ 0.2167
+  const R  = SIZE * 0.375;
+  const r  = SIZE * 0.2167;
 
   const startAngles = segments.reduce<number[]>((acc, seg, i) => {
     if (i === 0) return [-90];
@@ -54,43 +54,78 @@ function buildArcs(segments: DonutSegment[], SIZE: number) {
 }
 
 export default function DonutChart({ segments, title, size = 240 }: DonutChartProps) {
-  const arcs = buildArcs(segments, size);
+  // Use a smaller donut on mobile — controlled via CSS custom property workaround
+  // We render two sizes and show/hide via CSS
+  const mobileSize = 180;
+  const desktopSize = size;
 
   return (
-    <div className="flex items-center gap-12">
-      {/* Donut */}
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
-        {arcs.map((arc) => (
-          <g key={arc.label}>
-            <path d={arc.d} fill={arc.color} />
-            <text
-              x={arc.lx} y={arc.ly + 4}
-              textAnchor="middle"
-              fontSize={size > 240 ? 13 : 11}
-              fontWeight="600"
-              fill="#fff"
-            >
-              {arc.value}%
-            </text>
-          </g>
-        ))}
-      </svg>
+    <>
+      <style>{`
+        .donut-wrap        { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .donut-svg-mobile  { display: block; }
+        .donut-svg-desktop { display: none; }
+        .donut-legend      { width: 100%; }
+        .donut-title       { font-size: 15px; font-weight: 600; color: var(--color-text-main); margin-bottom: 14px; text-align: center; }
+        .donut-legend-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+        .donut-legend-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+        .donut-legend-label { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--color-text-main); }
+        .donut-legend-val  { color: var(--color-text-muted); flex-shrink: 0; }
 
-      {/* Legend */}
-      <div>
-        <p className="text-[15px] font-semibold text-text-main mb-5">{title}</p>
-        <div className="space-y-4">
-          {segments.map((seg) => (
-            <div key={seg.label} className="flex items-center justify-between gap-12 text-[13px]">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: seg.color }} />
-                <span className="font-medium text-text-main">{seg.label}:</span>
-              </div>
-              <span className="text-text-muted">{seg.value}%</span>
-            </div>
+        @media (min-width: 560px) {
+          .donut-wrap        { flex-direction: row; align-items: center; gap: 32px; }
+          .donut-svg-mobile  { display: none; }
+          .donut-svg-desktop { display: block; }
+          .donut-legend      { width: auto; flex: 1; }
+          .donut-title       { text-align: left; }
+          .donut-legend-rows { grid-template-columns: 1fr; gap: 12px; }
+          .donut-legend-item { justify-content: space-between; gap: 24px; }
+        }
+      `}</style>
+
+      <div className="donut-wrap">
+
+        {/* Mobile SVG (smaller) */}
+        <svg className="donut-svg-mobile" width={mobileSize} height={mobileSize} viewBox={`0 0 ${mobileSize} ${mobileSize}`} style={{ flexShrink: 0 }}>
+          {buildArcs(segments, mobileSize).map((arc) => (
+            <g key={arc.label}>
+              <path d={arc.d} fill={arc.color} />
+              <text x={arc.lx} y={arc.ly + 4} textAnchor="middle" fontSize={10} fontWeight="600" fill="#fff">
+                {arc.value}%
+              </text>
+            </g>
           ))}
+        </svg>
+
+        {/* Desktop SVG (original size) */}
+        <svg className="donut-svg-desktop" width={desktopSize} height={desktopSize} viewBox={`0 0 ${desktopSize} ${desktopSize}`} style={{ flexShrink: 0 }}>
+          {buildArcs(segments, desktopSize).map((arc) => (
+            <g key={arc.label}>
+              <path d={arc.d} fill={arc.color} />
+              <text x={arc.lx} y={arc.ly + 4} textAnchor="middle" fontSize={desktopSize > 240 ? 13 : 11} fontWeight="600" fill="#fff">
+                {arc.value}%
+              </text>
+            </g>
+          ))}
+        </svg>
+
+        {/* Legend */}
+        <div className="donut-legend">
+          <p className="donut-title">{title}</p>
+          <div className="donut-legend-rows">
+            {segments.map((seg) => (
+              <div key={seg.label} className="donut-legend-item">
+                <div className="donut-legend-label">
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: seg.color, flexShrink: 0, display: "inline-block" }} />
+                  {seg.label}:
+                </div>
+                <span className="donut-legend-val">{seg.value}%</span>
+              </div>
+            ))}
+          </div>
         </div>
+
       </div>
-    </div>
+    </>
   );
 }
