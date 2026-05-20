@@ -10,7 +10,7 @@ import Modal from "@/components/ui/Modal";
 import { PageLoader } from "@/components/ui/Loader";
 import UserDetail, { type User } from "@/components/users/UserDetail";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchUsers, fetchUserById, removeUser, clearSelected, addUser, suspendUserThunk } from "@/lib/redux/usersSlice";
+import { fetchUsers, fetchUserById, removeUser, clearSelected, addUser, suspendUserThunk, activateUserThunk } from "@/lib/redux/usersSlice";
 import type { ApiUser, RegisterUserPayload } from "@/lib/api/usersApi";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -40,7 +40,6 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   status:       normalizeStatus(u.status),
   joined:       new Date(u.createdAt).toLocaleDateString("en-GB"),
   verify:       u.verify,
-  // expert
   gender:       u.gender,
   bio:          u.bio,
   verification: u.verification,
@@ -50,9 +49,7 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   bankDetails:  u.bankDetails,
   document:     u.document,
   paymentModel: u.paymentModel,
-  // shared
   location:     u.location,
-  // tas
   dob:          u.dob,
   referral:     u.referral,
   account:      u.account,
@@ -70,7 +67,6 @@ type Role = "client" | "expert" | "tas";
 
 interface ClientFields { username: string; }
 interface ExpertFields { gender: "male" | "female" | "other"; bio: string; }
-// TAS fields TBD — using client fields for now
 interface TasFields    { gender: "male" | "female" | "other"; dob: string; }
 
 interface BaseFields { name: string; email: string; phone: string; password: string; }
@@ -181,7 +177,7 @@ function UserForm({
         </div>
       </div>
 
-      {/* Expert-only: gender + bio */}
+      {/* Expert-only: gender + bio + referral */}
       {form.role === "expert" && (
         <>
           <div><label style={labelStyle}>Gender *</label>
@@ -251,9 +247,7 @@ export default function UsersPage() {
   }, [selectedStatus, selected]);
 
   const closeAdd = () => { setAddOpen(false); setAddStep("role"); setForm(byRole("client")); setShowPassword(false); };
-
   const handleRoleSelect = (role: Role) => { setForm(byRole(role)); setAddStep("form"); };
-
   const handleBack = () => { setView("list"); dispatch(clearSelected()); };
 
   const handleViewUser = (userId: string) => {
@@ -273,11 +267,14 @@ export default function UsersPage() {
 
   const handleSuspend = () => {
     if (!selected) return;
+    const isSuspended = selected.status?.toLowerCase() === "suspended";
+    const thunk = isSuspended ? activateUserThunk : suspendUserThunk;
+    const successMsg = isSuspended ? `${selected.name} reinstated successfully` : `${selected.name} suspended successfully`;
     setSuspendLoading(true);
-    dispatch(suspendUserThunk({ type: selected.role ?? "client", id: selected.id }))
+    dispatch(thunk({ type: selected.role ?? "client", id: selected.id }))
       .unwrap()
-      .then(() => { toast.success(`${selected.name} suspended successfully`); setSuspendOpen(false); handleBack(); })
-      .catch((err: string) => toast.error("Suspend failed", { description: err }))
+      .then(() => { toast.success(successMsg); setSuspendOpen(false); handleBack(); })
+      .catch((err: string) => toast.error(isSuspended ? "Reinstate failed" : "Suspend failed", { description: err }))
       .finally(() => setSuspendLoading(false));
   };
 
@@ -296,7 +293,6 @@ export default function UsersPage() {
     }
     setAddLoading(true);
 
-    // Build payload per role
     let payload: RegisterUserPayload;
     if (form.role === "expert") {
       const f = form as BaseFields & ExpertFields & { role: "expert" };

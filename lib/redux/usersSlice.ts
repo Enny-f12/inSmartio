@@ -2,20 +2,20 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import axiosInstance from "@/lib/api/axiosInstance";
 import {
-  getAllUsers, getUserById, registerUser, 
-  suspendUser, getAdminStats,
+  getAllUsers, getUserById, registerUser,
+  suspendUser, activateUser, getAdminStats,
   type ApiUser, type RegisterUserPayload, type AdminStats,
 } from "@/lib/api/usersApi";
 
 interface UsersState {
-  list:          ApiUser[];
-  listStatus:    "idle" | "loading" | "succeeded" | "failed";
-  listError:     string | null;
-  selected:      ApiUser | null;
-  selectedStatus:"idle" | "loading" | "succeeded" | "failed";
-  mutateStatus:  "idle" | "loading" | "succeeded" | "failed";
-  adminStats:    AdminStats | null;
-  statsStatus:   "idle" | "loading" | "succeeded" | "failed";
+  list:           ApiUser[];
+  listStatus:     "idle" | "loading" | "succeeded" | "failed";
+  listError:      string | null;
+  selected:       ApiUser | null;
+  selectedStatus: "idle" | "loading" | "succeeded" | "failed";
+  mutateStatus:   "idle" | "loading" | "succeeded" | "failed";
+  adminStats:     AdminStats | null;
+  statsStatus:    "idle" | "loading" | "succeeded" | "failed";
 }
 
 const initialState: UsersState = {
@@ -31,8 +31,6 @@ const initialState: UsersState = {
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
-
-// ── Existing thunks ───────────────────────────────────────
 
 export const fetchUsers = createAsyncThunk(
   "users/fetchAll",
@@ -69,13 +67,19 @@ export const removeUser = createAsyncThunk(
   }
 );
 
-// ── New admin thunks ──────────────────────────────────────
-
 export const suspendUserThunk = createAsyncThunk(
   "users/suspend",
   async ({ type, id }: { type: string; id: string }, { rejectWithValue }) => {
     try { await suspendUser(type, id); return id; }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to suspend user")); }
+  }
+);
+
+export const activateUserThunk = createAsyncThunk(
+  "users/activate",
+  async ({ type, id }: { type: string; id: string }, { rejectWithValue }) => {
+    try { await activateUser(type, id); return id; }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to activate user")); }
   }
 );
 
@@ -86,8 +90,6 @@ export const fetchAdminStats = createAsyncThunk(
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch stats")); }
   }
 );
-
-// ── Slice ─────────────────────────────────────────────────
 
 const usersSlice = createSlice({
   name: "users",
@@ -102,25 +104,21 @@ const usersSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    // fetchUsers
     builder
       .addCase(fetchUsers.pending,   (state) => { state.listStatus = "loading"; state.listError = null; })
       .addCase(fetchUsers.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
       .addCase(fetchUsers.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
 
-    // fetchUserById
     builder
       .addCase(fetchUserById.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
       .addCase(fetchUserById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
       .addCase(fetchUserById.rejected,  (state) => { state.selectedStatus = "failed"; });
 
-    // addUser
     builder
       .addCase(addUser.pending,   (state) => { state.mutateStatus = "loading"; })
       .addCase(addUser.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; state.list.unshift(action.payload); })
       .addCase(addUser.rejected,  (state) => { state.mutateStatus = "failed"; });
 
-    // removeUser
     builder
       .addCase(removeUser.pending,   (state) => { state.mutateStatus = "loading"; })
       .addCase(removeUser.fulfilled, (state, action) => {
@@ -129,18 +127,24 @@ const usersSlice = createSlice({
       })
       .addCase(removeUser.rejected,  (state) => { state.mutateStatus = "failed"; });
 
-    // suspendUser
     builder
       .addCase(suspendUserThunk.pending,   (state) => { state.mutateStatus = "loading"; })
       .addCase(suspendUserThunk.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
-        // optimistically update status in list
         const user = state.list.find((u) => u.id === action.payload);
         if (user) user.status = "suspended";
       })
-      .addCase(suspendUserThunk.rejected, (state) => { state.mutateStatus = "failed"; });
+      .addCase(suspendUserThunk.rejected,  (state) => { state.mutateStatus = "failed"; });
 
-    // adminStats
+    builder
+      .addCase(activateUserThunk.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(activateUserThunk.fulfilled, (state, action) => {
+        state.mutateStatus = "succeeded";
+        const user = state.list.find((u) => u.id === action.payload);
+        if (user) user.status = "active";
+      })
+      .addCase(activateUserThunk.rejected,  (state) => { state.mutateStatus = "failed"; });
+
     builder
       .addCase(fetchAdminStats.pending,   (state) => { state.statsStatus = "loading"; })
       .addCase(fetchAdminStats.fulfilled, (state, action) => { state.statsStatus = "succeeded"; state.adminStats = action.payload; })

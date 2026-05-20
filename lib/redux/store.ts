@@ -9,6 +9,8 @@ import disputeReducer      from "./disputeSlice";
 import bannerReducer       from "./bannerSlice";
 import announcementReducer from "./announcementSlice";
 import verificationReducer from "./verificationSlice";
+import tasReducer          from "./tasSlice";
+import paymentReducer      from "./paymentSlice";
 
 export const store = configureStore({
   reducer: {
@@ -22,6 +24,8 @@ export const store = configureStore({
     banners:       bannerReducer,
     announcements: announcementReducer,
     verifications: verificationReducer,
+    tas:           tasReducer,
+    payments:      paymentReducer,
   },
 });
 

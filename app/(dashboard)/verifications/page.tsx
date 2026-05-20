@@ -173,15 +173,8 @@ export default function VerificationsPage() {
           </div>
         </div>
 
-        {/* Fallback context notice */}
-        {isUsingFallback && (
-          <div style={{ padding: "10px 16px", backgroundColor: "#fefcbf", border: "1px solid #fef08a", borderRadius: "12px", fontSize: "12px", color: "#a16207" }}>
-            💡 Operational verifications database is empty. Injecting fallback mock records.
-          </div>
-        )}
-
         {/* Grid Area Sheet Container */}
-        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden", marginTop: isUsingFallback ? "0" : "8px" }}>
+        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden", marginTop: "8px" }}>
 
           {/* Search bar input container */}
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
