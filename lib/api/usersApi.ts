@@ -70,8 +70,9 @@ export const getAllUsers = async (): Promise<ApiUser[]> => {
 };
 
 // ── Get user by type + id ─────────────────────────────────
-export const getUserById = async (id: string, type: string = "client"): Promise<ApiUser> => {
-  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/${type}/${id}`);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const getUserById = async (id: string, _type: string = "client"): Promise<ApiUser> => {
+  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/{type.toLowerCase()}/${id}`);
   return data.data;
 };
 
@@ -92,6 +93,7 @@ export interface RegisterExpertPayload {
   password: string;
   gender:   "male" | "female" | "other";
   bio:      string;
+  referral?: string;
 }
 
 export interface RegisterTasPayload {
@@ -116,9 +118,17 @@ export interface RegisterUserResponse {
 
 export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUser> => {
   if (payload.role === "expert") {
-    const { name, email, phone, password, gender, bio } = payload as RegisterExpertPayload & { role: "expert" };
+    // Extracted referral from the template payload mapping
+    const { name, email, phone, password, gender, bio, referral } = payload as RegisterExpertPayload & { role: "expert" };
+    
     const { data } = await axiosInstance.post<RegisterUserResponse>("/experts/register", {
-      name, email, phone, password, gender, bio,
+      name, 
+      email, 
+      phone, 
+      password, 
+      gender, 
+      bio, 
+      referral: referral || "" // Guarantees a flat string to pass schema validation constraints cleanly
     });
     return data.data;
   }

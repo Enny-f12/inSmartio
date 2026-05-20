@@ -66,7 +66,7 @@ const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
 type Role = "client" | "expert" | "tas";
 
 interface ClientFields { username: string; }
-interface ExpertFields { gender: "male" | "female" | "other"; bio: string; }
+interface ExpertFields { gender: "male" | "female" | "other"; bio: string; referral: string; }
 interface TasFields    { gender: "male" | "female" | "other"; dob: string; }
 
 interface BaseFields { name: string; email: string; phone: string; password: string; }
@@ -78,15 +78,16 @@ type FormState =
 
 const defaultBase: BaseFields = { name: "", email: "", phone: "", password: "" };
 const byRole = (role: Role): FormState => {
-  if (role === "expert") return { ...defaultBase, role: "expert", gender: "male", bio: "" };
+  if (role === "expert") return { ...defaultBase, role: "expert", gender: "male", bio: "", referral: "" };
   if (role === "tas")    return { ...defaultBase, role: "tas", gender: "male", dob: "" };
   return { ...defaultBase, role: "client", username: "" };
 };
 
+// Updated styling with explicit structural input borders
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "10px 14px", borderRadius: "10px",
-  border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)",
-  fontSize: "13px", color: "var(--color-text-main)", outline: "none", boxSizing: "border-box",
+  border: "1px solid #ced4da", backgroundColor: "var(--color-background, #fff)",
+  fontSize: "13px", color: "var(--color-text-main, #333)", outline: "none", boxSizing: "border-box",
 };
 const labelStyle: React.CSSProperties = {
   display: "block", fontSize: "12px", fontWeight: 500,
@@ -113,12 +114,12 @@ function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
           onClick={() => onSelect(r.value)}
           style={{
             display: "flex", flexDirection: "column", alignItems: "flex-start",
-            padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)",
+            padding: "14px 16px", borderRadius: "12px", border: "1px solid #ced4da",
             backgroundColor: "var(--color-background)", cursor: "pointer", textAlign: "left",
             transition: "border-color 0.15s",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#ced4da")}
         >
           <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{r.label}</span>
           <span style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "2px" }}>{r.desc}</span>
@@ -167,7 +168,7 @@ function UserForm({
       <div>
         <label style={labelStyle}>Phone Number</label>
         <div style={{ display: "flex" }}>
-          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid var(--color-border)", borderRight: "none", backgroundColor: "var(--color-background)", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0 }}>+234</div>
+          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid #ced4da", borderRight: "none", backgroundColor: "var(--color-background)", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0 }}>+234</div>
           <input
             style={{ ...inputStyle, borderRadius: "0 10px 10px 0", borderLeft: "none" }}
             placeholder="801 234 5678" maxLength={10}
@@ -189,6 +190,9 @@ function UserForm({
           </div>
           <div><label style={labelStyle}>Bio *</label>
             <textarea style={{ ...inputStyle, resize: "none" } as React.CSSProperties} rows={3} placeholder="Brief description about the expert..." value={(form as FormState & ExpertFields).bio} onChange={(e) => set({ bio: e.target.value } as Partial<FormState>)} />
+          </div>
+          <div><label style={labelStyle}>Referral Code (Optional)</label>
+            <input style={inputStyle} placeholder="e.g. REF123" value={(form as FormState & ExpertFields).referral || ""} onChange={(e) => set({ referral: e.target.value } as Partial<FormState>)} />
           </div>
         </>
       )}
@@ -296,7 +300,17 @@ export default function UsersPage() {
     let payload: RegisterUserPayload;
     if (form.role === "expert") {
       const f = form as BaseFields & ExpertFields & { role: "expert" };
-      payload = { role: "expert", name: f.name, email: f.email, phone: f.phone, password: f.password, gender: f.gender, bio: f.bio };
+      // Explicitly sending the validation-required referral property to fix the API's 400 response
+      payload = { 
+        role: "expert", 
+        name: f.name, 
+        email: f.email, 
+        phone: f.phone, 
+        password: f.password, 
+        gender: f.gender, 
+        bio: f.bio,
+        referral: f.referral || "" 
+      };
     } else if (form.role === "tas") {
       const f = form as BaseFields & TasFields & { role: "tas" };
       payload = { role: "tas", name: f.name, email: f.email, phone: f.phone, password: f.password, gender: f.gender, dob: f.dob };
@@ -342,7 +356,7 @@ export default function UsersPage() {
         <Modal open={suspendOpen} onClose={() => setSuspendOpen(false)} title={detailUser.status === "Suspended" ? "Reinstate User" : "Suspend User"} size="sm"
           footer={
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button onClick={() => setSuspendOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
+              <button onClick={() => setSuspendOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #ced4da", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
               <button onClick={handleSuspend} disabled={suspendLoading} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: detailUser.status === "Suspended" ? "#16a34a" : "#f59e0b", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: suspendLoading ? 0.7 : 1 }}>
                 {suspendLoading
                   ? <><Loader2 size={14} className="animate-spin" /> {detailUser.status === "Suspended" ? "Reinstating..." : "Suspending..."}</>
@@ -362,7 +376,7 @@ export default function UsersPage() {
         <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Account" size="sm"
           footer={
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button onClick={() => setDeleteOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
+              <button onClick={() => setDeleteOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #ced4da", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
               <button onClick={handleDelete} disabled={deleteLoading} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: deleteLoading ? 0.7 : 1 }}>
                 {deleteLoading ? <><Loader2 size={14} className="animate-spin" /> Deleting...</> : "Delete"}
               </button>
@@ -423,7 +437,7 @@ export default function UsersPage() {
         <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
           {listStatus === "succeeded" ? `${list.length} users total` : "Manage all users"}
         </p>
-        <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", border: "none" }}>
+        <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", border: "1px solid #ced4da" }}>
           <Plus size={15} /> Add User
         </button>
       </div>
@@ -445,7 +459,7 @@ export default function UsersPage() {
         footer={
           addStep === "role" ? undefined : (
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button onClick={() => setAddStep("role")} style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>← Back</button>
+              <button onClick={() => setAddStep("role")} style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid #ced4da", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>← Back</button>
               <button onClick={handleAddUser} disabled={addLoading} className="btn-primary" style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: addLoading ? 0.7 : 1 }}>
                 {addLoading ? <><Loader2 size={14} className="animate-spin" /> Adding...</> : "Add User"}
               </button>
