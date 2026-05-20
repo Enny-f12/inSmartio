@@ -1,227 +1,224 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useId } from "react";
 
 interface DashboardLineChartProps {
-  title: string;
-  yLabel: string;
-  xLabel?: string;
-  data: number[];
-  labels: string[];
-  color?: string;
+  title:      string;
+  yLabel:     string;
+  xLabel?:    string;
+  data:       number[];
+  labels:     string[];
+  color?:     string;
+  statValue?: string;  // real value from API e.g. "4 users" or "₦0"
 }
 
-interface TooltipState {
-  svgX: number;
-  svgY: number;
+interface Tooltip {
+  x:     number;   // pixel x relative to SVG container
+  y:     number;   // pixel y relative to SVG container
   label: string;
-  value: string;
+  value: number;
+  idx:   number;
 }
 
 export default function DashboardLineChart({
-  title,
-  yLabel,
-  xLabel,
-  data,
-  labels,
-  color = "#2563eb",
+  title, yLabel, xLabel, data, labels, color = "#2563eb", statValue,
 }: DashboardLineChartProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const svgRef   = useRef<SVGSVGElement>(null);
+  const wrapRef  = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const gradId   = useId().replace(/:/g, "");
 
-  const W = 500;
-  const H = 280;
-  const padL = 72;
-  const padR = 20;
-  const padT = 28;
-  const padB = 52;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
+  // ── SVG viewport ─────────────────────────────────────────
+  const W = 500, H = 220;
+  const PL = 16, PR = 16, PT = 16, PB = 36;
+  const chartW = W - PL - PR;
+  const chartH = H - PT - PB;
 
-  const minV = Math.floor(Math.min(...data) * 0.85);
-  const maxV = Math.ceil(Math.max(...data) * 1.05);
-  const range = maxV - minV || 1;
-  const yTicks = 5;
+  const minV  = 0;
+  const maxV  = Math.ceil(Math.max(...data) * 1.15) || 1;
+  const range = maxV - minV;
 
-  const xOf = (i: number) => padL + (i / (data.length - 1)) * chartW;
-  const yOf = (v: number) => padT + chartH - ((v - minV) / range) * chartH;
+  const xOf = (i: number) => PL + (i / (data.length - 1)) * chartW;
+  const yOf = (v: number) => PT + chartH - ((v - minV) / range) * chartH;
 
-  const polyline = data.map((v, i) => `${xOf(i)},${yOf(v)}`).join(" ");
-
-  const toPixel = useCallback((svgX: number, svgY: number) => {
-    const svg = svgRef.current;
-    const wrap = wrapRef.current;
-    if (!svg || !wrap) return { px: 0, py: 0 };
-    const svgRect = svg.getBoundingClientRect();
-    const wrapRect = wrap.getBoundingClientRect();
-    const scaleX = svgRect.width / W;
-    const scaleY = svgRect.height / H;
-    return {
-      px: svgRect.left - wrapRect.left + svgX * scaleX,
-      py: svgRect.top - wrapRect.top + svgY * scaleY,
-    };
-  }, []);
-
-  const handleEnter = (i: number) => {
-    const v = data[i];
-    setTooltip({
-      svgX: xOf(i),
-      svgY: yOf(v),
-      label: labels[i],
-      value: v.toLocaleString(),
-    });
+  // ── Smooth cubic bezier path ──────────────────────────────
+  const smooth = (pts: [number, number][]): string => {
+    if (pts.length < 2) return "";
+    let d = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1];
+      const [x1, y1] = pts[i];
+      const cpx = (x0 + x1) / 2;
+      d += ` C ${cpx} ${y0}, ${cpx} ${y1}, ${x1} ${y1}`;
+    }
+    return d;
   };
 
-  // eslint-disable-next-line react-hooks/refs
-  const tipPos = tooltip ? toPixel(tooltip.svgX, tooltip.svgY) : null;
+  const pts: [number, number][] = data.map((v, i) => [xOf(i), yOf(v)]);
+  const linePath = smooth(pts);
+
+  // Area: line path + close to bottom
+  const areaPath = linePath
+    + ` L ${xOf(data.length - 1)} ${PT + chartH}`
+    + ` L ${xOf(0)} ${PT + chartH} Z`;
+
+  // ── Y grid ticks ─────────────────────────────────────────
+  const TICKS = 4;
+  const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => {
+    const v = minV + (range / TICKS) * i;
+    return { v, y: yOf(v) };
+  });
+
+  // ── Tooltip positioning ───────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const showTooltip = useCallback((i: number, e: React.MouseEvent<SVGRectElement>) => {
+    const wrap = wrapRef.current;
+    const svg  = svgRef.current;
+    if (!wrap || !svg) return;
+    const svgRect  = svg.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const scaleX   = svgRect.width / W;
+    const scaleY   = svgRect.height / H;
+    const px = svgRect.left - wrapRect.left + xOf(i) * scaleX;
+    const py = svgRect.top  - wrapRect.top  + yOf(data[i]) * scaleY;
+    setTooltip({ x: px, y: py, label: labels[i], value: data[i], idx: i });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, labels]);
+
+  const fmt = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
-      <p
-        style={{
-          fontSize: "13px",
-          fontWeight: 600,
-          textAlign: "center",
-          color: "#111827",
-          marginBottom: "12px",
-        }}
-      >
-        {title}
-      </p>
+    <div ref={wrapRef} style={{ position: "relative", userSelect: "none" }}>
 
-      {tooltip && tipPos && (
-        <div
-          style={{
-            position: "absolute",
-            left: tipPos.px,
-            top: tipPos.py,
-            transform: "translate(-50%, calc(-100% - 10px))",
-            background: "#1F2937",
-            color: "#fff",
-            fontSize: "12px",
-            fontWeight: 600,
-            padding: "5px 10px",
-            borderRadius: "7px",
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            zIndex: 10,
-          }}
-        >
-          {tooltip.label}: {tooltip.value}
-          <span
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 0,
-              height: 0,
-              borderLeft: "5px solid transparent",
-              borderRight: "5px solid transparent",
-              borderTop: "5px solid #1F2937",
-            }}
-          />
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "16px" }}>
+        <div>
+          <p style={{ fontSize: "11px", fontWeight: 500, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 2px" }}>{yLabel}</p>
+          <p style={{ fontSize: "15px", fontWeight: 700, color: "#111827", margin: "0 0 2px" }}>{title}</p>
+          {statValue && (
+            <p style={{ fontSize: "22px", fontWeight: 800, color: "#111827", margin: 0, lineHeight: 1.1 }}>{statValue}</p>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: color, display: "inline-block" }} />
+          <span style={{ fontSize: "12px", color: "#6B7280" }}>Current</span>
+        </div>
+      </div>
+
+      {/* Tooltip card */}
+      {tooltip && (
+        <div style={{
+          position: "absolute",
+          left: tooltip.x, top: tooltip.y,
+          transform: "translate(-50%, calc(-100% - 14px))",
+          backgroundColor: "#1E293B",
+          color: "#fff",
+          borderRadius: "10px",
+          padding: "8px 14px",
+          pointerEvents: "none",
+          zIndex: 20,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+          minWidth: "110px",
+        }}>
+          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 2px", fontWeight: 500 }}>{tooltip.label}</p>
+          <p style={{ fontSize: "17px", fontWeight: 700, margin: 0, color: "#fff" }}>
+            {tooltip.value.toLocaleString()}
+          </p>
+          {/* arrow */}
+          <span style={{
+            position: "absolute", top: "100%", left: "50%",
+            transform: "translateX(-50%)",
+            width: 0, height: 0,
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: "6px solid #1E293B",
+          }} />
         </div>
       )}
 
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        style={{ display: "block" }}
-      >
-        {/* Grid + Y ticks — full numbers */}
-        {Array.from({ length: yTicks + 1 }, (_, i) => {
-          const val = minV + (range / yTicks) * i;
-          const y = yOf(val);
-          const rounded = Math.round(val);
+      {/* SVG chart */}
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", overflow: "visible" }}>
+        <defs>
+          {/* Gradient fill */}
+          <linearGradient id={`grad-${gradId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+          </linearGradient>
+          {/* Glow filter for the line */}
+          <filter id={`glow-${gradId}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Horizontal grid lines */}
+        {yTicks.map(({ v, y }, i) => (
+          <g key={i}>
+            <line x1={PL} y1={y} x2={PL + chartW} y2={y}
+              stroke="#F1F5F9" strokeWidth={1} strokeDasharray={i === 0 ? "0" : "4 3"} />
+            <text x={PL - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#CBD5E1">
+              {fmt(v)}
+            </text>
+          </g>
+        ))}
+
+        {/* Vertical crosshair when hovered */}
+        {tooltip && (
+          <line
+            x1={xOf(tooltip.idx)} y1={PT}
+            x2={xOf(tooltip.idx)} y2={PT + chartH}
+            stroke="#E2E8F0" strokeWidth={1} strokeDasharray="4 3"
+          />
+        )}
+
+        {/* Area fill */}
+        <path d={areaPath} fill={`url(#grad-${gradId})`} />
+
+        {/* Line */}
+        <path d={linePath} fill="none" stroke={color} strokeWidth={1.8}
+          strokeLinecap="round" strokeLinejoin="round"
+          filter={`url(#glow-${gradId})`} />
+
+        {/* Active dot */}
+        {tooltip && (
+          <>
+            <circle cx={xOf(tooltip.idx)} cy={yOf(tooltip.value)} r={8}
+              fill={color} fillOpacity={0.15} />
+            <circle cx={xOf(tooltip.idx)} cy={yOf(tooltip.value)} r={4.5}
+              fill="#fff" stroke={color} strokeWidth={2.5} />
+          </>
+        )}
+
+        {/* Invisible hover zones */}
+        {data.map((_, i) => {
+          const cx   = xOf(i);
+          const halfL = i === 0 ? PL : (cx - xOf(i - 1)) / 2;
+          const halfR = i === data.length - 1 ? PR + 4 : (xOf(i + 1) - cx) / 2;
           return (
-            <g key={i}>
-              <line x1={padL} y1={y} x2={padL + chartW} y2={y} stroke="#e5e7eb" strokeWidth={1} />
-              <text x={padL - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#9ca3af">
-                {rounded.toLocaleString()}
-              </text>
-            </g>
+            <rect key={i}
+              x={cx - halfL} y={PT} width={halfL + halfR} height={chartH}
+              fill="transparent" style={{ cursor: "crosshair" }}
+              onMouseEnter={(e) => showTooltip(i, e)}
+              onMouseLeave={() => setTooltip(null)}
+            />
           );
         })}
 
-        {/* Y-axis label */}
-        <text
-          x={10}
-          y={padT + chartH / 2}
-          textAnchor="middle"
-          fontSize={9}
-          fill="#9ca3af"
-          transform={`rotate(-90, 10, ${padT + chartH / 2})`}
-        >
-          {yLabel}
-        </text>
-
-        {/* X labels */}
+        {/* X axis labels */}
         {labels.map((lbl, i) => (
-          <text key={lbl} x={xOf(i)} y={H - 22} textAnchor="middle" fontSize={9} fill="#9ca3af">
+          <text key={lbl} x={xOf(i)} y={H - 8}
+            textAnchor={i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"}
+            fontSize={9} fill={tooltip?.idx === i ? color : "#94A3B8"}
+            fontWeight={tooltip?.idx === i ? 600 : 400}>
             {lbl}
           </text>
         ))}
 
         {xLabel && (
-          <text x={padL + chartW / 2} y={H - 6} textAnchor="middle" fontSize={9} fill="#9ca3af">
+          <text x={PL + chartW / 2} y={H - 2} textAnchor="middle" fontSize={8} fill="#CBD5E1">
             {xLabel}
           </text>
         )}
-
-        {/* Axes */}
-        <line x1={padL} y1={padT} x2={padL} y2={padT + chartH} stroke="#e5e7eb" strokeWidth={1} />
-        <line x1={padL} y1={padT + chartH} x2={padL + chartW} y2={padT + chartH} stroke="#e5e7eb" strokeWidth={1} />
-
-        {/* Crosshair */}
-        {tooltip && (
-          <line
-            x1={tooltip.svgX} y1={padT}
-            x2={tooltip.svgX} y2={padT + chartH}
-            stroke="#D1D5DB" strokeWidth={1} strokeDasharray="4 3"
-          />
-        )}
-
-        {/* Line */}
-        <polyline
-          points={polyline}
-          fill="none"
-          stroke={color}
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {/* Dots + hit zones */}
-        {data.map((v, i) => {
-          const cx = xOf(i);
-          const cy = yOf(v);
-          const halfL = i === 0 ? padL : (cx - xOf(i - 1)) / 2;
-          const halfR = i === data.length - 1 ? padR + 4 : (xOf(i + 1) - cx) / 2;
-          const isActive = tooltip?.label === labels[i];
-          return (
-            <g key={i}>
-              <rect
-                x={cx - halfL} y={padT}
-                width={halfL + halfR} height={chartH}
-                fill="transparent"
-                style={{ cursor: "crosshair" }}
-                onMouseEnter={() => handleEnter(i)}
-                onMouseLeave={() => setTooltip(null)}
-              />
-              <circle
-                cx={cx} cy={cy}
-                r={isActive ? 6 : 4}
-                fill={color}
-                stroke={isActive ? "#fff" : "none"}
-                strokeWidth={2.5}
-                style={{ pointerEvents: "none" }}
-              />
-            </g>
-          );
-        })}
       </svg>
     </div>
   );

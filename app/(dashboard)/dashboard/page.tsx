@@ -8,20 +8,21 @@ import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchAdminStats } from "@/lib/redux/usersSlice";
 
+// ── Realistic rise-and-fall data ──────────────────────────
 const userGrowthData = {
-  title: "Monthly User Growth",
+  title:  "Monthly User Growth",
   yLabel: "Total Users",
-  color: "#7C3AED",
-  data: [1200, 2000, 3500, 4500, 6200, 8000, 9800, 12100],
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
+  color:  "#7C3AED",
+  data:   [980, 1450, 2100, 1200,  1750, 4100, 3200, 2800,  6400, 3600, 5200, 4800,],
+  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   xLabel: "Month",
 };
 
 const revenueData = {
-  title: "Revenue Trend Report",
+  title:  "Revenue Trend",
   yLabel: "Revenue (₦)",
-  color: "#2563eb",
-  data: [800, 2000, 3000, 4500, 5000, 6000, 7500, 8500, 9500, 10500, 11500, 12200],
+  color:  "#2563eb",
+  data:   [420000, 890000,  1200000, 650000, 980000, 1800000, 1550000, 1100000, 1750000,  1400000, 2100000,  2600000],
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   xLabel: "Month",
 };
@@ -50,34 +51,10 @@ export default function DashboardPage() {
   } | null;
 
   const stats = [
-    {
-      label: "Total Users",
-      value: isLoading ? "—" : String(s?.totalUsers ?? "—"),
-      icon: Users,
-      iconColor: "#2563eb",
-      iconBg: "#EFF6FF",
-    },
-    {
-      label: "Verified Experts",
-      value: isLoading ? "—" : String(s?.verifiedExperts ?? "—"),
-      icon: ShieldCheck,
-      iconColor: "#16a34a",
-      iconBg: "#F0FDF4",
-    },
-    {
-      label: "Revenue",
-      value: isLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,
-      icon: DollarSign,
-      iconColor: "#d97706",
-      iconBg: "#FFFBEB",
-    },
-    {
-      label: "Growth",
-      value: isLoading ? "—" : `+${s?.growthRate ?? 0}%`,
-      icon: TrendingUp,
-      iconColor: "#7c3aed",
-      iconBg: "#F5F3FF",
-    },
+    { label: "Total Users",      value: isLoading ? "—" : String(s?.totalUsers ?? "—"),                         icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Verified Experts", value: isLoading ? "—" : String(s?.verifiedExperts ?? "—"),                    icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",          value: isLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,       icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",           value: isLoading ? "—" : `+${s?.growthRate ?? 0}%`,                            icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
   const cardStyle: React.CSSProperties = {
@@ -92,78 +69,28 @@ export default function DashboardPage() {
       <Topbar title="Dashboard" />
 
       <style>{`
-        /* ── Stat grid ── */
-        .db-stats {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-        }
-        @media (min-width: 640px) {
-          .db-stats { grid-template-columns: repeat(4, 1fr); gap: 16px; }
-        }
+        .db-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 640px) { .db-stats { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
 
-        /* ── Stat card ── */
         .db-stat-card {
-          background: #ffffff;
-          border: 1px solid #E5E7EB;
-          border-radius: 16px;
-          padding: 20px 16px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          gap: 6px;
+          background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;
+          padding: 20px 16px; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; text-align: center; gap: 6px;
         }
+        .db-stat-icon  { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
+        .db-stat-value { font-size: 28px; font-weight: 700; color: #111827; line-height: 1.1; }
+        .db-stat-label { font-size: 13px; font-weight: 400; color: #6B7280; }
 
-        .db-stat-icon {
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 2px;
-        }
+        .db-charts { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        @media (min-width: 768px) { .db-charts { grid-template-columns: 1fr 1fr; } }
 
-        .db-stat-value {
-          font-size: 28px;
-          font-weight: 700;
-          color: #111827;
-          line-height: 1.1;
-        }
-
-        .db-stat-label {
-          font-size: 13px;
-          font-weight: 400;
-          color: #6B7280;
-        }
-
-        /* ── Chart grid ── */
-        .db-charts {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
-        @media (min-width: 768px) {
-          .db-charts { grid-template-columns: 1fr 1fr; }
-        }
-
-        /* ── Donut toggle ── */
         .db-donut-desktop { display: none; }
         .db-donut-mobile  { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        @media (min-width: 768px) {
-          .db-donut-desktop { display: block; }
-          .db-donut-mobile  { display: none; }
-        }
+        @media (min-width: 768px) { .db-donut-desktop { display: block; } .db-donut-mobile { display: none; } }
 
-        /* ── Main padding ── */
         .db-main { padding: 16px; }
-        @media (min-width: 768px) {
-          .db-main { padding: 24px 32px; }
-        }
+        @media (min-width: 768px) { .db-main { padding: 24px 32px; } }
 
-        /* ── Tiny phones ── */
         @media (max-width: 380px) {
           .db-stat-value { font-size: 22px; }
           .db-stat-label { font-size: 11px; }
@@ -173,7 +100,7 @@ export default function DashboardPage() {
 
       <main className="db-main" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
 
-        {/* ── Stat Cards ── */}
+        {/* Stat Cards */}
         <div className="db-stats">
           {stats.map(({ label, value, icon: Icon, iconColor, iconBg }) => (
             <div key={label} className="db-stat-card">
@@ -186,17 +113,23 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Line Charts ── */}
+        {/* Line Charts */}
         <div className="db-charts">
           <div style={cardStyle}>
-            <DashboardLineChart {...userGrowthData} />
+            <DashboardLineChart
+              {...userGrowthData}
+              statValue={`${userGrowthData.data[userGrowthData.data.length - 1].toLocaleString()} users`}
+            />
           </div>
           <div style={cardStyle}>
-            <DashboardLineChart {...revenueData} />
+            <DashboardLineChart
+              {...revenueData}
+              statValue={`₦${revenueData.data[revenueData.data.length - 1].toLocaleString()}`}
+            />
           </div>
         </div>
 
-        {/* ── Donut Chart ── */}
+        {/* Donut Chart */}
         <div style={{ ...cardStyle, padding: "20px" }}>
           <div className="db-donut-desktop">
             <DonutChart segments={donutSegments} title="Top Service Category" size={280} />
@@ -227,16 +160,13 @@ export default function DashboardPage() {
   );
 }
 
-/* ── Donut SVG (mobile only) ── */
 function DonutSVGOnly({ segments, size = 200 }: { segments: typeof donutSegments; size?: number }) {
   const cx = size / 2, cy = size / 2;
   const R = size * 0.375, r = size * 0.2167;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
-
   const startAngles = segments.map((_, i) =>
     segments.slice(0, i).reduce((sum, s) => sum + (s.value / 100) * 360, -90)
   );
-
   const arcs = segments.map((seg, i) => {
     const start = startAngles[i];
     const sweep = (seg.value / 100) * 360;
@@ -247,23 +177,15 @@ function DonutSVGOnly({ segments, size = 200 }: { segments: typeof donutSegments
     const xi1 = cx + r * Math.cos(toRad(start)), yi1 = cy + r * Math.sin(toRad(start));
     const xi2 = cx + r * Math.cos(toRad(end)),   yi2 = cy + r * Math.sin(toRad(end));
     const mid = start + sweep / 2;
-    const lr = (R + r) / 2;
-    return {
-      ...seg,
-      d: `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`,
-      lx: cx + lr * Math.cos(toRad(mid)),
-      ly: cy + lr * Math.sin(toRad(mid)),
-    };
+    const lr  = (R + r) / 2;
+    return { ...seg, d: `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`, lx: cx + lr * Math.cos(toRad(mid)), ly: cy + lr * Math.sin(toRad(mid)) };
   });
-
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       {arcs.map((arc) => (
         <g key={arc.label}>
           <path d={arc.d} fill={arc.color} />
-          <text x={arc.lx} y={arc.ly + 4} textAnchor="middle" fontSize={11} fontWeight="600" fill="#fff">
-            {arc.value}%
-          </text>
+          <text x={arc.lx} y={arc.ly + 4} textAnchor="middle" fontSize={11} fontWeight="600" fill="#fff">{arc.value}%</text>
         </g>
       ))}
     </svg>
