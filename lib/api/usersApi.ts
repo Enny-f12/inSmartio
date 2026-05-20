@@ -93,24 +93,30 @@ export interface RegisterClientPayload {
   referral?: string;
 }
 
-// ── Expert registration payload (no username, no role sent) ──
+// ── Expert registration payload ───────────────────────────
 export interface RegisterExpertPayload {
-  name:     string;
-  email:    string;
-  phone:    string;
-  password: string;
-  gender:   "male" | "female" | "other";
-  bio:      string;
+  name:      string;
+  email:     string;
+  phone:     string;
+  password:  string;
+  gender:    "male" | "female" | "other";
+  bio:       string;
+  referral?: string;
 }
 
 // ── TAS registration payload ──────────────────────────────
 export interface RegisterTasPayload {
-  name:     string;
-  email:    string;
-  phone:    string;
-  password: string;
-  gender:   "male" | "female" | "other";
-  dob:      string; // ISO 8601 date string e.g. "1990-01-15"
+  name:            string;
+  email:           string;
+  phone:           string;
+  password:        string;
+  username:        string;
+  gender:          "male" | "female" | "other";
+  dateOfBirth:     string;   // ISO 8601 — backend field name
+  category:        string;
+  bankDetails:     string;
+  document:        string;
+  applicationCode: string;
 }
 
 export type RegisterUserPayload =
@@ -126,45 +132,29 @@ export interface RegisterUserResponse {
 
 export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUser> => {
   if (payload.role === "expert") {
-    const { name, email, phone, password, gender, bio } = payload as RegisterExpertPayload & { role: "expert" };
+    const { name, email, phone, password, gender, bio, referral } = payload as RegisterExpertPayload & { role: "expert" };
     const { data } = await axiosInstance.post<RegisterUserResponse>("/experts/register", {
       name, email, phone, password, gender, bio,
+      ...(referral ? { referral } : {}),
     });
     return data.data;
   }
 
   if (payload.role === "tas") {
-    const { name, email, phone, password, gender, dob } = payload as RegisterTasPayload & { role: "tas" };
+    const { name, email, phone, password, username, gender, dateOfBirth, category, bankDetails, document, applicationCode } = payload as RegisterTasPayload & { role: "tas" };
     const { data } = await axiosInstance.post<RegisterUserResponse>("/tas/register", {
-      name, email, phone, password, gender, dob,
+      name, email, phone, password, username, gender, dateOfBirth, category, bankDetails, document, applicationCode,
     });
     return data.data;
   }
 
   // client
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { role: _, ...rest } = payload as RegisterClientPayload;
+  const { role: _role, ...rest } = payload as RegisterClientPayload;
   const { data } = await axiosInstance.post<RegisterUserResponse>("/clients/register", rest);
   return data.data;
 };
 
-export const deleteUser = async (id: string): Promise<void> => {
-  await axiosInstance.delete(`/users/${id}`);
-};
-
-// ── New admin routes ──────────────────────────────────────
-
-// GET /api/admin/users — all users (admin)
-export const adminGetAllUsers = async (): Promise<ApiUser[]> => {
-  const { data } = await axiosInstance.get<UsersListResponse>("/admin/users");
-  return data.data;
-};
-
-// GET /api/admin/users/{type}/{id} — get user by type and id
-export const adminGetUserByType = async (type: string, id: string): Promise<ApiUser> => {
-  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/${type}/${id}`);
-  return data.data;
-};
+// ── Admin routes ──────────────────────────────────────────
 
 // DELETE /api/admin/users/{type}/{id}
 export const adminDeleteUser = async (type: string, id: string): Promise<void> => {
@@ -174,6 +164,11 @@ export const adminDeleteUser = async (type: string, id: string): Promise<void> =
 // PUT /api/admin/users/suspend/{type}/{id}
 export const suspendUser = async (type: string, id: string): Promise<void> => {
   await axiosInstance.put(`/admin/users/suspend/${type}/${id}`);
+};
+
+// PUT /api/admin/users/activate/{type}/{id}
+export const activateUser = async (type: string, id: string): Promise<void> => {
+  await axiosInstance.put(`/admin/users/activate/${type}/${id}`);
 };
 
 // ── Admin stats ───────────────────────────────────────────

@@ -1,8 +1,10 @@
 // components/disputes/types.ts
 
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
-export type Priority        = DisputePriority; // alias for DisputeBadges compatibility
-export type DisputeStatus   = "Open" | "In Progress" | "Resolved";
+export type Priority        = DisputePriority;
+export type DisputeStatus   =
+  | "Open" | "In Progress" | "Resolved"  // UI-normalized
+  | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE"; // raw backend values
 export type Resolution      = "full_expert" | "full_client" | "dismiss" | "partial" | "reperform" | null;
 
 export interface MediationNote {

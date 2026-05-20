@@ -40,6 +40,7 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   status:       normalizeStatus(u.status),
   joined:       new Date(u.createdAt).toLocaleDateString("en-GB"),
   verify:       u.verify,
+  // expert
   gender:       u.gender,
   bio:          u.bio,
   verification: u.verification,
@@ -49,7 +50,9 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   bankDetails:  u.bankDetails,
   document:     u.document,
   paymentModel: u.paymentModel,
+  // shared
   location:     u.location,
+  // tas
   dob:          u.dob,
   referral:     u.referral,
   account:      u.account,
@@ -62,11 +65,15 @@ const statusVariant: Record<string, "green" | "purple" | "yellow" | "red" | "gra
 
 const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
 
+// ── Per-role form state ───────────────────────────────────────
 type Role = "client" | "expert" | "tas";
+
 interface ClientFields { username: string; }
 interface ExpertFields { gender: "male" | "female" | "other"; bio: string; }
+// TAS fields TBD — using client fields for now
 interface TasFields    { gender: "male" | "female" | "other"; dob: string; }
-interface BaseFields   { name: string; email: string; phone: string; password: string; }
+
+interface BaseFields { name: string; email: string; phone: string; password: string; }
 
 type FormState =
   | (BaseFields & ClientFields & { role: "client" })
@@ -80,30 +87,19 @@ const byRole = (role: Role): FormState => {
   return { ...defaultBase, role: "client", username: "" };
 };
 
-/* ── Shared input styles ── */
 const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 14px",
-  borderRadius: "10px",
-  border: "1px solid #D1D5DB",
-  backgroundColor: "#ffffff",
-  fontSize: "13px",
-  color: "#111827",
-  outline: "none",
-  boxSizing: "border-box",
+  width: "100%", padding: "10px 14px", borderRadius: "10px",
+  border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)",
+  fontSize: "13px", color: "var(--color-text-main)", outline: "none", boxSizing: "border-box",
 };
-
 const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: "12px",
-  fontWeight: 600,
-  color: "#374151",
-  marginBottom: "6px",
+  display: "block", fontSize: "12px", fontWeight: 500,
+  color: "var(--color-text-muted)", marginBottom: "6px",
 };
 
 const seedMap = new Map<string, number>();
 
-// ── Role selector ─────────────────────────────────────────────
+// ── Role selector step ────────────────────────────────────────
 function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
   const roles: { value: Role; label: string; desc: string }[] = [
     { value: "client", label: "Client",  desc: "Can post jobs and hire experts" },
@@ -112,7 +108,7 @@ function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
   ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      <p style={{ fontSize: "13px", color: "#6B7280", marginBottom: "4px" }}>
+      <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "4px" }}>
         Select the type of user you want to create:
       </p>
       {roles.map((r) => (
@@ -120,37 +116,23 @@ function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
           key={r.value}
           onClick={() => onSelect(r.value)}
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            padding: "14px 16px",
-            borderRadius: "12px",
-            /* ── VISIBLE border ── */
-            border: "1.5px solid #D1D5DB",
-            backgroundColor: "#ffffff",
-            cursor: "pointer",
-            textAlign: "left",
-            transition: "border-color 0.15s, background 0.15s",
-            width: "100%",
+            display: "flex", flexDirection: "column", alignItems: "flex-start",
+            padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)",
+            backgroundColor: "var(--color-background)", cursor: "pointer", textAlign: "left",
+            transition: "border-color 0.15s",
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "#2563eb";
-            e.currentTarget.style.background = "#EFF6FF";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "#D1D5DB";
-            e.currentTarget.style.background = "#ffffff";
-          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
         >
-          <span style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827" }}>{r.label}</span>
-          <span style={{ fontSize: "12px", color: "#6B7280", marginTop: "2px" }}>{r.desc}</span>
+          <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{r.label}</span>
+          <span style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "2px" }}>{r.desc}</span>
         </button>
       ))}
     </div>
   );
 }
 
-// ── User form ─────────────────────────────────────────────────
+// ── Dynamic form fields by role ───────────────────────────────
 function UserForm({
   form, setForm, showPassword, setShowPassword,
 }: {
@@ -162,57 +144,26 @@ function UserForm({
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch } as FormState));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       {/* Role badge */}
-      <div style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "4px 12px",
-        borderRadius: "999px",
-        border: "1.5px solid #BFDBFE",
-        backgroundColor: "#EFF6FF",
-        fontSize: "12px",
-        fontWeight: 600,
-        color: "#2563eb",
-        alignSelf: "flex-start",
-      }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "999px", backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)", fontSize: "12px", fontWeight: 600, color: "var(--color-primary)", alignSelf: "flex-start" }}>
         {form.role.charAt(0).toUpperCase() + form.role.slice(1)}
       </div>
 
-      {/* Full Name */}
-      <div>
-        <label style={labelStyle}>Full Name *</label>
-        <input
-          style={inputStyle}
-          placeholder="e.g. John Doe"
-          value={form.name}
-          onChange={(e) => set({ name: e.target.value })}
-        />
+      {/* Name */}
+      <div><label style={labelStyle}>Full Name *</label>
+        <input style={inputStyle} placeholder="e.g. John Doe" value={form.name} onChange={(e) => set({ name: e.target.value })} />
       </div>
 
       {/* Email */}
-      <div>
-        <label style={labelStyle}>Email Address *</label>
-        <input
-          style={inputStyle}
-          type="email"
-          placeholder="user@email.com"
-          value={form.email}
-          onChange={(e) => set({ email: e.target.value })}
-        />
+      <div><label style={labelStyle}>Email Address *</label>
+        <input style={inputStyle} type="email" placeholder="user@email.com" value={form.email} onChange={(e) => set({ email: e.target.value })} />
       </div>
 
       {/* Username — client only */}
       {form.role === "client" && (
-        <div>
-          <label style={labelStyle}>Username *</label>
-          <input
-            style={inputStyle}
-            placeholder="e.g. johndoe"
-            value={(form as FormState & { username: string }).username}
-            onChange={(e) => set({ username: e.target.value } as Partial<FormState>)}
-          />
+        <div><label style={labelStyle}>Username *</label>
+          <input style={inputStyle} placeholder="e.g. johndoe" value={(form as FormState & { username: string }).username} onChange={(e) => set({ username: e.target.value } as Partial<FormState>)} />
         </div>
       )}
 
@@ -220,28 +171,12 @@ function UserForm({
       <div>
         <label style={labelStyle}>Phone Number</label>
         <div style={{ display: "flex" }}>
-          <div style={{
-            padding: "10px 14px",
-            borderRadius: "10px 0 0 10px",
-            border: "1px solid #D1D5DB",
-            borderRight: "none",
-            backgroundColor: "#F9FAFB",
-            fontSize: "13px",
-            color: "#374151",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}>
-            +234
-          </div>
+          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid var(--color-border)", borderRight: "none", backgroundColor: "var(--color-background)", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0 }}>+234</div>
           <input
             style={{ ...inputStyle, borderRadius: "0 10px 10px 0", borderLeft: "none" }}
-            placeholder="801 234 5678"
-            maxLength={10}
+            placeholder="801 234 5678" maxLength={10}
             value={form.phone.replace(/^\+234/, "")}
-            onChange={(e) => {
-              const d = e.target.value.replace(/\D/g, "").slice(0, 10);
-              set({ phone: d ? `+234${d}` : "" });
-            }}
+            onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 10); set({ phone: d ? `+234${d}` : "" }); }}
           />
         </div>
       </div>
@@ -249,27 +184,15 @@ function UserForm({
       {/* Expert-only: gender + bio */}
       {form.role === "expert" && (
         <>
-          <div>
-            <label style={labelStyle}>Gender *</label>
-            <select
-              style={inputStyle}
-              value={(form as FormState & ExpertFields).gender}
-              onChange={(e) => set({ gender: e.target.value as "male" | "female" | "other" } as Partial<FormState>)}
-            >
+          <div><label style={labelStyle}>Gender *</label>
+            <select style={inputStyle} value={(form as FormState & ExpertFields).gender} onChange={(e) => set({ gender: e.target.value as "male" | "female" | "other" } as Partial<FormState>)}>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
             </select>
           </div>
-          <div>
-            <label style={labelStyle}>Bio *</label>
-            <textarea
-              style={{ ...inputStyle, resize: "none" } as React.CSSProperties}
-              rows={3}
-              placeholder="Brief description about the expert..."
-              value={(form as FormState & ExpertFields).bio}
-              onChange={(e) => set({ bio: e.target.value } as Partial<FormState>)}
-            />
+          <div><label style={labelStyle}>Bio *</label>
+            <textarea style={{ ...inputStyle, resize: "none" } as React.CSSProperties} rows={3} placeholder="Brief description about the expert..." value={(form as FormState & ExpertFields).bio} onChange={(e) => set({ bio: e.target.value } as Partial<FormState>)} />
           </div>
         </>
       )}
@@ -277,26 +200,15 @@ function UserForm({
       {/* TAS-only: gender + dob */}
       {form.role === "tas" && (
         <>
-          <div>
-            <label style={labelStyle}>Gender *</label>
-            <select
-              style={inputStyle}
-              value={(form as FormState & TasFields).gender}
-              onChange={(e) => set({ gender: e.target.value as "male" | "female" | "other" } as Partial<FormState>)}
-            >
+          <div><label style={labelStyle}>Gender *</label>
+            <select style={inputStyle} value={(form as FormState & TasFields).gender} onChange={(e) => set({ gender: e.target.value as "male" | "female" | "other" } as Partial<FormState>)}>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
             </select>
           </div>
-          <div>
-            <label style={labelStyle}>Date of Birth *</label>
-            <input
-              style={inputStyle}
-              type="date"
-              value={(form as FormState & TasFields).dob}
-              onChange={(e) => set({ dob: e.target.value } as Partial<FormState>)}
-            />
+          <div><label style={labelStyle}>Date of Birth *</label>
+            <input style={inputStyle} type="date" value={(form as FormState & TasFields).dob} onChange={(e) => set({ dob: e.target.value } as Partial<FormState>)} />
           </div>
         </>
       )}
@@ -305,30 +217,8 @@ function UserForm({
       <div>
         <label style={labelStyle}>Password *</label>
         <div style={{ position: "relative" }}>
-          <input
-            style={{ ...inputStyle, paddingRight: "42px" }}
-            type={showPassword ? "text" : "password"}
-            placeholder="StrongPassword123!"
-            value={form.password}
-            onChange={(e) => set({ password: e.target.value })}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            style={{
-              position: "absolute",
-              right: "12px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "#9CA3AF",
-              display: "flex",
-              alignItems: "center",
-              padding: 0,
-            }}
-          >
+          <input style={{ ...inputStyle, paddingRight: "40px" }} type={showPassword ? "text" : "password"} placeholder="StrongPassword123!" value={form.password} onChange={(e) => set({ password: e.target.value })} />
+          <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", display: "flex", alignItems: "center" }}>
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
@@ -342,16 +232,16 @@ export default function UsersPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, selected, selectedStatus } = useAppSelector((s) => s.users);
 
-  const [view,           setView]           = useState<"list" | "detail">("list");
-  const [addOpen,        setAddOpen]        = useState(false);
-  const [addStep,        setAddStep]        = useState<"role" | "form">("role");
-  const [deleteOpen,     setDeleteOpen]     = useState(false);
-  const [deleteLoading,  setDeleteLoading]  = useState(false);
-  const [suspendOpen,    setSuspendOpen]    = useState(false);
-  const [suspendLoading, setSuspendLoading] = useState(false);
-  const [form,           setForm]           = useState<FormState>(byRole("client"));
-  const [addLoading,     setAddLoading]     = useState(false);
-  const [showPassword,   setShowPassword]   = useState(false);
+  const [view,           setView]          = useState<"list" | "detail">("list");
+  const [addOpen,        setAddOpen]       = useState(false);
+  const [addStep,        setAddStep]       = useState<"role" | "form">("role");
+  const [deleteOpen,     setDeleteOpen]    = useState(false);
+  const [deleteLoading,  setDeleteLoading] = useState(false);
+  const [suspendOpen,    setSuspendOpen]   = useState(false);
+  const [suspendLoading, setSuspendLoading]= useState(false);
+  const [form,           setForm]          = useState<FormState>(byRole("client"));
+  const [addLoading,     setAddLoading]    = useState(false);
+  const [showPassword,   setShowPassword]  = useState(false);
 
   useEffect(() => { if (listStatus === "idle") dispatch(fetchUsers()); }, [dispatch, listStatus]);
   useEffect(() => { list.forEach((u, i) => { if (!seedMap.has(u.id)) seedMap.set(u.id, i); }); }, [list]);
@@ -361,7 +251,9 @@ export default function UsersPage() {
   }, [selectedStatus, selected]);
 
   const closeAdd = () => { setAddOpen(false); setAddStep("role"); setForm(byRole("client")); setShowPassword(false); };
+
   const handleRoleSelect = (role: Role) => { setForm(byRole(role)); setAddStep("form"); };
+
   const handleBack = () => { setView("list"); dispatch(clearSelected()); };
 
   const handleViewUser = (userId: string) => {
@@ -404,6 +296,7 @@ export default function UsersPage() {
     }
     setAddLoading(true);
 
+    // Build payload per role
     let payload: RegisterUserPayload;
     if (form.role === "expert") {
       const f = form as BaseFields & ExpertFields & { role: "expert" };
@@ -436,7 +329,7 @@ export default function UsersPage() {
       <Topbar title="User Management" />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: "12px" }}>
         <p style={{ fontSize: "14px", color: "#ef4444" }}>Failed to load user.</p>
-        <button onClick={handleBack} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#2563eb", background: "none", border: "none", cursor: "pointer" }}>
+        <button onClick={handleBack} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer" }}>
           <ArrowLeft size={14} /> Back to Users
         </button>
       </div>
@@ -449,39 +342,39 @@ export default function UsersPage() {
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
         <Topbar title="User Management" />
         <UserDetail user={detailUser} onBack={handleBack} onDelete={() => setDeleteOpen(true)} onSuspend={() => setSuspendOpen(true)} />
-
-        {/* Suspend Modal */}
+        {/* Suspend/Reinstate Modal */}
         <Modal open={suspendOpen} onClose={() => setSuspendOpen(false)} title={detailUser.status === "Suspended" ? "Reinstate User" : "Suspend User"} size="sm"
           footer={
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button onClick={() => setSuspendOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>Cancel</button>
+              <button onClick={() => setSuspendOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
               <button onClick={handleSuspend} disabled={suspendLoading} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: detailUser.status === "Suspended" ? "#16a34a" : "#f59e0b", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: suspendLoading ? 0.7 : 1 }}>
-                {suspendLoading ? <><Loader2 size={14} className="animate-spin" />{detailUser.status === "Suspended" ? "Reinstating..." : "Suspending..."}</> : detailUser.status === "Suspended" ? "Reinstate" : "Suspend"}
+                {suspendLoading
+                  ? <><Loader2 size={14} className="animate-spin" /> {detailUser.status === "Suspended" ? "Reinstating..." : "Suspending..."}</>
+                  : detailUser.status === "Suspended" ? "Reinstate" : "Suspend"
+                }
               </button>
             </div>
           }
         >
-          <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
+          <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
             {detailUser.status === "Suspended"
-              ? <>Are you sure you want to reinstate <strong style={{ color: "#111827" }}>{detailUser.name}</strong>? They will regain full access.</>
-              : <>Are you sure you want to suspend <strong style={{ color: "#111827" }}>{detailUser.name}</strong>? They will lose access until reinstated.</>
+              ? <>Are you sure you want to reinstate <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? They will regain full access.</>
+              : <>Are you sure you want to suspend <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? They will lose access until reinstated.</>
             }
           </p>
         </Modal>
-
-        {/* Delete Modal */}
         <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Account" size="sm"
           footer={
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button onClick={() => setDeleteOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>Cancel</button>
+              <button onClick={() => setDeleteOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
               <button onClick={handleDelete} disabled={deleteLoading} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: deleteLoading ? 0.7 : 1 }}>
                 {deleteLoading ? <><Loader2 size={14} className="animate-spin" /> Deleting...</> : "Delete"}
               </button>
             </div>
           }
         >
-          <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
-            Are you sure you want to delete <strong style={{ color: "#111827" }}>{detailUser.name}</strong>? This cannot be undone.
+          <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
+            Are you sure you want to delete <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? This cannot be undone.
           </p>
         </Modal>
       </div>
@@ -497,8 +390,8 @@ export default function UsersPage() {
             {u.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
           </div>
           <div>
-            <p style={{ fontWeight: 600, color: "var(--color-text-main)", fontSize: "13px", margin: 0 }}>{u.name}</p>
-            <p style={{ fontSize: "11px", color: "var(--color-text-muted)", margin: 0 }}>{u.email}</p>
+            <p style={{ fontWeight: 600, color: "var(--color-text-main)", fontSize: "13px" }}>{u.name}</p>
+            <p style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>{u.email}</p>
           </div>
         </div>
       ),
@@ -531,7 +424,7 @@ export default function UsersPage() {
       `}</style>
 
       <div className="users-subheader" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <p style={{ fontSize: "13px", color: "var(--color-text-muted)", margin: 0 }}>
+        <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
           {listStatus === "succeeded" ? `${list.length} users total` : "Manage all users"}
         </p>
         <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", border: "none" }}>
@@ -540,14 +433,14 @@ export default function UsersPage() {
       </div>
 
       <main className="users-main" style={{ flex: 1 }}>
-        {listStatus === "loading"   && <PageLoader text="Loading users..." />}
-        {listStatus === "failed"    && <div style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>Failed to load users.</div>}
+        {listStatus === "loading" && <PageLoader text="Loading users..." />}
+        {listStatus === "failed" && <div style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>Failed to load users.</div>}
         {listStatus === "succeeded" && (
           <DataTable data={users} columns={columns} filterOptions={FILTER_OPTIONS} filterKey="type" searchKey="name" searchPlaceholder="Search name..." pageSize={10} onExport={() => console.log("export")} />
         )}
       </main>
 
-      {/* ── Add User Modal ── */}
+      {/* Add User Modal — 2 steps */}
       <Modal
         open={addOpen}
         onClose={closeAdd}
@@ -556,18 +449,8 @@ export default function UsersPage() {
         footer={
           addStep === "role" ? undefined : (
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button
-                onClick={() => setAddStep("role")}
-                style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", fontSize: "13px", cursor: "pointer", color: "#6B7280", fontWeight: 500 }}
-              >
-                ← Back
-              </button>
-              <button
-                onClick={handleAddUser}
-                disabled={addLoading}
-                className="btn-primary"
-                style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: addLoading ? 0.7 : 1 }}
-              >
+              <button onClick={() => setAddStep("role")} style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>← Back</button>
+              <button onClick={handleAddUser} disabled={addLoading} className="btn-primary" style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: addLoading ? 0.7 : 1 }}>
                 {addLoading ? <><Loader2 size={14} className="animate-spin" /> Adding...</> : "Add User"}
               </button>
             </div>

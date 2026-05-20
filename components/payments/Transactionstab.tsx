@@ -25,13 +25,13 @@ function MiniDropdown({
     <div style={{ position: "relative" }} ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "12px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "12px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", color: "var(--color-text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}
       >
         <span style={{ flex: 1, textAlign: "left" }}>{value || placeholder}</span>
         <ChevronDown size={13} />
       </button>
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50, borderRadius: "12px", overflow: "hidden", padding: "4px 0", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", minWidth: "120px" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50, borderRadius: "12px", overflow: "hidden", padding: "4px 0", backgroundColor: "#ffffff", border: "1px solid var(--color-border)", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", minWidth: "120px" }}>
           {options.map((opt) => (
             <button key={opt} onClick={() => { onChange(opt); setOpen(false); }}
               style={{ width: "100%", padding: "8px 16px", fontSize: "13px", textAlign: "left", color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer" }}
@@ -45,19 +45,19 @@ function MiniDropdown({
   );
 }
 
-// Status color helper
-function statusColor(status: string) {
-  const s = status.toLowerCase();
-  if (s === "completed" || s === "success") return { color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0" };
-  if (s === "pending") return { color: "#d97706", background: "#fffbeb", border: "1px solid #fde68a" };
-  if (s === "failed" || s === "rejected") return { color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca" };
-  return { color: "var(--color-text-muted)", background: "var(--color-background)", border: "1px solid var(--color-border)" };
-}
-
 function StatusPill({ status }: { status: string }) {
-  const s = statusColor(status);
+  const s = status.toLowerCase();
+  let style = { color: "var(--color-text-muted)", background: "var(--color-background)", border: "1px solid var(--color-border)" };
+  if (s === "completed" || s === "success" || s === "released" || s === "revenue" || s === "paid") {
+    style = { color: "#15803d", background: "#f0fdf4", border: "1px solid #bbf7d0" };
+  } else if (s === "pending" || s === "held") {
+    style = { color: "#d97706", background: "#fffbeb", border: "1px solid #fde68a" };
+  } else if (s === "failed" || s === "rejected") {
+    style = { color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca" };
+  }
+
   return (
-    <span style={{ ...s, fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
+    <span style={{ ...style, fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
       {status}
     </span>
   );
@@ -91,7 +91,7 @@ export default function TransactionsTab() {
         .txn-amount-row   { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .txn-date-row     { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .txn-table-wrap   { display: none; }
-        .txn-cards        { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .txn-cards        { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
         .txn-pagination   { flex-direction: column; gap: 8px; align-items: flex-start; }
 
         @media (min-width: 540px) {
@@ -105,7 +105,7 @@ export default function TransactionsTab() {
         }
       `}</style>
 
-      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
 
         {/* Filter toolbar */}
         <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
@@ -155,13 +155,13 @@ export default function TransactionsTab() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {paginated.length === 0 ? (
                 <tr><td colSpan={6} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No transactions found.</td></tr>
               ) : paginated.map((t) => (
-                <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border)" }} className="hover:bg-background/40 transition-colors">
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{t.date}</td>
-                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-main)" }}>{t.type}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-main)", fontWeight: 500 }}>{t.type}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{t.user}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{t.amount}</td>
                   <td style={{ padding: "16px 20px" }}><StatusPill status={t.status} /></td>
@@ -172,12 +172,13 @@ export default function TransactionsTab() {
           </table>
         </div>
 
-        {/* Mobile cards */}
-        <div className="txn-cards">
+        {/* Mobile cards layout wrapper */}
+        <div className="txn-cards" style={{ backgroundColor: "var(--color-background)" }}>
           {paginated.length === 0 ? (
-            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No transactions found.</p>
+            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)", backgroundColor: "#ffffff" }}>No transactions found.</p>
           ) : paginated.map((t) => (
-            <div key={t.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+            <div key={t.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
+              {/* FIXED TYPO HERE (justifyvalue to justifyContent) */}
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6px", gap: "8px" }}>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{t.type}</p>
@@ -196,24 +197,24 @@ export default function TransactionsTab() {
           ))}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination table tools interface wrapper */}
         <div className="txn-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
           <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
             {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
               Prev
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
               <button key={p} onClick={() => setPage(p)} className={p === page ? "btn-primary" : ""}
-                style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
+                style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
                 {p}
               </button>
             ))}
             <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
+              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
               Next
             </button>
           </div>

@@ -2,9 +2,47 @@
 "use client";
 
 import { useState } from "react";
-import { X, Eye, Download, CheckCircle2, Circle, Phone } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { X, Eye, Download, CheckCircle2, Circle, Phone, Loader2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
-import type { Expert } from "@/components/verifications/types";
+
+import { verifyDocument } from "@/lib/redux/verificationSlice";
+import type { AppDispatch, RootState } from "@/lib/redux/store";
+import type { ApiVerificationExpert } from "@/lib/api/verificationApi";
+
+// ── Explicit Sub-Interfaces for Type Safety ────────────────
+interface VerificationDocument {
+  name: string;
+  status: string;
+}
+
+interface NinVerification {
+  number: string;
+  status: string;
+  nameMatch: boolean;
+  dobMatch: boolean;
+}
+
+interface GuarantorVerification {
+  name: string;
+  phone: string;
+  occupation: string;
+  status: string;
+}
+
+interface PoliceClearanceVerification {
+  certificate: string;
+  issued: string;
+  issuingState: string;
+}
+
+// Extension to safely map dynamic layout keys without hitting 'unknown' blocks
+interface SafeVerificationExpert extends ApiVerificationExpert {
+  appliedTier?: string;
+  submitted?: string;
+  verificationFee?: string | number;
+  feePaidOn?: string;
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -28,7 +66,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function VerifiedChip() {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#16a34a" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#16a34a", fontWeight: 500 }}>
       <CheckCircle2 size={13} /> Verified
     </span>
   );
@@ -36,32 +74,72 @@ function VerifiedChip() {
 
 function PendingChip() {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#d97706" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#d97706", fontWeight: 500 }}>
       <Circle size={13} /> Pending
     </span>
   );
 }
 
 interface Props {
-  expert: Expert | null;
+  expert: ApiVerificationExpert | null;
   onClose: () => void;
-  onApprove: () => void;
-  onReject: () => void;
 }
 
-export default function VerificationModal({ expert, onClose, onApprove, onReject }: Props) {
+export default function VerificationModal({ expert: rawExpert, onClose }: Props) {
+  const dispatch = useDispatch<AppDispatch>();
+  const { mutateStatus } = useSelector((state: RootState) => state.verifications);
+
   const [note, setNote] = useState("");
+  const isMutating = mutateStatus === "loading";
+
+  if (!rawExpert) return null;
+
+  // Apply explicit extended interface casting
+  const expert = rawExpert as SafeVerificationExpert;
+
+  // Safe Extraction Layer via Typecasting Unknowns securely
+  const expertName = expert.name ? expert.name.replace(/\./g, "") : "Unknown Expert";
+  const appliedTier = expert.verification || expert.appliedTier || "Tier 1";
+  const dateSubmitted = expert.createdAt ? new Date(expert.createdAt).toLocaleDateString("en-GB") : expert.submitted || "Pending";
+  
+  const documentList = Array.isArray(expert.documents) 
+    ? (expert.documents as VerificationDocument[]) 
+    : [{ name: "Primary Identification", status: expert.verify ? "Verified" : "Pending" }];
+
+  const ninData = (expert.nin || expert.document?.nin) as NinVerification | undefined;
+  const guarantorData = expert.guarantor as GuarantorVerification | undefined;
+  const policeClearanceData = expert.policeClearance as PoliceClearanceVerification | undefined;
+
+  const handleAction = async (isApproval: boolean) => {
+    if (!isApproval && !note.trim()) {
+      alert("Please provide a reason in the notes field for rejection.");
+      return;
+    }
+
+    const payload = {
+      documentKey: "all_documents", 
+      verify: isApproval,
+      reject: !isApproval,
+      reason: !isApproval ? note : undefined,
+      adminId: "current-admin-id", 
+    };
+
+    await dispatch(verifyDocument({ id: expert.id, payload }));
+    onClose();
+  };
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", flexWrap: "wrap" }}>
       <button
-        onClick={onApprove}
+        onClick={() => handleAction(true)}
+        disabled={isMutating}
         style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#16a34a", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
       >
-        <CheckCircle2 size={15} /> Approve
+        {isMutating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />} Approve
       </button>
       <button
-        onClick={onReject}
+        onClick={() => handleAction(false)}
+        disabled={isMutating}
         style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#dc2626", backgroundColor: "#fef2f2", border: "1px solid #fecaca", cursor: "pointer", whiteSpace: "nowrap" }}
       >
         <X size={14} /> Reject
@@ -76,99 +154,97 @@ export default function VerificationModal({ expert, onClose, onApprove, onReject
 
   return (
     <Modal open={!!expert} onClose={onClose} title="Verification Detail" footer={footer} size="md">
-      {expert && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
-          {/* Expert Information */}
-          <Section title="Expert Information">
-            <InfoRow label="Name:"          value={expert.name.replace(".", "")} />
-            <InfoRow label="Phone:"         value={expert.phone} />
-            <InfoRow label="Email:"         value={expert.email} />
-            <InfoRow label="Applied Tier:"  value={expert.appliedTier} />
-            <InfoRow label="Submitted:"     value={expert.submitted} />
-            {expert.verificationFee && (
-              <InfoRow
-                label="Verification Fee:"
-                value={
-                  <span>
-                    {expert.verificationFee}
-                    <span style={{ color: "var(--color-text-muted)" }}> · Paid on {expert.feePaidOn}</span>
-                  </span>
-                }
-              />
-            )}
+        {/* Expert Information */}
+        <Section title="Expert Information">
+          <InfoRow label="Name:"          value={expertName} />
+          <InfoRow label="Phone:"         value={expert.phone ?? "—"} />
+          <InfoRow label="Email:"         value={expert.email} />
+          <InfoRow label="Applied Tier:"  value={appliedTier} />
+          <InfoRow label="Submitted:"     value={dateSubmitted} />
+          {expert.verificationFee && (
+            <InfoRow
+              label="Verification Fee:"
+              value={
+                <span>
+                  {String(expert.verificationFee)}
+                  {expert.feePaidOn && <span style={{ color: "var(--color-text-muted)" }}> · Paid on {expert.feePaidOn}</span>}
+                </span>
+              }
+            />
+          )}
+        </Section>
+
+        {/* Documents */}
+        <Section title="Documents">
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {documentList.map((doc, index) => (
+              <div key={doc.name || index} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ flex: 1, fontSize: "13px", color: "var(--color-text-main)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+                <button style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }} title="View"><Eye size={15} /></button>
+                <button style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }} title="Download"><Download size={15} /></button>
+                <span style={{ flexShrink: 0 }}>
+                  {doc.status === "Verified" || expert.verify ? <VerifiedChip /> : <PendingChip />}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* NIN Verification */}
+        {ninData && (
+          <Section title="NIN Verification">
+            <InfoRow label="NIN Number:" value={ninData.number ?? "—"} />
+            <InfoRow label="NIN Status:" value={ninData.status === "Verified" ? <VerifiedChip /> : <PendingChip />} />
+            <InfoRow label="Name Match:" value={ninData.nameMatch ? <VerifiedChip /> : <PendingChip />} />
+            <InfoRow label="DOB Match:"  value={ninData.dobMatch ? <VerifiedChip /> : <PendingChip />} />
           </Section>
+        )}
 
-          {/* Documents */}
-          <Section title="Documents">
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {expert.documents.map((doc) => (
-                <div key={doc.name} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ flex: 1, fontSize: "13px", color: "var(--color-text-main)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
-                  <button style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }} title="View"><Eye size={15} /></button>
-                  <button style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }} title="Download"><Download size={15} /></button>
-                  <span style={{ flexShrink: 0 }}>
-                    {doc.status === "Verified" ? <VerifiedChip /> : <PendingChip />}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* Guarantor Verification */}
+        {guarantorData && (
+          <Section title="Guarantor Verification">
+            <InfoRow label="Name:"       value={guarantorData.name} />
+            <InfoRow label="Phone:"      value={guarantorData.phone} />
+            <InfoRow label="Occupation:" value={guarantorData.occupation} />
+            <InfoRow
+              label="Status:"
+              value={
+                <button style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Phone size={12} /> {guarantorData.status}
+                </button>
+              }
+            />
+            <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", marginTop: "12px", marginBottom: "6px" }}>Rejection Notes / Internal Memo</p>
+            <textarea
+              placeholder="Provide context details if choosing to reject this documentation layer..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "#fff", color: "var(--color-text-main)", boxSizing: "border-box" }}
+            />
           </Section>
+        )}
 
-          {/* NIN Verification */}
-          {expert.nin && (
-            <Section title="NIN Verification">
-              <InfoRow label="NIN Number:" value={expert.nin.number} />
-              <InfoRow label="NIN Status:" value={expert.nin.status === "Verified" ? <VerifiedChip /> : <PendingChip />} />
-              <InfoRow label="Name Match:" value={expert.nin.nameMatch ? <VerifiedChip /> : <PendingChip />} />
-              <InfoRow label="DOB Match:"  value={expert.nin.dobMatch ? <VerifiedChip /> : <PendingChip />} />
-            </Section>
-          )}
+        {/* Police Clearance Verification */}
+        {policeClearanceData && (
+          <Section title="Police Clearance Verification">
+            <InfoRow label="Certificate #:" value={policeClearanceData.certificate} />
+            <InfoRow label="Issued:"         value={policeClearanceData.issued} />
+            <InfoRow label="Issuing State:"  value={policeClearanceData.issuingState} />
+            <InfoRow
+              label="Status:"
+              value={
+                <button style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Circle size={12} /> Verify Online
+                </button>
+              }
+            />
+          </Section>
+        )}
 
-          {/* Guarantor */}
-          {expert.guarantor && (
-            <Section title="Guarantor Verification">
-              <InfoRow label="Name:"       value={expert.guarantor.name} />
-              <InfoRow label="Phone:"      value={expert.guarantor.phone} />
-              <InfoRow label="Occupation:" value={expert.guarantor.occupation} />
-              <InfoRow
-                label="Status:"
-                value={
-                  <button style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer" }}>
-                    <Phone size={12} /> {expert.guarantor.status}
-                  </button>
-                }
-              />
-              <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", marginTop: "12px", marginBottom: "6px" }}>Notes</p>
-              <textarea
-                placeholder="enter your note...."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "#fff", color: "var(--color-text-main)", boxSizing: "border-box" }}
-              />
-            </Section>
-          )}
-
-          {/* Police Clearance */}
-          {expert.policeClearance && (
-            <Section title="Police Clearance Verification">
-              <InfoRow label="Certificate #:" value={expert.policeClearance.certificate} />
-              <InfoRow label="Issued:"         value={expert.policeClearance.issued} />
-              <InfoRow label="Issuing State:"  value={expert.policeClearance.issuingState} />
-              <InfoRow
-                label="Status:"
-                value={
-                  <button style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500, color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer" }}>
-                    <Circle size={12} /> Verify Online
-                  </button>
-                }
-              />
-            </Section>
-          )}
-
-        </div>
-      )}
+      </div>
     </Modal>
   );
 }

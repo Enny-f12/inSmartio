@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
 import { SubPageShell, SaveButton, FieldInput, FieldTextarea } from "./SettingsShared";
-import { notificationTemplates, TEMPLATE_KEYS } from "@/components/settings/types";
+import { notificationTemplates } from "@/components/settings/types";
 import type { TemplateKey } from "@/components/settings/types";
 
 export default function NotificationTemplates({ onBack }: { onBack: () => void }) {
@@ -47,9 +47,10 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
               Template:
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Force the dropdown options array to only contain "New Bid Received" */}
               <FilterDropdown
                 value={templateKey}
-                options={TEMPLATE_KEYS}
+                options={["New Bid Received"]}
                 onChange={handleTemplateChange}
               />
             </div>

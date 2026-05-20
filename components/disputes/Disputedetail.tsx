@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // components/disputes/DisputeDetail.tsx
 "use client";
 
@@ -76,22 +75,22 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
       .finally(() => setSubmitting(false));
   };
 
-  // Save Draft → In Progress
+  // Save Draft → IN_PROGRESS
   const handleSaveDraft = () => {
     setDrafting(true);
-    dispatch(editDispute({ id: disputeId, payload: { status: "In Progress" } }))
+    dispatch(editDispute({ id: disputeId, payload: { status: "IN_PROGRESS" } }))
       .unwrap()
-      .then(() => { toast.success("Saved as draft — status set to In Progress"); onBack(); })
+      .then(() => { toast.success("Saved as draft — marked In Progress"); onBack(); })
       .catch((err: string) => toast.error("Failed to save draft", { description: err }))
       .finally(() => setDrafting(false));
   };
 
-  // Appeal Later → In Progress
+  // Appeal Later → IN_PROGRESS
   const handleAppealLater = () => {
     setAppealing(true);
-    dispatch(editDispute({ id: disputeId, payload: { status: "In Progress" } }))
+    dispatch(editDispute({ id: disputeId, payload: { status: "IN_PROGRESS" } }))
       .unwrap()
-      .then(() => { toast.success("Marked for appeal — status set to In Progress"); onBack(); })
+      .then(() => { toast.success("Marked for appeal — status In Progress"); onBack(); })
       .catch((err: string) => toast.error("Failed to update dispute", { description: err }))
       .finally(() => setAppealing(false));
   };
@@ -213,7 +212,7 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
               ))}
             </div>
             <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "8px" }}>
-              Decision reason: <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontSize: "12px" }}>(optional)</span>
+              Decision reason:
             </p>
             <textarea rows={3} placeholder="Enter your decision reason..."
               value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)}

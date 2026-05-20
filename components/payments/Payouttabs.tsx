@@ -33,14 +33,14 @@ export default function PayoutsTab() {
     <>
       <style>{`
         .payouts-table { display: none; }
-        .payouts-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .payouts-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
         @media (min-width: 640px) {
           .payouts-table { display: block; overflow-x: auto; }
           .payouts-cards { display: none; }
         }
       `}</style>
 
-      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
 
         {/* Search */}
         <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
@@ -64,9 +64,9 @@ export default function PayoutsTab() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {filtered.map((p) => (
-                <tr key={p.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <tr key={p.id} style={{ borderBottom: "1px solid var(--color-border)" }} className="hover:bg-background/40 transition-colors">
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{p.recipient}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{p.type}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{p.amount}</td>
@@ -78,12 +78,12 @@ export default function PayoutsTab() {
           </table>
         </div>
 
-        {/* Mobile cards */}
-        <div className="payouts-cards">
+        {/* Mobile cards wrapper */}
+        <div className="payouts-cards" style={{ backgroundColor: "var(--color-background)" }}>
           {filtered.length === 0 ? (
-            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No results found.</p>
+            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)", backgroundColor: "#ffffff" }}>No results found.</p>
           ) : filtered.map((p) => (
-            <div key={p.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+            <div key={p.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px", gap: "8px" }}>
                 <div>
                   <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{p.recipient}</p>

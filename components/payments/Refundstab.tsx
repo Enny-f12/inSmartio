@@ -12,8 +12,8 @@ export default function RefundsTab() {
   const [reason, setReason] = useState("");
 
   return (
-    // No card wrapper — content sits directly on the page per the design
-    <div className="max-w-2xl">
+    /* Sections directly layout separated and securely bound with custom parameters */
+    <div className="max-w-5xl" style={{ padding: "20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
 
       {/* Transaction meta */}
       <div className="text-[13px] mb-5 space-y-1">
@@ -28,7 +28,7 @@ export default function RefundsTab() {
       </div>
 
       {/* Form card */}
-      <div className="rounded-2xl border border-border bg-surface p-6 space-y-4 mb-5">
+      <div className="rounded-2xl border border-border bg-background p-6 space-y-4 mb-5">
         {/* Refund Amount */}
         <div>
           <label className="block text-[13px] font-medium text-text-main mb-1.5">
@@ -39,7 +39,7 @@ export default function RefundsTab() {
             placeholder="enter amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            className="w-full px-4 py-3 rounded-xl text-[13px] outline-none border border-border bg-surface text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
           />
         </div>
 
@@ -53,7 +53,7 @@ export default function RefundsTab() {
             placeholder="Enter refund reason...."
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl text-[13px] outline-none resize-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            className="w-full px-4 py-3 rounded-xl text-[13px] outline-none resize-none border border-border bg-surface text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
           />
         </div>
       </div>

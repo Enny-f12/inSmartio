@@ -8,6 +8,7 @@ import adminReducer        from "./adminSlice";
 import disputeReducer      from "./disputeSlice";
 import bannerReducer       from "./bannerSlice";
 import announcementReducer from "./announcementSlice";
+import verificationReducer from "./verificationSlice";
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +21,7 @@ export const store = configureStore({
     disputes:      disputeReducer,
     banners:       bannerReducer,
     announcements: announcementReducer,
+    verifications: verificationReducer,
   },
 });
 

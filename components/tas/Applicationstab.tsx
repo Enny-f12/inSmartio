@@ -1,3 +1,4 @@
+// components/tas/ApplicationsTab.tsx
 "use client";
 
 import { useState } from "react";
@@ -36,6 +37,8 @@ export default function ApplicationsTab() {
         .apptab-table-wrap  { display: none; }
         .apptab-cards       { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
         .apptab-pagination  { flex-direction: column; gap: 8px; align-items: flex-start; }
+        .animate-spin       { animation: spin 1s linear infinite; }
+        @keyframes spin     { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
         @media (min-width: 480px) {
           .apptab-toolbar-row { flex-direction: row; align-items: center; }
@@ -49,11 +52,13 @@ export default function ApplicationsTab() {
         }
       `}</style>
 
-      <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+      {/* Main card box with clean margin space separating it from the top tab bars */}
+      <div className="rounded-2xl border border-border bg-surface overflow-hidden mt-6">
 
         {/* Toolbar */}
-        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-4 border-b border-border">
-          <div className="apptab-toolbar-top flex mb-3">
+        <div className="px-4 sm:px-6 py-4 border-b border-border">
+          {/* Cleared duplicate mt-10 and compacted padding to keep filter tag tight */}
+          <div className="apptab-toolbar-top flex mb-2.5">
             <div className="flex items-center gap-2">
               <SlidersHorizontal size={15} className="text-text-muted" />
               <span className="text-sm font-semibold text-text-main">Filter</span>
@@ -82,7 +87,7 @@ export default function ApplicationsTab() {
           </div>
         </div>
 
-        {/* Desktop table */}
+        {/* Desktop table layout configuration */}
         <div className="apptab-table-wrap overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -122,7 +127,7 @@ export default function ApplicationsTab() {
           </table>
         </div>
 
-        {/* Mobile cards */}
+        {/* Mobile cards mapping */}
         <div className="apptab-cards">
           {paginated.length === 0 ? (
             <p className="text-center py-10 text-[13px] text-text-muted">No results found.</p>
@@ -169,7 +174,7 @@ export default function ApplicationsTab() {
           ))}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination element layout block */}
         <div
           className="apptab-pagination"
           style={{

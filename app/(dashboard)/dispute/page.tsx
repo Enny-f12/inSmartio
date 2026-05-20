@@ -14,13 +14,13 @@ import type { Dispute } from "@/components/disputes/types";
 import { toast } from "sonner";
 
 const normalizeStatus = (s?: string): "Open" | "In Progress" | "Resolved" => {
-  const lower = s?.toLowerCase() ?? "";
-  if (lower === "in progress" || lower === "inprogress") return "In Progress";
-  if (lower === "resolved") return "Resolved";
-  return "Open";
+  const upper = s?.toUpperCase() ?? "";
+  if (upper === "IN_PROGRESS") return "In Progress";
+  if (upper === "RESOLVED" || upper === "CLOSE") return "Resolved";
+  return "Open"; // OPEN or anything else
 };
 
-// ── Map ApiDispute → UI Dispute ───────────────────────────
+// ── Map ApiDispute → UI Dispute ───
 const toDispute = (d: ApiDispute): Dispute => ({
   id:              d.id,
   jobId:           d.jobId ?? "—",
@@ -73,9 +73,9 @@ export default function DisputesPage() {
   };
 
   const stats = {
-    open:       list.filter((d) => !d.status || d.status.toLowerCase() === "open").length,
-    inProgress: list.filter((d) => d.status?.toLowerCase() === "in progress" || d.status?.toLowerCase() === "inprogress").length,
-    resolved:   list.filter((d) => d.status?.toLowerCase() === "resolved").length,
+    open:       list.filter((d) => !d.status || d.status === "OPEN").length,
+    inProgress: list.filter((d) => d.status === "IN_PROGRESS").length,
+    resolved:   list.filter((d) => d.status === "RESOLVED" || d.status === "CLOSE").length,
   };
 
   const filtered = list.filter((d) =>

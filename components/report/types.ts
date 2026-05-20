@@ -3,9 +3,6 @@
 export type ReportType =
   | "User Growth Report"
   | "Revenue Trend Report"
-  | "Jobs Report"
-  | "TAS Performance Report"
-  | "Disputes Report"
   | "Top Service Category"
   | "Top Cities";
 
@@ -39,9 +36,6 @@ export interface ReportConfig {
 export const REPORT_TYPES: ReportType[] = [
   "User Growth Report",
   "Revenue Trend Report",
-  "Jobs Report",
-  "TAS Performance Report",
-  "Disputes Report",
   "Top Service Category",
   "Top Cities",
 ];
@@ -85,45 +79,9 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
       { label: "Refunds Processed:", value: "₦18,500"  },
     ],
   },
-  "Jobs Report": {
-    title: "Jobs - March 2026",
-    chartType: "line",
-    yLabel: "Total Jobs",
-    weeks: [45, 110, 190, 280],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Total Jobs:",  value: "280"       },
-      { label: "Completed:",   value: "215 (77%)" },
-      { label: "In Progress:", value: "38 (14%)"  },
-      { label: "Disputed:",    value: "27 (9%)"   },
-    ],
-  },
-  "TAS Performance Report": {
-    title: "TAS Performance - March 2026",
-    chartType: "line",
-    yLabel: "Experts Recruited",
-    weeks: [120, 310, 580, 900],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Active TAS:",      value: "48"       },
-      { label: "Total Recruited:", value: "900"      },
-      { label: "Avg per TAS:",     value: "18.75"    },
-      { label: "TAS Payouts:",     value: "₦980,000" },
-    ],
-  },
-  "Disputes Report": {
-    title: "Disputes - March 2026",
-    chartType: "line",
-    yLabel: "Cases",
-    weeks: [5, 12, 20, 25],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Total Cases:", value: "25"       },
-      { label: "Resolved:",    value: "8 (32%)"  },
-      { label: "In Progress:", value: "12 (48%)" },
-      { label: "Open:",        value: "5 (20%)"  },
-    ],
-  },
+  
+ 
+ 
   "Top Service Category": {
     title: "Top Service Category",
     chartType: "donut",

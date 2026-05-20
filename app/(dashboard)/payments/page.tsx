@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { Download } from "lucide-react";
-import Topbar            from "@/components/layout/Navbar";
+import Topbar           from "@/components/layout/Navbar";
 import TransactionsTab   from "@/components/payments/Transactionstab";
 import EscrowReleasesTab from "@/components/payments/EscrowReleasetab";
 import PayoutsTab        from "@/components/payments/Payouttabs";
@@ -29,18 +29,18 @@ export default function PaymentsPage() {
       <Topbar title="Payments & Payouts" />
 
       <style>{`
-        .pay-main     { padding: 12px; gap: 14px; }
+        .pay-main     { padding: 12px; gap: 20px; }
         .pay-overview-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-        .stat-cards   { display: grid; grid-template-columns: repeat(2, 1fr); border-radius: 16px; border: 1px solid var(--color-border); background: var(--color-surface); overflow: hidden; }
+        .stat-cards   { display: grid; grid-template-columns: repeat(2, 1fr); border-radius: 16px; border: 1px solid var(--color-border); background: #ffffff; overflow: hidden; }
         .stat-card    { padding: 14px 16px; border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
         .stat-card:nth-child(2n) { border-right: none; }
         .stat-card:nth-last-child(-n+2) { border-bottom: none; }
-        .pay-tabs     { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .pay-tabs     { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin-top: 4px; }
         .pay-tabs::-webkit-scrollbar { display: none; }
         .pay-tabs-inner { display: flex; gap: 8px; width: max-content; }
 
         @media (min-width: 640px) {
-          .pay-main     { padding: 20px 32px; gap: 20px; }
+          .pay-main     { padding: 20px 32px; gap: 24px; }
           .pay-overview-header { flex-direction: row; align-items: center; }
           .stat-cards   { display: flex; }
           .stat-card    { flex: 1; text-align: center; border-right: 1px solid var(--color-border); border-bottom: none; }
@@ -52,9 +52,9 @@ export default function PaymentsPage() {
 
       <main className="pay-main" style={{ flex: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--color-background)", overflowY: "auto" }}>
 
-        {/* Transaction Overview — always visible */}
-        <div>
-          <div className="pay-overview-header" style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+        {/* Transaction Overview Section */}
+        <div style={{ padding: "20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
+          <div className="pay-overview-header" style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
             <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-text-main)" }}>Transaction Overview</p>
             <button className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
               <Download size={15} /> Export
@@ -68,7 +68,7 @@ export default function PaymentsPage() {
           </div>
         </div>
 
-        {/* Tab switcher */}
+        {/* Tab Switcher Wrapper Row */}
         <div className="pay-tabs">
           <div className="pay-tabs-inner">
             {PAY_TABS.map((tab) => (
@@ -79,9 +79,10 @@ export default function PaymentsPage() {
                 style={{
                   padding: "8px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
                   border: tab === activeTab ? "none" : "1px solid var(--color-border)",
-                  backgroundColor: tab === activeTab ? undefined : "transparent",
+                  backgroundColor: tab === activeTab ? undefined : "#ffffff",
                   color: tab === activeTab ? undefined : "var(--color-text-muted)",
                   cursor: "pointer", whiteSpace: "nowrap",
+                  boxShadow: tab === activeTab ? "none" : "0 1px 2px rgba(0,0,0,0.02)"
                 }}
               >
                 {tab}
@@ -90,6 +91,7 @@ export default function PaymentsPage() {
           </div>
         </div>
 
+        {/* Render View Tabs Target Sections */}
         {activeTab === "Transactions"    && <TransactionsTab />}
         {activeTab === "Escrow Releases" && <EscrowReleasesTab />}
         {activeTab === "Payouts"         && <PayoutsTab />}

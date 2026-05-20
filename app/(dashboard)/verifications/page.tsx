@@ -1,18 +1,34 @@
 // app/(dashboard)/verifications/page.tsx
 "use client";
 
-import { useState } from "react";
-import { Search, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Search, Eye, Loader2 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import VerificationModal from "@/components/verifications/VerificationModal";
 import { StatusBadge } from "@/components/ui/Badge";
-import type { Expert, Tier } from "@/components/verifications/types";
 
-const mockExperts: Expert[] = [
+import { fetchVerifications } from "@/lib/redux/verificationSlice";
+import type { AppDispatch, RootState } from "@/lib/redux/store";
+import type { ApiVerificationExpert } from "@/lib/api/verificationApi";
+
+// ── Strict Swagger Compliant Fallback Dataset ─────────────
+const MOCK_FALLBACK_EXPERTS: ApiVerificationExpert[] = [
   {
-    id: 1, name: "Emeka O.", phone: "+234 801 234 5678", email: "emeka@email.com",
-    appliedTier: "Tier 1", submitted: "20/03/2026", status: "Pending",
+    id: "v-expert-1",
+    name: "Emeka O.",
+    email: "emeka@email.com",
+    phone: "+234 801 234 5678",
+    status: "Pending",
+    verify: false,
+    role: "expert",
+    avatar: null,
+    verification: "tier1",
+    appliedTier: "Tier 1", 
+    submitted: "20/03/2026",
     docsTotal: 3, docsVerified: 3,
+    createdAt: "2026-03-20T10:00:00.000Z",
+    updatedAt: "2026-03-20T10:00:00.000Z",
     documents: [
       { name: "NIN Slip", status: "Verified" },
       { name: "Valid ID (National ID)", status: "Verified" },
@@ -21,21 +37,21 @@ const mockExperts: Expert[] = [
     nin: { number: "12345678901", status: "Verified", nameMatch: true, dobMatch: true },
   },
   {
-    id: 2, name: "Ngozi E.", phone: "+234 802 345 6789", email: "ngozi@email.com",
-    appliedTier: "Tier 1", submitted: "20/03/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 3,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "Valid ID (National ID)", status: "Verified" },
-      { name: "Passport Photograph", status: "Verified" },
-    ],
-    nin: { number: "98765432100", status: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: 3, name: "Chidi E.", phone: "+234 801 234 5678", email: "chidi@email.com",
-    appliedTier: "Tier 3", submitted: "19/03/2026",
+    id: "v-expert-2",
+    name: "Chidi E.",
+    email: "chidi@email.com",
+    phone: "+234 801 234 5678",
+    status: "Pending",
+    verify: false,
+    role: "expert",
+    avatar: null,
+    verification: "tier3",
+    appliedTier: "Tier 3",
+    submitted: "19/03/2026",
     verificationFee: "₦1,500", feePaidOn: "18/03/2026",
-    status: "Pending", docsTotal: 7, docsVerified: 5,
+    docsTotal: 7, docsVerified: 5,
+    createdAt: "2026-03-19T11:00:00.000Z",
+    updatedAt: "2026-03-19T11:00:00.000Z",
     documents: [
       { name: "NIN Slip", status: "Verified" },
       { name: "BVN Consent Form", status: "Verified" },
@@ -47,80 +63,60 @@ const mockExperts: Expert[] = [
     ],
     guarantor: { name: "Chief Okafor M.", phone: "+234 809 876 5432", occupation: "Civil Servant (Level 14)", status: "Call Guarantor" },
     policeClearance: { certificate: "PC-2026-12345", issued: "10/03/2026 (within 6 months)", issuingState: "Lagos" },
-  },
-  {
-    id: 4, name: "Peter O.", phone: "+234 803 456 7890", email: "peter@email.com",
-    appliedTier: "Tier 2", submitted: "18/03/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 1,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "BVN Consent Form", status: "Pending" },
-      { name: "Proof of Address", status: "Pending" },
-    ],
-  },
-  {
-    id: 5, name: "Mary K.", phone: "+234 804 567 8901", email: "mary@email.com",
-    appliedTier: "Tier 1", submitted: "18/03/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 3,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "Valid ID (National ID)", status: "Verified" },
-      { name: "Passport Photograph", status: "Verified" },
-    ],
-    nin: { number: "11223344556", status: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: 6, name: "John D.", phone: "+234 805 678 9012", email: "john@email.com",
-    appliedTier: "Tier 2", submitted: "15/03/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 2,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "BVN Consent Form", status: "Verified" },
-      { name: "Proof of Address", status: "Pending" },
-    ],
-  },
-  {
-    id: 7, name: "James O.", phone: "+234 806 789 0123", email: "james@email.com",
-    appliedTier: "Tier 1", submitted: "13/02/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 1,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "Valid ID (National ID)", status: "Pending" },
-      { name: "Passport Photograph", status: "Pending" },
-    ],
-  },
-  {
-    id: 8, name: "Mayowa S.", phone: "+234 807 890 1234", email: "mayowa@email.com",
-    appliedTier: "Tier 2", submitted: "10/02/2026", status: "Pending",
-    docsTotal: 3, docsVerified: 2,
-    documents: [
-      { name: "NIN Slip", status: "Verified" },
-      { name: "BVN Consent Form", status: "Verified" },
-      { name: "Proof of Address", status: "Pending" },
-    ],
-  },
+  }
 ];
 
-const TIERS: Tier[] = ["Tier 1", "Tier 2", "Tier 3"];
+const TIERS = ["Tier 1", "Tier 2", "Tier 3"] as const;
+type TierType = typeof TIERS[number];
 const PAGE_SIZE = 10;
-const TOTAL_PENDING = 45;
 
 export default function VerificationsPage() {
-  const [activeTier, setActiveTier] = useState<Tier>("Tier 1");
+  const dispatch = useDispatch<AppDispatch>();
+  const { list: verifications, listStatus, listError } = useSelector((state: RootState) => state.verifications);
+
+  const [activeTier, setActiveTier] = useState<TierType>("Tier 1");
   const [search,     setSearch]     = useState("");
   const [page,       setPage]       = useState(1);
-  const [selected,   setSelected]   = useState<Expert | null>(null);
+  const [selected,   setSelected]   = useState<ApiVerificationExpert | null>(null);
 
-  const filtered = mockExperts.filter((e) =>
-    e.appliedTier === activeTier &&
-    e.name.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    dispatch(fetchVerifications());
+  }, [dispatch]);
+
+  // Fallback state evaluation gate
+  const isUsingFallback = listStatus === "succeeded" && verifications.length === 0;
+  const operationalData = isUsingFallback ? MOCK_FALLBACK_EXPERTS : verifications;
+
+  // Handles safe extraction regardless of tier key variations ("tier1" vs "Tier 1")
+  const filtered = operationalData.filter((e) => {
+    const rawTier = e.verification || (e.appliedTier as string) || "tier1";
+    const normalTier = rawTier.toLowerCase().replace(/\s/g, "");
+    const activeNormal = activeTier.toLowerCase().replace(/\s/g, "");
+
+    const matchTier = normalTier === activeNormal;
+    const matchSearch = e.name.toLowerCase().includes(search.toLowerCase());
+    
+    return matchTier && matchSearch;
+  });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Formatting utilities for presentation mapping
+  const extractDate = (expert: ApiVerificationExpert) => {
+    if (expert.createdAt) return new Date(expert.createdAt).toLocaleDateString("en-GB");
+    return (expert.submitted as string) || "Pending";
+  };
+
+  const getDocRatio = (expert: ApiVerificationExpert) => {
+    if (expert.docsVerified !== undefined && expert.docsTotal !== undefined) {
+      return `${expert.docsVerified}/${expert.docsTotal}`;
+    }
+    return expert.verify ? "1/1" : "0/1";
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
       <Topbar title="Verifications" />
 
       <style>{`
@@ -128,26 +124,34 @@ export default function VerificationsPage() {
         .ver-header { flex-direction: column; align-items: flex-start; gap: 12px; }
         .ver-tiers { display: flex; gap: 8px; width: 100%; }
         .ver-tier-btn { flex: 1; text-align: center; }
-        .ver-table { display: none; }
-        .ver-cards { display: flex; flex-direction: column; gap: 10px; }
-        .ver-pagination { flex-direction: column; gap: 8px; align-items: flex-start; }
+        .ver-pgn { flex-direction: column; gap: 8px; align-items: flex-start; }
+        .ver-row:hover { background: #F9FAFB; }
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .ver-desktop { display: none !important; }
+        .ver-mobile  { display: flex !important; flex-direction: column; gap: 10px; padding: 12px; }
+
         @media (min-width: 640px) {
-          .ver-main { padding: 24px 32px; gap: 20px; }
-          .ver-header { flex-direction: row; align-items: center; }
-          .ver-tiers { width: auto; }
-          .ver-tier-btn { flex: none; }
-          .ver-table { display: block; }
-          .ver-cards { display: none; }
-          .ver-pagination { flex-direction: row; align-items: center; }
+          .ver-main      { padding: 24px 32px; gap: 20px; }
+          .ver-header    { flex-direction: row; align-items: center; }
+          .ver-tiers     { width: auto; }
+          .ver-tier-btn  { flex: none; }
+          .ver-pgn       { flex-direction: row; align-items: center; }
+          .ver-desktop   { display: block !important; }
+          .ver-mobile    { display: none !important; }
         }
       `}</style>
 
       <main className="ver-main" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
 
-        {/* Sub-header */}
+        {/* Header toolbar */}
         <div className="ver-header" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", whiteSpace: "nowrap" }}>
-            {TOTAL_PENDING} pending
+          <span style={{
+            padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+            backgroundColor: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A", whiteSpace: "nowrap",
+          }}>
+            {filtered.length} active pending logs
           </span>
           <div className="ver-tiers">
             {TIERS.map((tier) => (
@@ -156,11 +160,11 @@ export default function VerificationsPage() {
                 className="ver-tier-btn"
                 onClick={() => { setActiveTier(tier); setPage(1); }}
                 style={{
-                  padding: "8px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
-                  border: tier === activeTier ? "none" : "1px solid var(--color-border)",
-                  backgroundColor: tier === activeTier ? "#16a34a" : "var(--color-surface)",
-                  color: tier === activeTier ? "#fff" : "var(--color-text-muted)",
-                  cursor: "pointer",
+                  padding: "8px 24px", borderRadius: "999px", fontSize: "13px", fontWeight: 600,
+                  cursor: "pointer", transition: "all 0.15s",
+                  border: tier === activeTier ? "none" : "1px solid #D1D5DB",
+                  backgroundColor: tier === activeTier ? "#16a34a" : "#ffffff",
+                  color: tier === activeTier ? "#ffffff" : "#6B7280",
                 }}
               >
                 {tier}
@@ -169,91 +173,129 @@ export default function VerificationsPage() {
           </div>
         </div>
 
-        {/* Table card */}
-        <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+        {/* Fallback context notice */}
+        {isUsingFallback && (
+          <div style={{ padding: "10px 16px", backgroundColor: "#fefcbf", border: "1px solid #fef08a", borderRadius: "12px", fontSize: "12px", color: "#a16207" }}>
+            💡 Operational verifications database is empty. Injecting fallback mock records.
+          </div>
+        )}
 
-          {/* Search */}
-          <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+        {/* Grid Area Sheet Container */}
+        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden", marginTop: isUsingFallback ? "0" : "8px" }}>
+
+          {/* Search bar input container */}
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
             <div style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+              <Search size={15} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
               <input
                 type="text"
                 placeholder="Search name..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+                style={{
+                  width: "100%", paddingLeft: "40px", paddingRight: "16px",
+                  paddingTop: "10px", paddingBottom: "10px",
+                  borderRadius: "10px", fontSize: "13px", outline: "none",
+                  border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                  color: "#111827", boxSizing: "border-box",
+                }}
               />
             </div>
           </div>
 
-          {/* ── Desktop table ── */}
-          <div className="ver-table" style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                  {["Name", "Submitted", "Status", "Documents", "Actions"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No verifications found.</td></tr>
-                ) : paginated.map((expert) => (
-                  <tr key={expert.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "16px 24px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{expert.name}</td>
-                    <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{expert.submitted}</td>
-                    <td style={{ padding: "16px 24px" }}><StatusBadge label="Pending" variant="yellow" /></td>
-                    <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{expert.docsVerified}/{expert.docsTotal}</td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <button onClick={() => setSelected(expert)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-                        <Eye size={17} strokeWidth={1.8} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Loader View handler component state */}
+          {listStatus === "loading" && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", gap: "8px", color: "var(--color-text-muted)", fontSize: "14px" }}>
+              <Loader2 size={18} className="animate-spin" /> Fetching active registry...
+            </div>
+          )}
 
-          {/* ── Mobile cards ── */}
-          <div className="ver-cards" style={{ padding: "12px" }}>
-            {paginated.length === 0 ? (
-              <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No verifications found.</p>
-            ) : paginated.map((expert) => (
-              <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>{expert.name}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <StatusBadge label="Pending" variant="yellow" />
-                    <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{expert.submitted}</span>
-                    <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Docs: {expert.docsVerified}/{expert.docsTotal}</span>
+          {/* Error view */}
+          {listStatus === "failed" && (
+            <div style={{ padding: "24px", textAlign: "center", color: "#ef4444", fontSize: "13.5px" }}>
+              Error: {listError}
+            </div>
+          )}
+
+          {/* Desktop Matrix Output View Grid list */}
+          {listStatus === "succeeded" && (
+            <div className="ver-desktop" style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                    {["Name", "Submitted", "Status", "Documents", "Actions"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "12px", fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>No verification profiles found.</td></tr>
+                  ) : paginated.map((expert: ApiVerificationExpert) => (
+                    <tr key={expert.id} className="ver-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
+                      <td style={{ padding: "16px 24px", fontSize: "14px", fontWeight: 600, color: "#111827" }}>{expert.name}</td>
+                      <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{extractDate(expert)}</td>
+                      <td style={{ padding: "16px 24px" }}><StatusBadge label={expert.status || "Pending"} variant="yellow" /></td>
+                      <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{getDocRatio(expert)}</td>
+                      <td style={{ padding: "16px 24px" }}>
+                        <button onClick={() => setSelected(expert)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
+                          <Eye size={17} strokeWidth={1.8} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Mobile Display Component Blocks */}
+          {listStatus === "succeeded" && (
+            <div className="ver-mobile">
+              {paginated.length === 0 ? (
+                <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No verification profiles found.</p>
+              ) : paginated.map((expert: ApiVerificationExpert) => (
+                <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: "0 0 4px" }}>{expert.name}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <StatusBadge label={expert.status || "Pending"} variant="yellow" />
+                      <span style={{ fontSize: "12px", color: "#6B7280" }}>{extractDate(expert)}</span>
+                      <span style={{ fontSize: "12px", color: "#6B7280" }}>Docs: {getDocRatio(expert)}</span>
+                    </div>
                   </div>
+                  <button onClick={() => setSelected(expert)} style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                    <Eye size={16} strokeWidth={1.8} />
+                  </button>
                 </div>
-                <button onClick={() => setSelected(expert)} style={{ padding: "8px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}>
-                  <Eye size={16} strokeWidth={1.8} />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination Blocks layout */}
+          {listStatus === "succeeded" && (
+            <div className="ver-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+              <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
+                Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} results
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button key={p} onClick={() => setPage(p)} style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#16a34a" : "#ffffff", color: p === page ? "#ffffff" : "#6B7280", cursor: "pointer" }}>
+                    {p}
+                  </button>
+                ))}
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
+                  Next
                 </button>
               </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="ver-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
-              Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {TOTAL_PENDING} results
-            </p>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Prev</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button key={p} onClick={() => setPage(p)} className={p === page ? "btn-primary" : ""} style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
-                  {p}
-                </button>
-              ))}
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
             </div>
-          </div>
+          )}
+
         </div>
       </main>
 
@@ -261,8 +303,6 @@ export default function VerificationsPage() {
         <VerificationModal
           expert={selected}
           onClose={() => setSelected(null)}
-          onApprove={() => setSelected(null)}
-          onReject={() => setSelected(null)}
         />
       )}
     </div>

@@ -32,14 +32,14 @@ export default function EscrowReleasesTab() {
     <>
       <style>{`
         .escrow-table { display: none; }
-        .escrow-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .escrow-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
         @media (min-width: 640px) {
           .escrow-table { display: block; overflow-x: auto; }
           .escrow-cards { display: none; }
         }
       `}</style>
 
-      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
 
         {/* Search */}
         <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
@@ -63,9 +63,9 @@ export default function EscrowReleasesTab() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {filtered.map((e) => (
-                <tr key={e.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <tr key={e.id} style={{ borderBottom: "1px solid var(--color-border)" }} className="hover:bg-background/40 transition-colors">
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{e.jobId}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{e.expert}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{e.amount}</td>
@@ -77,12 +77,12 @@ export default function EscrowReleasesTab() {
           </table>
         </div>
 
-        {/* Mobile cards */}
-        <div className="escrow-cards">
+        {/* Mobile cards layout wrapper row view context parameters */}
+        <div className="escrow-cards" style={{ backgroundColor: "var(--color-background)" }}>
           {filtered.length === 0 ? (
-            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No results found.</p>
+            <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)", backgroundColor: "#ffffff" }}>No results found.</p>
           ) : filtered.map((e) => (
-            <div key={e.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
+            <div key={e.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px", gap: "8px" }}>
                 <div>
                   <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{e.jobId}</p>

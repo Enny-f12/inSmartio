@@ -2,9 +2,12 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
-  getAllDisputes, getDisputeById, createDispute,
-  updateDispute, deleteDispute,
-  type ApiDispute, type CreateDisputePayload, type UpdateDisputePayload,
+  getAllDisputes, getDisputeById, getDisputeByCaseId,
+  createDispute, updateDispute, deleteDispute, resolveDispute,
+  type ApiDispute,
+  type CreateDisputePayload,
+  type UpdateDisputePayload,
+  type ResolveDisputePayload,
 } from "@/lib/api/disputeApi";
 
 interface DisputeState {
@@ -14,6 +17,7 @@ interface DisputeState {
   selected:       ApiDispute | null;
   selectedStatus: "idle" | "loading" | "succeeded" | "failed";
   mutateStatus:   "idle" | "loading" | "succeeded" | "failed";
+  mutateError:    string | null;
 }
 
 const initialState: DisputeState = {
@@ -23,10 +27,13 @@ const initialState: DisputeState = {
   selected:       null,
   selectedStatus: "idle",
   mutateStatus:   "idle",
+  mutateError:    null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
+
+// ── Thunks ────────────────────────────────────────────────
 
 export const fetchDisputes = createAsyncThunk(
   "disputes/fetchAll",
@@ -40,6 +47,14 @@ export const fetchDisputeById = createAsyncThunk(
   "disputes/fetchById",
   async (id: string, { rejectWithValue }) => {
     try { return await getDisputeById(id); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch dispute")); }
+  }
+);
+
+export const fetchDisputeByCaseId = createAsyncThunk(
+  "disputes/fetchByCaseId",
+  async (caseId: string, { rejectWithValue }) => {
+    try { return await getDisputeByCaseId(caseId); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch dispute")); }
   }
 );
@@ -68,6 +83,24 @@ export const removeDispute = createAsyncThunk(
   }
 );
 
+// PROPOSED: POST /api/dispute/{id}/resolve
+// Submits decision — backend sets status to "Resolved" + releases escrow
+export const resolveDisputeThunk = createAsyncThunk(
+  "disputes/resolve",
+  async ({ id, payload }: { id: string; payload: ResolveDisputePayload }, { rejectWithValue }) => {
+    try { return await resolveDispute(id, payload); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to resolve dispute")); }
+  }
+);
+
+// ── Helper to update a dispute in list + selected ─────────
+const updateInState = (state: DisputeState, updated: ApiDispute) => {
+  const idx = state.list.findIndex((d) => d.id === updated.id);
+  if (idx !== -1) state.list[idx] = updated;
+  if (state.selected?.id === updated.id) state.selected = updated;
+};
+
+// ── Slice ─────────────────────────────────────────────────
 const disputeSlice = createSlice({
   name: "disputes",
   initialState,
@@ -78,6 +111,7 @@ const disputeSlice = createSlice({
     },
     resetMutateStatus: (state) => {
       state.mutateStatus = "idle";
+      state.mutateError  = null;
     },
   },
   extraReducers: (builder) => {
@@ -86,32 +120,38 @@ const disputeSlice = createSlice({
       .addCase(fetchDisputes.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
       .addCase(fetchDisputes.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
 
-    builder
-      .addCase(fetchDisputeById.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
-      .addCase(fetchDisputeById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
-      .addCase(fetchDisputeById.rejected,  (state) => { state.selectedStatus = "failed"; });
+    // both fetchById + fetchByCaseId set selected
+    [fetchDisputeById, fetchDisputeByCaseId].forEach((thunk) => {
+      builder
+        .addCase(thunk.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
+        .addCase(thunk.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
+        .addCase(thunk.rejected,  (state) => { state.selectedStatus = "failed"; });
+    });
 
     builder
-      .addCase(addDispute.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(addDispute.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
       .addCase(addDispute.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; state.list.unshift(action.payload); })
-      .addCase(addDispute.rejected,  (state) => { state.mutateStatus = "failed"; });
+      .addCase(addDispute.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
 
     builder
-      .addCase(editDispute.pending,   (state) => { state.mutateStatus = "loading"; })
-      .addCase(editDispute.fulfilled, (state, action) => {
-        state.mutateStatus = "succeeded";
-        const idx = state.list.findIndex((d) => d.id === action.payload.id);
-        if (idx !== -1) state.list[idx] = action.payload;
-      })
-      .addCase(editDispute.rejected, (state) => { state.mutateStatus = "failed"; });
+      .addCase(editDispute.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
+      .addCase(editDispute.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })
+      .addCase(editDispute.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
 
     builder
-      .addCase(removeDispute.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(removeDispute.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
       .addCase(removeDispute.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
         state.list = state.list.filter((d) => d.id !== action.payload);
+        if (state.selected?.id === action.payload) { state.selected = null; state.selectedStatus = "idle"; }
       })
-      .addCase(removeDispute.rejected, (state) => { state.mutateStatus = "failed"; });
+      .addCase(removeDispute.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+
+    // resolve — proposed, updates dispute once backend confirms
+    builder
+      .addCase(resolveDisputeThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
+      .addCase(resolveDisputeThunk.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })
+      .addCase(resolveDisputeThunk.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
   },
 });
 

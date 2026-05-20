@@ -13,7 +13,7 @@ export default function Topbar({ title }: TopbarProps) {
   const { collapsed, toggle, setMobileOpen } = useSidebar();
 
   return (
-    <header style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", height: "64px", padding: "0 16px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", flexShrink: 0, gap: "8px" }}>
+    <header style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", height: "64px", padding: "0 16px", backgroundColor: "white", borderBottom: "1px solid var(--color-border)", flexShrink: 0, gap: "8px" }}>
       <style>{`
         .nav-mobile-only  { display: flex; }
         .nav-desktop-only { display: none; }

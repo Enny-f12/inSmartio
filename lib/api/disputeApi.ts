@@ -3,7 +3,7 @@ import axiosInstance from "@/lib/api/axiosInstance";
 
 // ── Types ─────────────────────────────────────────────────
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
-export type DisputeStatus   = "Open" | "In Progress" | "Resolved";
+export type DisputeStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
 export interface DisputeParty {
   id:        string;
