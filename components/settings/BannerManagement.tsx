@@ -3,21 +3,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Plus, Pencil, Trash2, Upload, Eye, Calendar, Loader2, X } from "lucide-react";
-import Image from "next/image";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell } from "./SettingsShared";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchBanners, addBanner, editBanner, removeBanner } from "@/lib/redux/bannerSlice";
 import type { ApiBanner, CreateBannerPayload } from "@/lib/api/bannerApi";
-
-// ── Mock fallback ─────────────────────────────────────────
-const MOCK_BANNERS: ApiBanner[] = [
-  { id: "b1", image: "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=400&h=160&fit=crop&auto=format", title: "Get Multiple Offers in Minutes", subTitle: "Post your job and receive competitive bids.", ctaButtonText: "Post a Job", ctaLink: "/post-job", startDate: "2026-04-01", endDate: "2026-05-31", status: "active",   click: 1247, createdAt: "", updatedAt: "" },
-  { id: "b2", image: "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=160&fit=crop&auto=format", title: "Hire Verified Experts",          subTitle: "Work with trusted professionals.",        ctaButtonText: "Hire Now",  ctaLink: "/experts",  startDate: "2026-04-01", endDate: "2026-05-31", status: "active",   click: 980,  createdAt: "", updatedAt: "" },
-  { id: "b3", image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=160&fit=crop&auto=format", title: "100% Payment Protected",          subTitle: "Your money is safe until done.",          ctaButtonText: "Learn More",ctaLink: "/how",      startDate: "2026-04-01", endDate: "2026-05-31", status: "active",   click: 754,  createdAt: "", updatedAt: "" },
-  { id: "b4", image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=160&fit=crop&auto=format", title: "Post Your Job Free",             subTitle: "Get offers in less than 60 seconds.",     ctaButtonText: "Start Free",ctaLink: "/post-job", startDate: "2026-05-01", endDate: "2026-05-31", status: "inactive", click: 500,  createdAt: "", updatedAt: "" },
-];
 
 // ── Image compression ─────────────────────────────────────
 const compressImage = (file: File, maxWidth = 1200, quality = 0.8): Promise<string> => {
@@ -108,7 +99,8 @@ function ImageUploader({
 
       {preview ? (
         <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--color-border)", height: "120px" }}>
-          <Image src={preview} alt="Banner preview" fill style={{ objectFit: "cover" }} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="Banner preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <button
             onClick={() => onImage("")}
             style={{ position: "absolute", top: "8px", right: "8px", width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}
@@ -250,7 +242,7 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
   const [deleteTarget, setDeleteTarget] = useState<ApiBanner | null>(null);
 
   const isMutating = mutateStatus === "loading";
-  const banners    = listStatus === "succeeded" && list.length > 0 ? list : MOCK_BANNERS;
+  const banners    = list;
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchBanners());
@@ -322,7 +314,7 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
         )}
 
         {listStatus === "succeeded" && list.length === 0 && (
-          <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginBottom: "4px" }}>No banners on server — showing sample data.</p>
+          <p style={{ fontSize: "13px", color: "var(--color-text-muted)", textAlign: "center", padding: "40px 0" }}>No banners yet. Add your first banner.</p>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "8px" }}>
@@ -331,7 +323,8 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
               <div className="banner-card-top">
                 <div style={{ width: 72, height: 56, borderRadius: "10px", overflow: "hidden", flexShrink: 0, border: "1px solid var(--color-border)", position: "relative" }}>
                   {banner.image
-                    ? <Image src={banner.image} alt={banner.title} fill style={{ objectFit: "cover" }} />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={banner.image} alt={banner.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)" }}>IMG</div>
                   }
                 </div>

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // app/(dashboard)/dispute/page.tsx
 "use client";
 
@@ -149,11 +148,9 @@ export default function DisputesPage() {
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
             {listStatus === "succeeded" ? `${list.length} disputes total` : "Disputes"}
           </p>
-          {/*
           <button onClick={() => setCreateOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
             <Plus size={15} /> New Dispute
           </button>
-          */}
         </div>
 
         {/* Stats */}
@@ -229,9 +226,15 @@ export default function DisputesPage() {
                               <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
                                 <Eye size={17} strokeWidth={1.8} />
                               </button>
-                              <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ fontSize: "13px", fontWeight: 500, padding: "4px 12px", borderRadius: "8px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
-                                Resolve
-                              </button>
+                              {ui.status === "Resolved" ? (
+                                <span style={{ fontSize: "12px", fontWeight: 600, padding: "4px 12px", borderRadius: "999px", backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>
+                                  Resolved
+                                </span>
+                              ) : (
+                                <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ fontSize: "13px", fontWeight: 500, padding: "4px 12px", borderRadius: "8px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
+                                  Resolve
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -261,9 +264,15 @@ export default function DisputesPage() {
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--color-border)" }}>
-                        <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ flex: 1, padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
-                          Resolve
-                        </button>
+                        {ui.status === "Resolved" ? (
+                          <span style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>
+                            Resolved
+                          </span>
+                        ) : (
+                          <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ flex: 1, padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
+                            Resolve
+                          </button>
+                        )}
                         <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
                           <Eye size={16} strokeWidth={1.8} />
                         </button>

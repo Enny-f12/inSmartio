@@ -16,9 +16,7 @@ export interface User {
   status:       UserStatus;
   joined:       string;
   verify?:      boolean;
-  // client
   username?:    string;
-  // expert
   gender?:      string;
   bio?:         string;
   verification?: string;
@@ -28,9 +26,7 @@ export interface User {
   bankDetails?: Record<string, unknown>;
   document?:    Record<string, unknown>;
   paymentModel?: string;
-  // tas + expert shared
   location?:    { area?: string; city?: string; state?: string; country?: string };
-  // tas
   dob?:         string;
   referral?:    string | null;
   account?:     { bvn?: string; bankName?: string; accountCode?: string; accountName?: string; accountNumber?: string };
@@ -59,7 +55,6 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-// ── Client ────────────────────────────────────────────────
 function ClientRows({ user }: { user: User }) {
   return (
     <>
@@ -74,7 +69,6 @@ function ClientRows({ user }: { user: User }) {
   );
 }
 
-// ── Expert ────────────────────────────────────────────────
 function ExpertRows({ user }: { user: User }) {
   return (
     <>
@@ -92,15 +86,12 @@ function ExpertRows({ user }: { user: User }) {
   );
 }
 
-// ── TAS ───────────────────────────────────────────────────
 function TasRows({ user }: { user: User }) {
   const loc = user.location;
   const locationStr = loc
     ? [loc.area, loc.city, loc.state, loc.country].filter(Boolean).join(", ")
     : undefined;
-
   const acc = user.account;
-
   return (
     <>
       <InfoRow label="Name:"           value={user.name} />
@@ -126,7 +117,6 @@ function TasRows({ user }: { user: User }) {
   );
 }
 
-// ── Actions ───────────────────────────────────────────────
 function ClientActions({ onDelete, onSuspend, isSuspended }: { onDelete?: () => void; onSuspend?: () => void; isSuspended: boolean }) {
   return (
     <>
@@ -175,7 +165,6 @@ function TasActions({ onDelete, onSuspend, isSuspended }: { onDelete?: () => voi
   );
 }
 
-// ── Main ──────────────────────────────────────────────────
 interface UserDetailProps {
   onSuspend?: () => void;
   user:      User;
@@ -187,13 +176,22 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <style>{`
-        .ud-content { padding: 16px; }
+        .ud-content { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
         .ud-profile { flex-direction: column; align-items: center; gap: 20px; }
         .ud-label   { width: 120px; }
         .ud-avatar  { width: 72px !important; height: 72px !important; font-size: 22px !important; }
         .ud-act-btn { padding: 12px 4px !important; font-size: 11px !important; }
+
+        /* ── card shared style ── */
+        .ud-card {
+          background: #ffffff;
+          border: 1px solid #E5E7EB;
+          border-radius: 16px;
+          overflow: hidden;
+        }
+
         @media (min-width: 640px) {
-          .ud-content { padding: 28px 40px; }
+          .ud-content { padding: 24px 32px; gap: 20px; }
           .ud-profile { flex-direction: row; align-items: flex-start; gap: 32px; }
           .ud-avatar  { width: 100px !important; height: 100px !important; font-size: 28px !important; }
           .ud-act-btn { padding: 16px !important; font-size: 13px !important; }
@@ -202,43 +200,94 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
 
       <div className="ud-content" style={{ flex: 1, overflowY: "auto" }}>
 
-        {/* Back only in header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-          <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer" }}>
-            <ArrowLeft size={16} /> {user.name}
-          </button>
-        </div>
+        {/* ── Back header ── */}
+        <button
+          onClick={onBack}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            fontSize: "15px",
+            fontWeight: 600,
+            color: "var(--color-text-main)",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <ArrowLeft size={16} /> {user.name}
+        </button>
 
-        {/* Profile */}
-        <div className="ud-profile" style={{ display: "flex", marginBottom: "32px" }}>
-          <div className="ud-avatar" style={{ borderRadius: "50%", flexShrink: 0, backgroundColor: getColor(user.avatarSeed), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, letterSpacing: "0.02em" }}>
-            {getInitials(user.name)}
-          </div>
+        {/* ── Profile card ── */}
+        <div className="ud-card">
+          <div className="ud-profile" style={{ display: "flex", padding: "24px" }}>
 
-          <div style={{ flex: 1, paddingTop: "4px" }}>
-            {user.type === "Expert" && <ExpertRows user={user} />}
-            {user.type === "TAS"    && <TasRows    user={user} />}
-            {user.type === "Client" && <ClientRows user={user} />}
+            {/* Avatar */}
+            <div
+              className="ud-avatar"
+              style={{
+                borderRadius: "50%",
+                flexShrink: 0,
+                backgroundColor: getColor(user.avatarSeed),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+              }}
+            >
+              {getInitials(user.name)}
+            </div>
 
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
-              <span className="ud-label" style={{ flexShrink: 0, color: "var(--color-text-muted)" }}>Status:</span>
-              <StatusBadge label={user.status} variant={statusVariant[user.status]} />
+            {/* Info rows */}
+            <div style={{ flex: 1, paddingTop: "4px" }}>
+              {user.type === "Expert" && <ExpertRows user={user} />}
+              {user.type === "TAS"    && <TasRows    user={user} />}
+              {user.type === "Client" && <ClientRows user={user} />}
+
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+                <span className="ud-label" style={{ flexShrink: 0, color: "var(--color-text-muted)" }}>Status:</span>
+                <StatusBadge label={user.status} variant={statusVariant[user.status]} />
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--color-border)", marginBottom: "24px" }} />
-
-        {/* Jobs */}
-        <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "16px" }}>Jobs</p>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "10px", color: "var(--color-text-muted)" }}>
-          <BriefcaseIcon size={36} strokeWidth={1.2} />
-          <p style={{ fontSize: "13px" }}>No jobs found for this user.</p>
+        {/* ── Jobs card ── */}
+        <div className="ud-card">
+          <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
+            <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>Jobs</p>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "40px 0",
+              gap: "10px",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <BriefcaseIcon size={36} strokeWidth={1.2} />
+            <p style={{ fontSize: "13px", margin: 0 }}>No jobs found for this user.</p>
+          </div>
         </div>
+
       </div>
 
-      {/* Action bar */}
-      <div style={{ flexShrink: 0, display: "flex", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+      {/* ── Action bar card ── */}
+      <div
+        className="ud-card"
+        style={{
+          flexShrink: 0,
+          display: "flex",
+          margin: "0 16px 16px",
+          borderRadius: "16px",
+        }}
+      >
         {user.type === "Expert" && <ExpertActions onDelete={onDelete} onSuspend={onSuspend} isSuspended={user.status === "Suspended"} />}
         {user.type === "TAS"    && <TasActions    onDelete={onDelete} onSuspend={onSuspend} isSuspended={user.status === "Suspended"} />}
         {user.type === "Client" && <ClientActions onDelete={onDelete} onSuspend={onSuspend} isSuspended={user.status === "Suspended"} />}
