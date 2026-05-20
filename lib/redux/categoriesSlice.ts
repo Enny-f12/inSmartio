@@ -81,46 +81,83 @@ const categoriesSlice = createSlice({
   extraReducers: (builder) => {
     // fetchCategories
     builder
-      .addCase(fetchCategories.pending, (state) => { state.listStatus = "loading"; state.listError = null; })
-      .addCase(fetchCategories.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
-      .addCase(fetchCategories.rejected, (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
+      .addCase(fetchCategories.pending, (state) => { 
+        state.listStatus = "loading"; 
+        state.listError = null; 
+      })
+      .addCase(fetchCategories.fulfilled, (state, action) => { 
+        state.listStatus = "succeeded"; 
+        state.list = action.payload; 
+      })
+      .addCase(fetchCategories.rejected, (state, action) => { 
+        state.listStatus = "failed"; 
+        state.listError = action.payload as string; 
+      });
 
     // addCategory
     builder
-      .addCase(addCategory.pending, (state) => { state.mutateStatus = "loading"; })
+      .addCase(addCategory.pending, (state) => { 
+        state.mutateStatus = "loading"; 
+        state.mutateError = null; // Clear old mutation errors
+      })
       .addCase(addCategory.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
         state.list.unshift(action.payload);
       })
-      .addCase(addCategory.rejected, (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+      .addCase(addCategory.rejected, (state, action) => { 
+        state.mutateStatus = "failed"; 
+        state.mutateError = action.payload as string; 
+      });
 
     // editCategory
     builder
-      .addCase(editCategory.pending, (state) => { state.mutateStatus = "loading"; })
+      .addCase(editCategory.pending, (state) => { 
+        state.mutateStatus = "loading"; 
+        state.mutateError = null; // Clear old mutation errors
+      })
       .addCase(editCategory.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
         const idx = state.list.findIndex((c) => c.id === action.payload.id);
         if (idx !== -1) state.list[idx] = action.payload;
       })
-      .addCase(editCategory.rejected, (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+      .addCase(editCategory.rejected, (state, action) => { 
+        state.mutateStatus = "failed"; 
+        state.mutateError = action.payload as string; 
+      });
 
     // removeCategory
     builder
-      .addCase(removeCategory.pending, (state) => { state.mutateStatus = "loading"; })
+      .addCase(removeCategory.pending, (state) => { 
+        state.mutateStatus = "loading"; 
+        state.mutateError = null; // Clear old mutation errors
+      })
       .addCase(removeCategory.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
         state.list = state.list.filter((c) => c.id !== action.payload);
       })
-      .addCase(removeCategory.rejected, (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+      .addCase(removeCategory.rejected, (state, action) => { 
+        state.mutateStatus = "failed"; 
+        state.mutateError = action.payload as string; 
+      });
 
     // bulkUploadCategories
     builder
-      .addCase(bulkUploadCategories.pending, (state) => { state.mutateStatus = "loading"; })
+      .addCase(bulkUploadCategories.pending, (state) => { 
+        state.mutateStatus = "loading"; 
+        state.mutateError = null; // Clear old mutation errors
+      })
       .addCase(bulkUploadCategories.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
-        state.list = [...action.payload, ...state.list];
+        // Safe check to avoid duplicate key issues if identical payload arrays stream in
+        const uniqueIncoming = action.payload.filter(
+          (incoming) => !state.list.some((existing) => existing.id === incoming.id)
+        );
+        state.list = [...uniqueIncoming, ...state.list];
       })
-      .addCase(bulkUploadCategories.rejected, (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+      .addCase(bulkUploadCategories.rejected, (state, action) => { 
+        state.mutateStatus = "failed"; 
+        state.mutateError = action.payload as string; 
+      });
   },
 });
 
