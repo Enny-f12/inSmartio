@@ -4,21 +4,22 @@
 import { useState } from "react";
 import { Search, Eye } from "lucide-react";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
-import { mockAgents, PAGE_SIZE } from "./types";
+import { PAGE_SIZE } from "./types";
 import type { ActiveAgent } from "./types";
 
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3", "Tier 4", "Tier 5", "Tier 6"] as const;
 
 interface ActiveAgentsTabProps {
+  agents:        ActiveAgent[];   // passed from page (API or mock)
   onSelectAgent: (agent: ActiveAgent) => void;
 }
 
-export default function ActiveAgentsTab({ onSelectAgent }: ActiveAgentsTabProps) {
+export default function ActiveAgentsTab({ agents, onSelectAgent }: ActiveAgentsTabProps) {
   const [search,     setSearch]     = useState("");
   const [tierFilter, setTierFilter] = useState<typeof TIER_OPTIONS[number]>("All Tiers");
   const [page,       setPage]       = useState(1);
 
-  const filtered = mockAgents.filter(a => {
+  const filtered = agents.filter(a => {
     const matchSearch = a.name.toLowerCase().includes(search.toLowerCase());
     const matchTier   = tierFilter === "All Tiers" || `Tier ${a.tier}` === tierFilter;
     return matchSearch && matchTier;
@@ -53,9 +54,7 @@ export default function ActiveAgentsTab({ onSelectAgent }: ActiveAgentsTabProps)
             <div style={{ position: "relative", flex: 1 }}>
               <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
               <input
-                type="text"
-                placeholder="Search name..."
-                value={search}
+                type="text" placeholder="Search name..." value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
                 style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
               />
@@ -81,7 +80,7 @@ export default function ActiveAgentsTab({ onSelectAgent }: ActiveAgentsTabProps)
                 <tr key={agent.id} className="agents-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 600, color: "#111827" }}>{agent.name}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "#6B7280" }}>{agent.tasId}</td>
-                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "#6B7280" }}>{agent.tier}</td>
+                  <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "#6B7280" }}>Tier {agent.tier}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", color: "#6B7280" }}>{agent.experts}</td>
                   <td style={{ padding: "16px 20px", fontSize: "13.5px", fontWeight: 500, color: "#111827" }}>{agent.earnings}</td>
                   <td style={{ padding: "16px 20px" }}>

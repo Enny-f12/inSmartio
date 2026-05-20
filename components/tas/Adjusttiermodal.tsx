@@ -1,96 +1,85 @@
+// components/tas/Adjusttiermodal.tsx
 "use client";
 
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { adjustTier } from "@/lib/redux/tasSlice";
 import type { ActiveAgent } from "@/components/tas/types";
 import { TAS_TIERS } from "@/components/tas/types";
 
 interface AdjustTierModalProps {
-  agent: ActiveAgent | null;
+  agent:   ActiveAgent | null;
   onClose: () => void;
 }
 
 export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps) {
-  const currentTierFull = agent
-    ? `Tier ${agent.tier} (${agent.tierLabel}, ${agent.bonus} bonus)`
-    : "";
+  const dispatch = useAppDispatch();
+  const { mutateStatus } = useAppSelector((s) => s.tas);
 
-  const [selected, setSelected] = useState(currentTierFull);
-  const [reason, setReason]     = useState("");
+  const [selected, setSelected] = useState(String(agent?.tier ?? "1"));
+  const [reason,   setReason]   = useState("");
+
+  const isLoading = mutateStatus === "loading";
 
   if (!agent) return null;
 
+  const handleConfirm = () => {
+    dispatch(adjustTier({ id: agent.id, payload: { newTier: selected } }))
+      .unwrap()
+      .then(() => { toast.success(`Tier adjusted to ${selected} for ${agent.name}`); onClose(); })
+      .catch((err: string) => toast.error("Failed to adjust tier", { description: err }));
+  };
+
   const footer = (
-    <>
-      <button
-        onClick={onClose}
-        className="px-5 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-surface text-text-muted hover:bg-background transition-colors"
-      >
+    <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+      <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
         Cancel
       </button>
-      <button
-        onClick={onClose}
-        className="btn-primary px-5 py-2.5 rounded-xl text-[13px]"
-      >
-        Confirm Adjustment
+      <button onClick={handleConfirm} disabled={isLoading} className="btn-primary"
+        style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isLoading ? 0.7 : 1 }}>
+        {isLoading ? <><Loader2 size={14} className="animate-spin" /> Adjusting...</> : "Confirm Adjustment"}
       </button>
-    </>
+    </div>
   );
 
   return (
     <Modal open={!!agent} onClose={onClose} title="Adjust TAS Tier" size="sm" footer={footer}>
-      <div className="space-y-4">
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
         {/* Current info */}
-        <div className="text-[13px] text-text-muted space-y-1">
-          <p>
-            <span className="font-medium text-text-main">TAS:</span>{" "}
-            {agent.fullName} ({agent.tasId})
-          </p>
-          <p>
-            <span className="font-medium text-text-main">Current Tier:</span>{" "}
-            {agent.tier} ({agent.tierLabel}, {agent.bonus} bonus)
-          </p>
+        <div style={{ fontSize: "13px", color: "var(--color-text-muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
+          <p style={{ margin: 0 }}><span style={{ fontWeight: 500, color: "var(--color-text-main)" }}>TAS:</span> {agent.fullName} ({agent.tasId})</p>
+          <p style={{ margin: 0 }}><span style={{ fontWeight: 500, color: "var(--color-text-main)" }}>Current Tier:</span> {agent.tier} ({agent.tierLabel})</p>
         </div>
 
         {/* Tier selection */}
         <div>
-          <p className="text-[13px] font-medium text-text-main mb-2">New Tier:</p>
-          <div className="space-y-2">
-            {TAS_TIERS.map(tier => {
-              const isCurrent = tier.toLowerCase().includes(agent.tierLabel.toLowerCase());
-              return (
-                <label
-                  key={tier}
-                  className="flex items-center gap-2.5 cursor-pointer text-[13px] text-text-main"
-                >
-                  <input
-                    type="radio"
-                    name="tier"
-                    value={tier}
-                    checked={selected === tier || (selected === currentTierFull && isCurrent)}
-                    onChange={() => setSelected(tier)}
-                    className="accent-primary"
-                  />
-                  {isCurrent ? `${tier} - Current` : tier}
-                </label>
-              );
-            })}
+          <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "10px" }}>New Tier:</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {TAS_TIERS.map(tier => (
+              <label key={tier} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "var(--color-text-main)" }}>
+                <input type="radio" name="tier" value={tier} checked={selected === tier}
+                  onChange={() => setSelected(tier)}
+                  style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", flexShrink: 0 }} />
+                {tier} {tier === String(agent.tier) ? <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>— Current</span> : ""}
+              </label>
+            ))}
           </div>
         </div>
 
         {/* Reason */}
         <div>
-          <p className="text-[13px] font-medium text-text-main mb-1.5">Reason for adjustment:</p>
-          <textarea
-            rows={3}
-            placeholder="enter reason...."
-            value={reason}
+          <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "8px" }}>
+            Reason <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontSize: "12px" }}>(optional)</span>
+          </p>
+          <textarea rows={3} placeholder="Enter reason for adjustment..." value={reason}
             onChange={e => setReason(e.target.value)}
-            className="w-full rounded-xl px-3 py-2.5 text-[13px] outline-none resize-none bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
           />
         </div>
-
       </div>
     </Modal>
   );
