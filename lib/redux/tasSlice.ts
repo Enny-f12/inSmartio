@@ -1,35 +1,31 @@
 // lib/redux/tasSlice.ts
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
-  getAllTas, getTasById, adjustTasTier,
+  getAllTas, adjustTasTier, suspendTas, activateTas,
   type ApiTas, type AdjustTierPayload,
 } from "@/lib/api/tasApi";
 
 interface TasState {
-  list:           ApiTas[];
-  listStatus:     "idle" | "loading" | "succeeded" | "failed";
-  listError:      string | null;
-  selected:       ApiTas | null;
-  selectedStatus: "idle" | "loading" | "succeeded" | "failed";
-  mutateStatus:   "idle" | "loading" | "succeeded" | "failed";
-  mutateError:    string | null;
+  list:         ApiTas[];
+  listStatus:   "idle" | "loading" | "succeeded" | "failed";
+  listError:    string | null;
+  selected:     ApiTas | null;
+  mutateStatus: "idle" | "loading" | "succeeded" | "failed";
+  mutateError:  string | null;
 }
 
 const initialState: TasState = {
-  list:           [],
-  listStatus:     "idle",
-  listError:      null,
-  selected:       null,
-  selectedStatus: "idle",
-  mutateStatus:   "idle",
-  mutateError:    null,
+  list:         [],
+  listStatus:   "idle",
+  listError:    null,
+  selected:     null,
+  mutateStatus: "idle",
+  mutateError:  null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
-
-// ── Thunks ────────────────────────────────────────────────
 
 // GET /api/admin/tas-managements
 export const fetchTas = createAsyncThunk(
@@ -40,21 +36,42 @@ export const fetchTas = createAsyncThunk(
   }
 );
 
-// GET /api/admin/tas-managements/{id}
-export const fetchTasById = createAsyncThunk(
-  "tas/fetchById",
-  async (id: string, { rejectWithValue }) => {
-    try { return await getTasById(id); }
-    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch TAS agent")); }
-  }
-);
-
-// PUT /api/admin/tas-managements/{id}/adjust-tier
+// PUT /api/admin/tas-managements/{id}/adjust-tier — refetches list after
 export const adjustTier = createAsyncThunk(
   "tas/adjustTier",
   async ({ id, payload }: { id: string; payload: AdjustTierPayload }, { rejectWithValue }) => {
-    try { return await adjustTasTier(id, payload); }
-    catch (err) { return rejectWithValue(errMsg(err, "Failed to adjust tier")); }
+    try {
+      await adjustTasTier(id, payload);
+      return await getAllTas();
+    } catch (err) {
+      return rejectWithValue(errMsg(err, "Failed to adjust tier"));
+    }
+  }
+);
+
+// PUT /api/admin/users/suspend/tas/{id} — refetches list after
+export const suspendTasThunk = createAsyncThunk(
+  "tas/suspend",
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await suspendTas(id);
+      return await getAllTas();
+    } catch (err) {
+      return rejectWithValue(errMsg(err, "Failed to suspend TAS agent"));
+    }
+  }
+);
+
+// PUT /api/admin/users/activate/tas/{id} — refetches list after
+export const activateTasThunk = createAsyncThunk(
+  "tas/activate",
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await activateTas(id);
+      return await getAllTas();
+    } catch (err) {
+      return rejectWithValue(errMsg(err, "Failed to reinstate TAS agent"));
+    }
   }
 );
 
@@ -63,9 +80,11 @@ const tasSlice = createSlice({
   name: "tas",
   initialState,
   reducers: {
+    selectTas: (state, action: PayloadAction<string>) => {
+      state.selected = state.list.find((t) => t.id === action.payload) ?? null;
+    },
     clearSelectedTas: (state) => {
-      state.selected       = null;
-      state.selectedStatus = "idle";
+      state.selected = null;
     },
     resetMutateStatus: (state) => {
       state.mutateStatus = "idle";
@@ -79,27 +98,37 @@ const tasSlice = createSlice({
       .addCase(fetchTas.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
       .addCase(fetchTas.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
 
-    // fetchTasById
-    builder
-      .addCase(fetchTasById.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
-      .addCase(fetchTasById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
-      .addCase(fetchTasById.rejected,  (state) => { state.selectedStatus = "failed"; });
+    // shared handler for adjustTier, suspend, activate — all refetch the list
+    const refetchFulfilled = (state: TasState, action: { payload: unknown }) => {
+      state.mutateStatus = "succeeded";
+      state.list = action.payload as ApiTas[];
+      // keep selected in sync
+      if (state.selected) {
+        state.selected = (action.payload as ApiTas[]).find((t) => t.id === state.selected!.id) ?? state.selected;
+      }
+    };
+    const mutatePending  = (state: TasState) => { state.mutateStatus = "loading"; state.mutateError = null; };
+    const mutateRejected = (state: TasState, action: { payload: unknown }) => {
+      state.mutateStatus = "failed";
+      state.mutateError  = action.payload as string;
+    };
 
-    // adjustTier — update in list + selected
     builder
-      .addCase(adjustTier.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
-      .addCase(adjustTier.fulfilled, (state, action) => {
-        state.mutateStatus = "succeeded";
-        const idx = state.list.findIndex((t) => t.id === action.payload.id);
-        if (idx !== -1) state.list[idx] = action.payload;
-        if (state.selected?.id === action.payload.id) state.selected = action.payload;
-      })
-      .addCase(adjustTier.rejected, (state, action) => {
-        state.mutateStatus = "failed";
-        state.mutateError  = action.payload as string;
-      });
+      .addCase(adjustTier.pending,   mutatePending)
+      .addCase(adjustTier.fulfilled, refetchFulfilled)
+      .addCase(adjustTier.rejected,  mutateRejected);
+
+    builder
+      .addCase(suspendTasThunk.pending,   mutatePending)
+      .addCase(suspendTasThunk.fulfilled, refetchFulfilled)
+      .addCase(suspendTasThunk.rejected,  mutateRejected);
+
+    builder
+      .addCase(activateTasThunk.pending,   mutatePending)
+      .addCase(activateTasThunk.fulfilled, refetchFulfilled)
+      .addCase(activateTasThunk.rejected,  mutateRejected);
   },
 });
 
-export const { clearSelectedTas, resetMutateStatus } = tasSlice.actions;
+export const { selectTas, clearSelectedTas, resetMutateStatus } = tasSlice.actions;
 export default tasSlice.reducer;

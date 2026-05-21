@@ -8,129 +8,105 @@ import ApplicationsTab from "@/components/tas/Applicationstab";
 import ActiveAgentsTab from "@/components/tas/Activeagentstab";
 import AgentDetail from "@/components/tas/Agentdetail";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchTas, fetchTasById, clearSelectedTas } from "@/lib/redux/tasSlice";
+import { fetchTas, selectTas, clearSelectedTas } from "@/lib/redux/tasSlice";
 import type { ApiTas } from "@/lib/api/tasApi";
 import type { TASTab, ActiveAgent, AgentStatus } from "@/components/tas/types";
 
 const TABS: TASTab[] = ["Applications", "Active TAS Agents"];
 
-// ── Map ApiTas → ActiveAgent UI shape ─────────────────────
-const toActiveAgent = (t: ApiTas): ActiveAgent => ({
-  id:              t.id,
-  name:            t.name ?? "—",
-  fullName:        t.name ?? "—",
-  tasId:           (t.username ?? t.id.slice(0, 8).toUpperCase()) as string,
-  phone:           t.phone ?? "—",
-  email:           t.email ?? "—",
-  tier:            Number(t.tier ?? 1) as number,
-  tierLabel:       `Tier ${t.tier ?? 1}`,
-  bonus:           "—",
-  joined:          t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-GB") : "—",
-  status:          (t.status === "suspended" ? "Suspended" : "Active") as AgentStatus,
-  experts:         0,
-  activeExperts:   0,
-  totalEarnings:   "—",
-  thisMonth:       "—",
-  availableBalance:"—",
-  pendingBalance:  "—",
-  earnings:        "—",
-  recruitedExperts:[],
-});
+// ── Parse tier string from API ─────────────────────────────
+// API returns: "Tier 2 (Senior, +5% bonus)" or plain "1" etc.
+const parseTier = (tierStr?: string): { num: number; label: string; bonus: string } => {
+  if (!tierStr) return { num: 1, label: "Bronze", bonus: "—" };
+  const numMatch   = tierStr.match(/\d+/);
+  const num        = numMatch ? parseInt(numMatch[0]) : 1;
+  const bonusMatch = tierStr.match(/\+[\d.]+%[^)"]*/);
+  const bonus      = bonusMatch ? bonusMatch[0].trim() : "—";
+  const labelMatch = tierStr.match(/\(([^,)]+)/);
+  const label      = labelMatch ? labelMatch[1].trim() : `Tier ${num}`;
+  return { num, label, bonus };
+};
 
-// ── Mock data fallback ─────────────────────────────────────
-const MOCK_AGENTS: ActiveAgent[] = [
-  {
-    id: "m1", name: "Adebayo T.", fullName: "Adebayo Tunde", tasId: "TAS-0012",
-    phone: "+234 801 234 5678", email: "adebayo@email.com",
-    tier: 3, tierLabel: "Gold", bonus: "12%", joined: "01/01/2026",
-    status: "Active" as AgentStatus, experts: 24, activeExperts: 18,
-    totalEarnings: "₦480,000", thisMonth: "₦62,000",
-    availableBalance: "₦120,000", pendingBalance: "₦40,000", earnings: "₦480,000",
-    recruitedExperts: [
-      { name: "Chidi O.", earningsHistory: "₦80,000", subTas: "Active" as AgentStatus, payouts: "₦60,000", notes: "" },
-      { name: "Ngozi E.", earningsHistory: "₦50,000", subTas: "Active" as AgentStatus, payouts: "₦40,000", notes: "" },
-    ],
-  },
-  {
-    id: "m2", name: "Fatima A.", fullName: "Fatima Aliyu", tasId: "TAS-0021",
-    phone: "+234 802 345 6789", email: "fatima@email.com",
-    tier: 2, tierLabel: "Silver", bonus: "8%", joined: "15/02/2026",
-    status: "Active" as AgentStatus, experts: 10, activeExperts: 7,
-    totalEarnings: "₦200,000", thisMonth: "₦28,000",
-    availableBalance: "₦60,000", pendingBalance: "₦15,000", earnings: "₦200,000",
-    recruitedExperts: [
-      { name: "Peter O.", earningsHistory: "₦40,000", subTas: "Active" as AgentStatus, payouts: "₦30,000", notes: "New recruit" },
-    ],
-  },
-  {
-    id: "m3", name: "Emeka J.", fullName: "Emeka James", tasId: "TAS-0034",
-    phone: "+234 803 456 7890", email: "emeka@email.com",
-    tier: 1, tierLabel: "Bronze", bonus: "5%", joined: "20/03/2026",
-    status: "Active" as AgentStatus, experts: 3, activeExperts: 2,
-    totalEarnings: "₦45,000", thisMonth: "₦12,000",
-    availableBalance: "₦20,000", pendingBalance: "₦5,000", earnings: "₦45,000",
+// ── Map real ApiTas → ActiveAgent UI shape ─────────────────
+const toActiveAgent = (t: ApiTas): ActiveAgent => {
+  const { num, label, bonus } = parseTier(t.tier);
+  const bank = t.bankDetails as { bankName?: string; accountNo?: string } | null;
+  const loc  = t.location as Record<string, string> | undefined;
+  const doc  = t.document as Record<string, string> | undefined;
+
+  return {
+    id:               t.id,
+    name:             t.name ?? "—",
+    fullName:         t.name ?? "—",
+    tasId:            t.username ?? t.id.slice(0, 8).toUpperCase(),
+    phone:            t.phone ?? "—",
+    email:            t.email ?? "—",
+    tier:             num,
+    tierLabel:        label,
+    bonus:            bonus,
+    joined:           t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-GB") : "—",
+    status:           (t.status === "suspended" ? "Suspended" : "Active") as AgentStatus,
+    experts:          0,
+    activeExperts:    0,
+    earnings:         "—",
+    totalEarnings:    "—",
+    thisMonth:        "—",
+    availableBalance: "—",
+    pendingBalance:   "—",
     recruitedExperts: [],
-  },
-  {
-    id: "m4", name: "Amaka S.", fullName: "Amaka Stella", tasId: "TAS-0045",
-    phone: "+234 804 567 8901", email: "amaka@email.com",
-    tier: 2, tierLabel: "Silver", bonus: "8%", joined: "10/03/2026",
-    status: "Active" as AgentStatus, experts: 15, activeExperts: 11,
-    totalEarnings: "₦320,000", thisMonth: "₦45,000",
-    availableBalance: "₦90,000", pendingBalance: "₦22,000", earnings: "₦320,000",
-    recruitedExperts: [
-      { name: "Tunde B.", earningsHistory: "₦60,000", subTas: "Active" as AgentStatus, payouts: "₦50,000", notes: "" },
-      { name: "Bisi K.",  earningsHistory: "₦35,000", subTas: "Active" as AgentStatus, payouts: "₦28,000", notes: "On probation" },
-    ],
-  },
-  {
-    id: "m5", name: "Kunle D.", fullName: "Kunle Dauda", tasId: "TAS-0056",
-    phone: "+234 805 678 9012", email: "kunle@email.com",
-    tier: 4, tierLabel: "Platinum", bonus: "15%", joined: "05/01/2026",
-    status: "Suspended" as AgentStatus, experts: 38, activeExperts: 0,
-    totalEarnings: "₦950,000", thisMonth: "₦0",
-    availableBalance: "₦0", pendingBalance: "₦180,000", earnings: "₦950,000",
-    recruitedExperts: [],
-  },
-];
+    // real API fields
+    verified:         t.verify,
+    dob:              t.dateOfBirth,
+    category:         Array.isArray(t.category) ? (t.category as string[]).join(", ") : undefined,
+    location:         loc,
+    document:         doc,
+    bankName:         bank?.bankName,
+    accountNo:        bank?.accountNo,
+    applicationCode:  t.applicationCode,
+  };
+};
 
 export default function TASManagementPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, selected, selectedStatus } = useAppSelector((s) => s.tas);
+  const { list, listStatus, listError, selected } = useAppSelector((s) => s.tas);
 
-  const [activeTab,     setActiveTab]     = useState<TASTab>("Applications");
-  const [selectedAgent, setSelectedAgent] = useState<ActiveAgent | null>(null);
+  const [activeTab,      setActiveTab]      = useState<TASTab>("Applications");
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchTas());
   }, [dispatch, listStatus]);
 
-  // Derive agents from API or mock — no setState in effect
-  const agents: ActiveAgent[] = useMemo(() =>
-    listStatus === "succeeded" && list.length > 0
-      ? list.map((t) => toActiveAgent(t))
-      : MOCK_AGENTS,
+  const allAgents = useMemo(() =>
+    listStatus === "succeeded" ? list.map(toActiveAgent) : [],
   [listStatus, list]);
 
-  // Derive selected agent from Redux selected state — no setState in effect
-  const detailAgent: ActiveAgent | null = useMemo(() =>
-    selectedStatus === "succeeded" && selected
-      ? toActiveAgent(selected)
-      : null,
-  [selectedStatus, selected]);
+  // Applications = not yet verified (verify: false)
+  const applicationAgents = useMemo(() =>
+    allAgents.filter((a) => !a.verified),
+  [allAgents]);
+
+  // Active = verified agents (verify: true)
+  const activeAgents = useMemo(() =>
+    allAgents.filter((a) => a.verified),
+  [allAgents]);
+
+  // Keep selected in sync with freshly fetched list (e.g. after tier adjust)
+  const displayAgent = useMemo(() => {
+    if (!selectedAgentId) return null;
+    if (selected?.id === selectedAgentId) return toActiveAgent(selected);
+    return allAgents.find((a) => a.id === selectedAgentId) ?? null;
+  }, [selectedAgentId, selected, allAgents]);
 
   const handleSelectAgent = (agent: ActiveAgent) => {
-    setSelectedAgent(agent); // show immediately from local data
-    dispatch(fetchTasById(agent.id)); // fetch fresh detail in background
+    setSelectedAgentId(agent.id);
+    dispatch(selectTas(agent.id));
   };
 
   const handleBack = () => {
-    setSelectedAgent(null);
+    setSelectedAgentId(null);
     dispatch(clearSelectedTas());
   };
-
-  // Use fresh API detail if available, else local selection
-  const displayAgent = detailAgent ?? selectedAgent;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -150,7 +126,6 @@ export default function TASManagementPage() {
 
       <div className="tas-outer" style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-background)" }}>
 
-        {/* Detail view */}
         {displayAgent ? (
           <AgentDetail agent={displayAgent} onBack={handleBack} />
         ) : (
@@ -159,10 +134,8 @@ export default function TASManagementPage() {
             {/* Tabs */}
             <div className="tas-tabs">
               <div className="tas-tabs-inner">
-                {TABS.map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
+                {TABS.map((tab) => (
+                  <button key={tab} onClick={() => setActiveTab(tab)}
                     className={tab === activeTab ? "btn-primary" : ""}
                     style={{
                       padding: "8px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
@@ -170,28 +143,34 @@ export default function TASManagementPage() {
                       backgroundColor: tab === activeTab ? undefined : "transparent",
                       color: tab === activeTab ? undefined : "var(--color-text-muted)",
                       cursor: "pointer", whiteSpace: "nowrap",
-                    }}
-                  >
+                    }}>
                     {tab}
+                    {listStatus === "succeeded" && (
+                      <span style={{
+                        marginLeft: "6px", fontSize: "11px", fontWeight: 700,
+                        backgroundColor: tab === activeTab ? "rgba(255,255,255,0.25)" : "#E5E7EB",
+                        color: tab === activeTab ? "#fff" : "#6B7280",
+                        padding: "1px 7px", borderRadius: "999px",
+                      }}>
+                        {tab === "Applications" ? applicationAgents.length : activeAgents.length}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Loading indicator */}
-            {activeTab === "Active TAS Agents" && listStatus === "loading" && (
+            {listStatus === "loading" && (
               <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                <Loader2 size={16} className="animate-spin" /> Loading TAS agents...
+                <Loader2 size={16} className="animate-spin" /> Loading TAS data...
               </div>
             )}
-
-            {/* Mock data notice */}
-            {activeTab === "Active TAS Agents" && listStatus === "succeeded" && list.length === 0 && (
-              <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>No agents on server — showing sample data.</p>
+            {listStatus === "failed" && (
+              <p style={{ fontSize: "13px", color: "#ef4444" }}>{listError}</p>
             )}
 
-            {activeTab === "Applications"      && <ApplicationsTab />}
-            {activeTab === "Active TAS Agents" && <ActiveAgentsTab agents={agents} onSelectAgent={handleSelectAgent} />}
+            {activeTab === "Applications"      && <ApplicationsTab agents={applicationAgents} onSelectAgent={handleSelectAgent} />}
+            {activeTab === "Active TAS Agents" && <ActiveAgentsTab agents={activeAgents}      onSelectAgent={handleSelectAgent} />}
           </div>
         )}
       </div>

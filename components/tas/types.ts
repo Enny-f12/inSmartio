@@ -1,3 +1,5 @@
+// components/tas/types.ts
+
 // ── Types ──────────────────────────────────────────────────
 export type AppStatus   = "Approved" | "Pending" | "Rejected";
 export type AgentStatus = "Active" | "Suspended";
@@ -32,25 +34,34 @@ export interface RecruitedExpert {
 }
 
 export interface ActiveAgent {
-  id: string;
-  name: string;
-  fullName: string;
-  tasId: string;
-  phone: string;
-  email: string;
-  tier: number;
-  tierLabel: string;
-  bonus: string;
-  joined: string;
-  status: AgentStatus;
-  experts: number;
-  earnings: string;
-  activeExperts: number;
-  totalEarnings: string;
-  thisMonth: string;
+  id:               string;
+  name:             string;
+  fullName:         string;
+  tasId:            string;
+  phone:            string;
+  email:            string;
+  tier:             number;
+  tierLabel:        string;
+  bonus:            string;
+  joined:           string;
+  status:           AgentStatus;
+  experts:          number;
+  earnings:         string;
+  activeExperts:    number;
+  totalEarnings:    string;
+  thisMonth:        string;
   availableBalance: string;
-  pendingBalance: string;
+  pendingBalance:   string;
   recruitedExperts: RecruitedExpert[];
+  // fields from real API
+  verified?:        boolean;
+  dob?:             string;
+  category?:        string;
+  location?:        Record<string, string>;
+  document?:        Record<string, string>;
+  bankName?:        string;
+  accountNo?:       string;
+  applicationCode?: string;
 }
 
 // ── Constants ──────────────────────────────────────────────
@@ -197,9 +208,10 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 245, earnings: "₦100K",
     activeExperts: 220, totalEarnings: "₦1,250,000", thisMonth: "₦245,000",
     availableBalance: "₦180,000", pendingBalance: "₦65,000",
+    verified: true,
     recruitedExperts: [
-      { name: "Adebayo S.", earningsHistory: "Model 2", subTas: "Active",    payouts: "₦4,800", notes: "earned for TAS" },
-      { name: "Funke A.",   earningsHistory: "Model 1", subTas: "Active",    payouts: "₦3,000", notes: "earned for TAS" },
+      { name: "Adebayo S.", earningsHistory: "Model 2", subTas: "Active", payouts: "₦4,800", notes: "earned for TAS" },
+      { name: "Funke A.",   earningsHistory: "Model 1", subTas: "Active", payouts: "₦3,000", notes: "earned for TAS" },
       { name: "Chinedu O.", earningsHistory: "Model 2", subTas: "Suspended", payouts: "₦1,200", notes: "earned for TAS" },
     ],
   },
@@ -210,10 +222,11 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 189, earnings: "₦890K",
     activeExperts: 170, totalEarnings: "₦890,000", thisMonth: "₦120,000",
     availableBalance: "₦95,000", pendingBalance: "₦25,000",
+    verified: true,
     recruitedExperts: [
-      { name: "Emeka O.", earningsHistory: "Model 1", subTas: "Active",    payouts: "₦2,500", notes: "earned for TAS" },
-      { name: "Grace A.", earningsHistory: "Model 2", subTas: "Active",    payouts: "₦3,800", notes: "earned for TAS" },
-      { name: "John D.",  earningsHistory: "Model 1", subTas: "Suspended", payouts: "₦900",   notes: "earned for TAS" },
+      { name: "Emeka O.", earningsHistory: "Model 1", subTas: "Active",     payouts: "₦2,500", notes: "earned for TAS" },
+      { name: "Grace A.", earningsHistory: "Model 2", subTas: "Active",     payouts: "₦3,800", notes: "earned for TAS" },
+      { name: "John D.",  earningsHistory: "Model 1", subTas: "Suspended",  payouts: "₦900",   notes: "earned for TAS" },
     ],
   },
   {
@@ -223,6 +236,7 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 156, earnings: "₦750K",
     activeExperts: 140, totalEarnings: "₦750,000", thisMonth: "₦98,000",
     availableBalance: "₦70,000", pendingBalance: "₦28,000",
+    verified: true,
     recruitedExperts: [
       { name: "Mary K.",  earningsHistory: "Model 2", subTas: "Active", payouts: "₦3,100", notes: "earned for TAS" },
       { name: "Peter O.", earningsHistory: "Model 1", subTas: "Active", payouts: "₦2,200", notes: "earned for TAS" },
@@ -235,6 +249,7 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 89, earnings: "₦340K",
     activeExperts: 80, totalEarnings: "₦340,000", thisMonth: "₦45,000",
     availableBalance: "₦30,000", pendingBalance: "₦15,000",
+    verified: true,
     recruitedExperts: [
       { name: "Ngozi E.", earningsHistory: "Model 1", subTas: "Active", payouts: "₦1,800", notes: "earned for TAS" },
     ],
@@ -246,6 +261,7 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 67, earnings: "₦280K",
     activeExperts: 60, totalEarnings: "₦280,000", thisMonth: "₦38,000",
     availableBalance: "₦25,000", pendingBalance: "₦13,000",
+    verified: true,
     recruitedExperts: [
       { name: "James O.", earningsHistory: "Model 2", subTas: "Active", payouts: "₦2,000", notes: "earned for TAS" },
     ],
@@ -257,6 +273,7 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 90, earnings: "₦1.2M",
     activeExperts: 85, totalEarnings: "₦1,200,000", thisMonth: "₦180,000",
     availableBalance: "₦150,000", pendingBalance: "₦30,000",
+    verified: true,
     recruitedExperts: [
       { name: "Tunde A.",  earningsHistory: "Model 2", subTas: "Active", payouts: "₦5,000", notes: "earned for TAS" },
       { name: "Chioma K.", earningsHistory: "Model 1", subTas: "Active", payouts: "₦2,800", notes: "earned for TAS" },
@@ -269,6 +286,7 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 20, earnings: "₦180K",
     activeExperts: 18, totalEarnings: "₦180,000", thisMonth: "₦22,000",
     availableBalance: "₦18,000", pendingBalance: "₦4,000",
+    verified: true,
     recruitedExperts: [
       { name: "Adeola B.", earningsHistory: "Model 1", subTas: "Active", payouts: "₦1,200", notes: "earned for TAS" },
     ],
@@ -280,8 +298,9 @@ export const mockAgents: ActiveAgent[] = [
     status: "Active", experts: 30, earnings: "₦300K",
     activeExperts: 28, totalEarnings: "₦300,000", thisMonth: "₦40,000",
     availableBalance: "₦32,000", pendingBalance: "₦8,000",
+    verified: true,
     recruitedExperts: [
-      { name: "John D.",  earningsHistory: "Model 2", subTas: "Active", payouts: "₦1,600", notes: "earned for TAS" },
+      { name: "John D.", earningsHistory: "Model 2", subTas: "Active", payouts: "₦1,600", notes: "earned for TAS" },
       { name: "Mary K.", earningsHistory: "Model 1", subTas: "Active", payouts: "₦1,100", notes: "earned for TAS" },
     ],
   },
