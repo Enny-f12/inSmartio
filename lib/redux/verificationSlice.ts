@@ -52,15 +52,19 @@ export const fetchVerificationById = createAsyncThunk(
   }
 );
 
-// PUT /api/admin/experts/verification/{id}
+// PUT /api/admin/experts/verification/{id} — returns null, so we refetch
 export const verifyDocument = createAsyncThunk(
   "verifications/verify",
   async (
     { id, payload }: { id: string; payload: VerifyExpertDocumentPayload },
     { rejectWithValue }
   ) => {
-    try { return await verifyExpertDocument(id, payload); }
-    catch (err) { return rejectWithValue(errMsg(err, "Failed to update verification")); }
+    try {
+      await verifyExpertDocument(id, payload);
+      // Refetch list since response is null
+      const updated = await getAllVerifications();
+      return updated;
+    } catch (err) { return rejectWithValue(errMsg(err, "Failed to update verification")); }
   }
 );
 
@@ -91,14 +95,12 @@ const verificationSlice = createSlice({
       .addCase(fetchVerificationById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
       .addCase(fetchVerificationById.rejected,  (state) => { state.selectedStatus = "failed"; });
 
-    // verifyDocument — update expert in list + selected
+    // verifyDocument — refetches full list on success
     builder
       .addCase(verifyDocument.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
       .addCase(verifyDocument.fulfilled, (state, action) => {
         state.mutateStatus = "succeeded";
-        const idx = state.list.findIndex((e) => e.id === action.payload.id);
-        if (idx !== -1) state.list[idx] = action.payload;
-        if (state.selected?.id === action.payload.id) state.selected = action.payload;
+        state.list = action.payload as ApiVerificationExpert[];
       })
       .addCase(verifyDocument.rejected, (state, action) => {
         state.mutateStatus = "failed";

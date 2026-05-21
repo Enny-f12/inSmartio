@@ -103,7 +103,7 @@ export default function LoginPage() {
 
           {/* Card — no border/shadow on mobile, card style on sm+ */}
           <div className="w-full max-w-md rounded-2xl p-0 sm:p-9 sm:bg-white sm:border sm:border-border sm:shadow-sm">
-            <h1 className="text-base sm:text-lg font-bold text-center mb-5 sm:mb-7 text-text-main">
+            <h1 className="text-base sm:text-lg font-bold text-center  mt-5 mb-5 sm:mb-7 text-text-main">
               Admin Dashboard
             </h1>
 

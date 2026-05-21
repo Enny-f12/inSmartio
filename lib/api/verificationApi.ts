@@ -1,39 +1,60 @@
 // lib/api/verificationApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Types ─────────────────────────────────────────────────
+// ── Types from real API schema ────────────────────────────
 
 export interface ApiVerificationExpert {
-  id:        string;
-  name:      string;
-  email:     string;
-  phone?:    string;
-  status:    string;
-  verify:    boolean;
-  role:      string;
-  avatar:    string | null;
-  createdAt: string;
-  updatedAt: string;
-  // verification-specific fields
-  document?:      Record<string, unknown>;
-  verification?:  string;   // "tier1" | "tier2" | "tier3"
-  gender?:        string;
-  bio?:           string;
-  location?:      { country?: string; state?: string; city?: string; area?: string };
-  [key: string]:  unknown;
+  id:     string;
+  name:   string;
+  email:  string;
+  phone?: string;
+  gender?: string;
+  bio?:    string;
+  location?: {
+    country?: string;
+    state?:   string;
+    city?:    string;
+    area?:    string;
+  };
+  skill?: {
+    experience?:  string;
+    description?: string;
+    role?:        string;
+    area?:        string;
+  };
+  category?: string[];
+  verificationDocument?: {
+    idCard?:           string;   // url
+    referenceLetter?:  string;   // url
+    [key: string]:     string | undefined;
+  };
+  paymentModel?: string;
+  bankDetails?: {
+    bankName?:   string;
+    accountNo?:  string;
+  };
+  services?: unknown[];
+  // not in list response but kept for flexibility
+  status?:   string;
+  verify?:   boolean;
+  role?:     string;
+  avatar?:   string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
 // PUT /api/admin/experts/verification/{id}
-// Request body
+// Response is { status: true, message: string, data: null }
 export interface VerifyExpertDocumentPayload {
-  documentKey: string;   
-  verify:      boolean;  
-  reject:      boolean;  // true = reject
+  documentKey: string;
+  verify:      boolean;
+  reject:      boolean;
   reason?:     string;   // required when reject = true
-  adminId:     string;   // the admin performing the action
+  adminId:     string;
 }
 
-// Response wrappers
+// ── Response wrappers ─────────────────────────────────────
 interface VerificationListResponse {
   status:  boolean;
   message: string;
@@ -49,7 +70,7 @@ interface VerificationOneResponse {
 interface VerifyDocumentResponse {
   status:  boolean;
   message: string;
-  data:    ApiVerificationExpert;
+  data:    null;   // backend returns null on success
 }
 
 // ── API functions ─────────────────────────────────────────
@@ -57,7 +78,6 @@ interface VerifyDocumentResponse {
 // GET /api/admin/experts/verification
 export const getAllVerifications = async (): Promise<ApiVerificationExpert[]> => {
   const { data } = await axiosInstance.get<VerificationListResponse>("/admin/experts/verification");
-  console.log("📋 Verifications API:", data);
   return data.data ?? [];
 };
 
@@ -68,13 +88,10 @@ export const getVerificationById = async (id: string): Promise<ApiVerificationEx
 };
 
 // PUT /api/admin/experts/verification/{id}
+// Returns null on success — we refetch the list after
 export const verifyExpertDocument = async (
   id: string,
   payload: VerifyExpertDocumentPayload
-): Promise<ApiVerificationExpert> => {
-  const { data } = await axiosInstance.put<VerifyDocumentResponse>(
-    `/admin/experts/verification/${id}`,
-    payload
-  );
-  return data.data;
+): Promise<void> => {
+  await axiosInstance.put<VerifyDocumentResponse>(`/admin/experts/verification/${id}`, payload);
 };

@@ -22,7 +22,8 @@ export interface ApiUser {
   document?:    Record<string, unknown>;
   paymentModel?: string;
   // tas fields
-  dob?:         string;
+  dob?:          string;
+  dateOfBirth?:  string;   // TAS API returns this field name
   referral?:    string | null;
   account?:     {
     bvn?:           string;
@@ -70,13 +71,14 @@ export const getAllUsers = async (): Promise<ApiUser[]> => {
 };
 
 // ── Get user by type + id ─────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const getUserById = async (id: string, _type: string = "client"): Promise<ApiUser> => {
-  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/{type.toLowerCase()}/${id}`);
+// GET /api/admin/users/{type}/{id}  — type: "client" | "expert" | "tas"
+export const getUserById = async (id: string, type: string = "client"): Promise<ApiUser> => {
+  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/${type.toLowerCase()}/${id}`);
   return data.data;
 };
 
 // ── Registration payloads ─────────────────────────────────
+
 export interface RegisterClientPayload {
   name:      string;
   email:     string;
@@ -86,23 +88,66 @@ export interface RegisterClientPayload {
   referral?: string;
 }
 
+// POST /experts/register — full schema from Swagger
 export interface RegisterExpertPayload {
-  name:     string;
-  email:    string;
-  phone:    string;
-  password: string;
-  gender:   "male" | "female" | "other";
-  bio:      string;
-  referral?: string;
+  name:        string;
+  email:       string;
+  phone:       string;
+  password:    string;
+  gender:      "male" | "female" | "other";
+  bio:         string;
+  referral?:   string;
+  avatar?:     string;
+  location?: {
+    country?: string;
+    state?:   string;
+    city?:    string;
+    area?:    string;
+  };
+  skill?: {
+    experience?:  number | string;
+    description?: string;
+    role?:        string[];
+    area?:        string;
+  };
+  category?: {
+    name?: string;
+    sub?:  string[];
+  };
+  verification?: "tier1" | "tier2" | "tier3";
+  paymentModel?: "protected" | "unprotected";
+  bankDetails?: {
+    bankName?:      string;
+    accountNumber?: string;
+    bvn?:           string;
+    accountCode?:   string;
+    accountName?:   string;
+  };
+  services?: unknown[];
 }
 
+// POST /tas/register — full schema from Swagger
 export interface RegisterTasPayload {
-  name:     string;
-  email:    string;
-  phone:    string;
-  password: string;
-  gender:   "male" | "female" | "other";
-  dob:      string;
+  username:            string;
+  name:                string;
+  email:               string;
+  phone:               string;
+  password:            string;
+  gender:              "male" | "female" | "other";
+  dateOfBirth:         string;   // ISO 8601 e.g. "1990-01-01"
+  category?:           string[];
+  recruitExpectations?: string;
+  bankDetails?: {
+    bankName?:   string;
+    accountNo?:  string;
+  };
+  document?: {
+    idCard?:          string;
+    referenceLetter?: string;
+  };
+  applicationCode?: string;
+  avatar?:          string;
+  location?:        Record<string, unknown>;
 }
 
 export type RegisterUserPayload =
@@ -118,30 +163,20 @@ export interface RegisterUserResponse {
 
 export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUser> => {
   if (payload.role === "expert") {
-    // Extracted referral from the template payload mapping
-    const { name, email, phone, password, gender, bio, referral } = payload as RegisterExpertPayload & { role: "expert" };
-    
-    const { data } = await axiosInstance.post<RegisterUserResponse>("/experts/register", {
-      name, 
-      email, 
-      phone, 
-      password, 
-      gender, 
-      bio, 
-      referral: referral || "" // Guarantees a flat string to pass schema validation constraints cleanly
-    });
+    const { role: _, ...expertPayload } = payload as RegisterExpertPayload & { role: "expert" };
+    // Remove referral if empty string
+    if (expertPayload.referral === "") delete expertPayload.referral;
+    const { data } = await axiosInstance.post<RegisterUserResponse>("/experts/register", expertPayload);
     return data.data;
   }
 
   if (payload.role === "tas") {
-    const { name, email, phone, password, gender, dob } = payload as RegisterTasPayload & { role: "tas" };
-    const { data } = await axiosInstance.post<RegisterUserResponse>("/tas/register", {
-      name, email, phone, password, gender, dob,
-    });
+    const { role: _, ...tasPayload } = payload as RegisterTasPayload & { role: "tas" };
+    const { data } = await axiosInstance.post<RegisterUserResponse>("/tas/register", tasPayload);
     return data.data;
   }
 
-  // client — strip role before sending
+  // client
   const { role, ...rest } = payload as RegisterClientPayload & { role: "client" };
   void role;
   const { data } = await axiosInstance.post<RegisterUserResponse>("/clients/register", rest);
