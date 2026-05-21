@@ -1,33 +1,25 @@
 // lib/api/verificationApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Matches the REAL list response from the API ───────────
-// GET /api/admin/experts/verification returns these fields per item:
-// { name, email, status, submitted, documents, totalDocuments }
-// NOTE: No `id` field yet — pending backend confirmation
-
 export interface ApiVerificationSummary {
+  id:             string;   // required — records without id are filtered out
   name:           string;
   email:          string;
-  status:         string;        // "active" | "pending" | "rejected"
-  submitted:      string;        // ISO date string
-  documents:      number;        // uploaded count
-  totalDocuments: number;        // required count
-  // id will be added once backend confirms the correct field
-  id?: string;
+  status:         string;
+  submitted:      string;
+  documents:      number;
+  totalDocuments: number;
 }
 
-// PUT /api/admin/experts/verification/{id}
 export interface VerifyExpertPayload {
   action:  "verify" | "reject";
-  reason?: string;               // required when action = "reject"
+  reason?: string;
 }
 
-// ── Response wrappers ─────────────────────────────────────
 interface VerificationListResponse {
   status:  boolean;
   message: string;
-  data:    ApiVerificationSummary[];
+  data:    (Omit<ApiVerificationSummary, "id"> & { id?: string })[];
 }
 
 interface VerifyResponse {
@@ -36,16 +28,14 @@ interface VerifyResponse {
   data:    null;
 }
 
-// ── API functions ─────────────────────────────────────────
-
 // GET /api/admin/experts/verification
+// Filters out any records the backend returns without an id (e.g. Stella)
 export const getAllVerifications = async (): Promise<ApiVerificationSummary[]> => {
   const { data } = await axiosInstance.get<VerificationListResponse>("/admin/experts/verification");
-  return data.data ?? [];
+  return (data.data ?? []).filter((item): item is ApiVerificationSummary => !!item.id);
 };
 
 // PUT /api/admin/experts/verification/{id}
-// id = expert's user ID (pending backend confirmation)
 export const verifyExpert = async (
   id: string,
   payload: VerifyExpertPayload,

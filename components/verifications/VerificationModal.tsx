@@ -31,13 +31,7 @@ export default function VerificationModal({ expert, onClose }: Props) {
   const [rejectReason, setRejectReason] = useState("");
   const isMutating = mutateStatus === "loading";
 
-  // NOTE: verify/reject requires an ID — once backend confirms the ID field,
-  // replace `expert.id` below with the correct field (e.g. expert.expertId)
   const handleApprove = () => {
-    if (!expert.id) {
-      toast.error("Cannot verify: no expert ID available yet. Ask backend to include ID in list response.");
-      return;
-    }
     dispatch(verifyExpertThunk({ id: expert.id, payload: { action: "verify" } }))
       .unwrap()
       .then(() => { toast.success(`${expert.name} approved`); onClose(); })
@@ -46,17 +40,11 @@ export default function VerificationModal({ expert, onClose }: Props) {
 
   const handleReject = () => {
     if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
-    if (!expert.id) {
-      toast.error("Cannot reject: no expert ID available yet.");
-      return;
-    }
     dispatch(verifyExpertThunk({ id: expert.id, payload: { action: "reject", reason: rejectReason.trim() } }))
       .unwrap()
       .then(() => { toast.success(`${expert.name} rejected`); setRejectOpen(false); onClose(); })
       .catch((err: string) => toast.error("Rejection failed", { description: err }));
   };
-
-  const docsFraction = `${expert.documents} of ${expert.totalDocuments} documents uploaded`;
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", flexWrap: "wrap" }}>
@@ -81,7 +69,7 @@ export default function VerificationModal({ expert, onClose }: Props) {
       <Modal open onClose={onClose} title="Verification Detail" footer={footer} size="md">
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
-          {/* Expert summary — what the list gives us */}
+          {/* Expert summary */}
           <div style={{ borderRadius: "12px", backgroundColor: "var(--color-background)", border: "1px solid var(--color-border)", padding: "16px" }}>
             <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-muted)", marginBottom: "12px" }}>
               Expert Information
@@ -90,10 +78,10 @@ export default function VerificationModal({ expert, onClose }: Props) {
             <InfoRow label="Email:"     value={expert.email} />
             <InfoRow label="Status:"    value={expert.status} />
             <InfoRow label="Submitted:" value={expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"} />
-            <InfoRow label="Documents:" value={docsFraction} />
+            <InfoRow label="Documents:" value={`${expert.documents} of ${expert.totalDocuments} uploaded`} />
           </div>
 
-          {/* Documents progress bar */}
+          {/* Document progress bar */}
           <div style={{ borderRadius: "12px", backgroundColor: "var(--color-background)", border: "1px solid var(--color-border)", padding: "16px" }}>
             <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-muted)", marginBottom: "12px" }}>
               Document Progress
@@ -104,26 +92,18 @@ export default function VerificationModal({ expert, onClose }: Props) {
             </div>
             <div style={{ height: "8px", borderRadius: "999px", backgroundColor: "#E5E7EB", overflow: "hidden" }}>
               <div style={{
-                height: "100%",
-                borderRadius: "999px",
+                height: "100%", borderRadius: "999px",
                 backgroundColor: expert.documents === expert.totalDocuments ? "#16a34a" : "#f59e0b",
                 width: `${expert.totalDocuments > 0 ? (expert.documents / expert.totalDocuments) * 100 : 0}%`,
                 transition: "width 0.3s ease",
               }} />
             </div>
             {expert.documents < expert.totalDocuments && (
-              <p style={{ fontSize: "12px", color: "#d97706", marginTop: "8px" }}>
+              <p style={{ fontSize: "12px", color: "#d97706", marginTop: "8px", margin: "8px 0 0" }}>
                 ⚠ {expert.totalDocuments - expert.documents} document(s) still missing
               </p>
             )}
           </div>
-
-          {/* Note about limited data */}
-          {!expert.id && (
-            <div style={{ borderRadius: "10px", backgroundColor: "#FFF7ED", border: "1px solid #FED7AA", padding: "12px 16px", fontSize: "12px", color: "#C2410C", lineHeight: 1.5 }}>
-              ⚠ The API list doesn&apos;t return an expert ID yet. Approve/Reject will work once the backend includes an <code>id</code> field in the verification list response.
-            </div>
-          )}
 
         </div>
       </Modal>
@@ -146,11 +126,8 @@ export default function VerificationModal({ expert, onClose }: Props) {
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
             Reason for rejecting <strong style={{ color: "var(--color-text-main)" }}>{expert.name}</strong>&apos;s verification.
           </p>
-          <textarea
-            placeholder="e.g. Document unclear, ID expired..."
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            rows={3}
+          <textarea placeholder="e.g. Document unclear, ID expired..." value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)} rows={3}
             style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
           />
         </div>
