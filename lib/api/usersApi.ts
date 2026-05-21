@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export interface ApiUser {

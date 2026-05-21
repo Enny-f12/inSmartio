@@ -1,7 +1,7 @@
 // lib/api/verificationApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Types from real API schema ────────────────────────────
+// ── Types 
 
 export interface ApiVerificationExpert {
   id:     string;
