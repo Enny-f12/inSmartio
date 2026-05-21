@@ -1,10 +1,10 @@
-// components/reports/DonutChart.tsx
+// components/report/DonutChart.tsx
 import type { DonutSegment } from "@/components/report/types";
 
 interface DonutChartProps {
   segments: DonutSegment[];
-  title: string;
-  size?: number;
+  title:    string;
+  size?:    number;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -15,6 +15,7 @@ function buildArcs(segments: DonutSegment[], SIZE: number) {
   const R  = SIZE * 0.375;
   const r  = SIZE * 0.2167;
 
+  // Build cumulative start angles without mutation
   const startAngles = segments.reduce<number[]>((acc, seg, i) => {
     if (i === 0) return [-90];
     const prev = acc[i - 1] + (segments[i - 1].value / 100) * 360;
@@ -54,9 +55,7 @@ function buildArcs(segments: DonutSegment[], SIZE: number) {
 }
 
 export default function DonutChart({ segments, title, size = 240 }: DonutChartProps) {
-  // Use a smaller donut on mobile — controlled via CSS custom property workaround
-  // We render two sizes and show/hide via CSS
-  const mobileSize = 180;
+  const mobileSize  = 180;
   const desktopSize = size;
 
   return (
@@ -71,7 +70,6 @@ export default function DonutChart({ segments, title, size = 240 }: DonutChartPr
         .donut-legend-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
         .donut-legend-label { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--color-text-main); }
         .donut-legend-val  { color: var(--color-text-muted); flex-shrink: 0; }
-
         @media (min-width: 560px) {
           .donut-wrap        { flex-direction: row; align-items: center; gap: 32px; }
           .donut-svg-mobile  { display: none; }
@@ -84,8 +82,7 @@ export default function DonutChart({ segments, title, size = 240 }: DonutChartPr
       `}</style>
 
       <div className="donut-wrap">
-
-        {/* Mobile SVG (smaller) */}
+        {/* Mobile */}
         <svg className="donut-svg-mobile" width={mobileSize} height={mobileSize} viewBox={`0 0 ${mobileSize} ${mobileSize}`} style={{ flexShrink: 0 }}>
           {buildArcs(segments, mobileSize).map((arc) => (
             <g key={arc.label}>
@@ -97,7 +94,7 @@ export default function DonutChart({ segments, title, size = 240 }: DonutChartPr
           ))}
         </svg>
 
-        {/* Desktop SVG (original size) */}
+        {/* Desktop */}
         <svg className="donut-svg-desktop" width={desktopSize} height={desktopSize} viewBox={`0 0 ${desktopSize} ${desktopSize}`} style={{ flexShrink: 0 }}>
           {buildArcs(segments, desktopSize).map((arc) => (
             <g key={arc.label}>
@@ -124,7 +121,6 @@ export default function DonutChart({ segments, title, size = 240 }: DonutChartPr
             ))}
           </div>
         </div>
-
       </div>
     </>
   );

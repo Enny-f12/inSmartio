@@ -11,6 +11,7 @@ import announcementReducer from "./announcementSlice";
 import verificationReducer from "./verificationSlice";
 import tasReducer          from "./tasSlice";
 import paymentReducer      from "./paymentSlice";
+import reportReducer  from "./reportSlice";
 
 export const store = configureStore({
   reducer: {
@@ -26,6 +27,7 @@ export const store = configureStore({
     verifications: verificationReducer,
     tas:           tasReducer,
     payments:      paymentReducer,
+    report: reportReducer,
   },
 });
 
