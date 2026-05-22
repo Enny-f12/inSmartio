@@ -2,6 +2,7 @@
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export type VerificationTier = "tier1" | "tier2" | "tier3";
+export type VerificationType = "expert" | "tas";
 
 export interface VerificationDocument {
   name:   string;
@@ -30,6 +31,7 @@ export interface NinVerification {
   dobMatch:  boolean;
 }
 
+// ── Shape returned by GET /api/admin/experts/verification (list) ──
 export interface ApiVerificationSummary {
   id:             string;
   name:           string;
@@ -40,6 +42,7 @@ export interface ApiVerificationSummary {
   documents:      number;
   totalDocuments: number;
   tier?:          VerificationTier;
+  verificationType?: VerificationType;
   appliedTier?:        string;
   verificationFee?:    string;
   verificationDocuments?: VerificationDocument[];
@@ -49,8 +52,51 @@ export interface ApiVerificationSummary {
   notes?:              string;
 }
 
-// PUT /api/admin/experts/verification/{id}?type=...
-// Body matches Swagger schema exactly
+// ── Shape returned by GET /api/admin/experts/verification/{id}?type=expert|tas ──
+// This is a full expert profile, not a verification summary
+export interface ApiVerificationDetail {
+  id:                   string;
+  name:                 string;
+  email:                string;
+  phone:                string;
+  avatar:               string | null;
+  gender:               string;
+  bio:                  string;
+  role:                 string;
+  roles:                string[];
+  status:               string;
+  currentMode:          string;
+  category:             string;
+  skill:                string[];
+  services:             string | null;
+  tier:                 number;           // 1 | 2 | 3 as number
+  verification:         string;           // "tier1" | "tier2" | "tier3"
+  verify:               boolean;          // true = already verified
+  commission:           number | null;
+  paymentModel:         string;
+  subscriptionActive:   boolean;
+  subscriptionExpiresAt: string | null;
+  referral:             string | null;
+  lastModelSwitchDate:  string | null;
+  createdAt:            string;
+  updatedAt:            string;
+  location: {
+    city:    string;
+    state:   string;
+    address: string;
+  };
+  document: {
+    number:   string;
+    kycType:  string;       // "BVN" | "NIN" etc.
+    verified: boolean;
+  };
+  bankDetails: {
+    bankName:      string;
+    accountName:   string;
+    accountNumber: string;
+  };
+}
+
 export interface VerifyExpertPayload {
   documentKey?: string;
   verify?:      boolean;
@@ -68,7 +114,7 @@ interface VerificationListResponse {
 interface VerificationDetailResponse {
   status:  boolean;
   message: string;
-  data:    ApiVerificationSummary;
+  data:    ApiVerificationDetail;
 }
 
 interface VerifyResponse {
@@ -83,11 +129,11 @@ export const getAllVerifications = async (): Promise<ApiVerificationSummary[]> =
   return (data.data ?? []).filter((item): item is ApiVerificationSummary => !!item.id);
 };
 
-// GET /api/admin/experts/verification/{id}?type=tier1|tier2|tier3
+// GET /api/admin/experts/verification/{id}?type=expert|tas
 export const getVerificationById = async (
   id:   string,
-  type: VerificationTier,
-): Promise<ApiVerificationSummary> => {
+  type: VerificationType,
+): Promise<ApiVerificationDetail> => {
   const { data } = await axiosInstance.get<VerificationDetailResponse>(
     `/admin/experts/verification/${id}`,
     { params: { type } },
@@ -95,10 +141,10 @@ export const getVerificationById = async (
   return data.data;
 };
 
-// PUT /api/admin/experts/verification/{id}?type=tier1|tier2|tier3
+// PUT /api/admin/experts/verification/{id}?type=expert|tas
 export const verifyExpert = async (
   id:      string,
-  type:    VerificationTier,
+  type:    VerificationType,
   payload: VerifyExpertPayload,
 ): Promise<void> => {
   await axiosInstance.put<VerifyResponse>(

@@ -12,7 +12,7 @@ import {
   fetchVerificationById,
   clearSelectedVerification,
 } from "@/lib/redux/verificationSlice";
-import type { ApiVerificationSummary, VerificationTier } from "@/lib/api/verificationApi";
+import type { ApiVerificationSummary, VerificationTier, VerificationType } from "@/lib/api/verificationApi";
 
 const PAGE_SIZE = 10;
 const TIERS = ["Tier 1", "Tier 2", "Tier 3"] as const;
@@ -24,7 +24,11 @@ const tierLabelToKey: Record<TierLabel, VerificationTier> = {
   "Tier 3": "tier3",
 };
 
-// ── Mock data — used when API returns nothing or as tier fill ──
+// tier3 = TAS, tier1/tier2 = expert
+const toApiType = (tier?: VerificationTier): VerificationType =>
+  tier === "tier3" ? "tas" : "expert";
+
+// ── Mock data ──────────────────────────────────────────────────────────────
 const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
   {
     id: "mock-t1-1", name: "Emeka O.", email: "emeka@email.com", phone: "+234 801 234 5678",
@@ -32,9 +36,9 @@ const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
     documents: 3, totalDocuments: 3, tier: "tier1",
     appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 20/03/2026",
     verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
+      { name: "NIN Slip",              url: "#", status: "verified" },
       { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph", url: "#", status: "verified" },
+      { name: "Passport Photograph",   url: "#", status: "verified" },
     ],
     ninVerification: { ninNumber: "12345678901", ninStatus: "Verified", nameMatch: true, dobMatch: true },
   },
@@ -44,9 +48,9 @@ const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
     documents: 3, totalDocuments: 3, tier: "tier1",
     appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 21/03/2026",
     verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
+      { name: "NIN Slip",              url: "#", status: "verified" },
       { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph", url: "#", status: "verified" },
+      { name: "Passport Photograph",   url: "#", status: "verified" },
     ],
     ninVerification: { ninNumber: "98765432100", ninStatus: "Verified", nameMatch: true, dobMatch: true },
   },
@@ -56,9 +60,9 @@ const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
     documents: 1, totalDocuments: 3, tier: "tier1",
     appliedTier: "Tier 1",
     verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",         status: "pending" },
-      { name: "Passport Photograph",            status: "pending" },
+      { name: "NIN Slip",               url: "#", status: "verified" },
+      { name: "Valid ID (National ID)",           status: "pending"  },
+      { name: "Passport Photograph",              status: "pending"  },
     ],
   },
   // ── Tier 2 ──
@@ -95,16 +99,16 @@ const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
     ],
     guarantor: { name: "Alhaji Musa B.", phone: "+234 811 234 5678", occupation: "Business Owner" },
   },
-  // ── Tier 3 ──
+  // ── Tier 3 (TAS) ──
   {
     id: "mock-t3-1", name: "James A.", email: "james@email.com", phone: "+234 805 678 9012",
     status: "active", submitted: "2026-03-16T10:00:00.000Z",
     documents: 2, totalDocuments: 3, tier: "tier3",
     appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 16/03/2026",
     verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "CAC Certificate",                 status: "pending"  },
+      { name: "NIN Slip",        url: "#", status: "verified" },
+      { name: "BVN Consent Form",url: "#", status: "verified" },
+      { name: "CAC Certificate",           status: "pending"  },
     ],
   },
   {
@@ -113,9 +117,9 @@ const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
     documents: 3, totalDocuments: 3, tier: "tier3",
     appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 14/03/2026",
     verificationDocuments: [
-      { name: "NIN Slip",       url: "#", status: "verified" },
-      { name: "BVN Consent Form", url: "#", status: "verified" },
-      { name: "CAC Certificate",  url: "#", status: "verified" },
+      { name: "NIN Slip",        url: "#", status: "verified" },
+      { name: "BVN Consent Form",url: "#", status: "verified" },
+      { name: "CAC Certificate", url: "#", status: "verified" },
     ],
   },
 ];
@@ -143,7 +147,6 @@ export default function VerificationsPage() {
     if (listStatus === "idle") dispatch(fetchVerifications());
   }, [dispatch, listStatus]);
 
-  // Merge real API data with mock — real data wins, mock fills the rest
   const mergedData: ApiVerificationSummary[] = (() => {
     if (listStatus === "succeeded" && list.length > 0) {
       const withTiers = list.map((item, i): ApiVerificationSummary => ({
@@ -177,12 +180,14 @@ export default function VerificationsPage() {
   };
 
   const handleOpenDetail = (expert: ApiVerificationSummary) => {
-    dispatch(fetchVerificationById({ id: expert.id, type: expert.tier ?? "tier1" }));
+    dispatch(fetchVerificationById({
+      id:      expert.id,
+      type:    toApiType(expert.tier),   // "expert" | "tas"
+      summary: expert,
+    }));
   };
 
-  const handleCloseModal = () => {
-    dispatch(clearSelectedVerification());
-  };
+  const handleCloseModal = () => dispatch(clearSelectedVerification());
 
   const isModalOpen = selectedStatus === "loading" || selectedStatus === "succeeded";
 
@@ -215,7 +220,6 @@ export default function VerificationsPage() {
             {mergedData.length} pending
           </span>
 
-          {/* Tier filters */}
           <div className="ver-tiers">
             {TIERS.map((tier) => {
               const count    = tierCounts[tierLabelToKey[tier]];
@@ -267,7 +271,7 @@ export default function VerificationsPage() {
             <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
 
-          {(listStatus !== "loading") && (
+          {listStatus !== "loading" && (
             <>
               {/* Desktop table */}
               <div className="ver-desktop" style={{ overflowX: "auto" }}>
@@ -289,8 +293,7 @@ export default function VerificationsPage() {
                         <td style={{ padding: "16px 24px" }}><StatusBadge label={expert.status ?? "pending"} variant={statusVariant(expert.status ?? "")} /></td>
                         <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{getDocLabel(expert)}</td>
                         <td style={{ padding: "16px 24px" }}>
-                          <button
-                            onClick={() => handleOpenDetail(expert)}
+                          <button onClick={() => handleOpenDetail(expert)}
                             style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
                             <Eye size={17} strokeWidth={1.8} />
                           </button>
@@ -315,8 +318,7 @@ export default function VerificationsPage() {
                         <span style={{ fontSize: "12px", color: "#6B7280" }}>Docs: {getDocLabel(expert)}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleOpenDetail(expert)}
+                    <button onClick={() => handleOpenDetail(expert)}
                       style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
                       <Eye size={16} strokeWidth={1.8} />
                     </button>
@@ -345,12 +347,8 @@ export default function VerificationsPage() {
         </div>
       </main>
 
-      {/* Modal — opens on loading (spinner inside) or succeeded (full detail) */}
       {isModalOpen && (
-        <VerificationModal
-          expert={selected}
-          onClose={handleCloseModal}
-        />
+        <VerificationModal expert={selected} onClose={handleCloseModal} />
       )}
     </div>
   );

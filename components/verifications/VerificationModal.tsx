@@ -2,12 +2,16 @@
 "use client";
 
 import { useState } from "react";
-import { X, CheckCircle2, Circle, Loader2, Eye, Download, Phone } from "lucide-react";
+import { X, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { verifyExpertThunk } from "@/lib/redux/verificationSlice";
-import type { ApiVerificationSummary } from "@/lib/api/verificationApi";
+import type { VerificationTier, VerificationType } from "@/lib/api/verificationApi";
+import type { ApiVerificationDetail } from "@/lib/api/verificationApi";
+
+const toApiType = (tier?: VerificationTier): VerificationType =>
+  tier === "tier3" ? "tas" : "expert";
 
 function SectionTitle({ title }: { title: string }) {
   return (
@@ -20,7 +24,7 @@ function SectionTitle({ title }: { title: string }) {
 function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
-      <span style={{ minWidth: "130px", flexShrink: 0, color: "#6B7280" }}>{label}</span>
+      <span style={{ minWidth: "140px", flexShrink: 0, color: "#6B7280" }}>{label}</span>
       <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
     </div>
   );
@@ -42,40 +46,40 @@ function VerifiedChip() {
   );
 }
 
-function PendingChip() {
+function UnverifiedChip() {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#d97706", fontWeight: 500 }}>
-      <Circle size={13} /> Pending
+      <Circle size={13} /> Not Verified
     </span>
   );
 }
 
 interface Props {
-  expert:  ApiVerificationSummary | null; // null while selectedStatus === "loading"
+  expert:  ApiVerificationDetail | null; // null while loading
   onClose: () => void;
 }
 
 export default function VerificationModal({ expert, onClose }: Props) {
   const dispatch = useAppDispatch();
-  const { mutateStatus, selectedStatus } = useAppSelector((s) => s.verifications);
+  const { mutateStatus, selectedStatus, selectedSummary } = useAppSelector((s) => s.verifications);
 
   const [rejectOpen,   setRejectOpen]   = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [notes,        setNotes]        = useState(expert?.notes ?? "");
 
   const isMutating      = mutateStatus   === "loading";
   const isLoadingDetail = selectedStatus === "loading";
 
+  // Derive tier from summary (needed for PUT type param)
+  const summaryTier = selectedSummary?.tier;
+
   // ── Approve ──────────────────────────────────────────────────
   const handleApprove = () => {
-    if (!expert) return;
-    dispatch(
-      verifyExpertThunk({
-        id:      expert.id,
-        type:    expert.tier ?? "tier1",
-        payload: { verify: true },
-      })
-    )
+    if (!expert || !selectedSummary) return;
+    dispatch(verifyExpertThunk({
+      id:      expert.id,
+      type:    toApiType(summaryTier),
+      payload: { verify: true },
+    }))
       .unwrap()
       .then(() => { toast.success(`${expert.name} approved`); onClose(); })
       .catch((err: string) => toast.error("Approval failed", { description: err }));
@@ -83,72 +87,36 @@ export default function VerificationModal({ expert, onClose }: Props) {
 
   // ── Reject ───────────────────────────────────────────────────
   const handleReject = () => {
-    if (!expert) return;
+    if (!expert || !selectedSummary) return;
     if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
-    dispatch(
-      verifyExpertThunk({
-        id:      expert.id,
-        type:    expert.tier ?? "tier1",
-        payload: { reject: true, reason: rejectReason.trim() },
-      })
-    )
+    dispatch(verifyExpertThunk({
+      id:      expert.id,
+      type:    toApiType(summaryTier),
+      payload: { reject: true, reason: rejectReason.trim() },
+    }))
       .unwrap()
       .then(() => { toast.success(`${expert.name} rejected`); setRejectOpen(false); onClose(); })
       .catch((err: string) => toast.error("Rejection failed", { description: err }));
   };
 
-  // ── mailto ───────────────────────────────────────────────────
   const mailtoHref = expert
     ? `mailto:${expert.email}` +
       `?subject=${encodeURIComponent("Verification – More Information Needed")}` +
-      `&body=${encodeURIComponent(
-        `Dear ${expert.name},\n\nWe have reviewed your verification application and need some additional information before we can proceed.\n\nPlease respond to this email with the requested details at your earliest convenience.\n\nThank you.`
-      )}`
+      `&body=${encodeURIComponent(`Dear ${expert.name},\n\nWe have reviewed your verification application and need some additional information before we can proceed.\n\nPlease respond to this email with the requested details at your earliest convenience.\n\nThank you.`)}`
     : "#";
 
-  // ── Footer ───────────────────────────────────────────────────
   const footer = (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", flexWrap: "wrap" }}>
-      <button
-        onClick={handleApprove}
-        disabled={isMutating || !expert}
-        style={{
-          display: "flex", alignItems: "center", gap: "6px",
-          padding: "10px 20px", borderRadius: "10px",
-          fontSize: "13px", fontWeight: 600,
-          color: "#fff", backgroundColor: "#16a34a",
-          border: "none",
-          cursor: (isMutating || !expert) ? "not-allowed" : "pointer",
-          opacity: (isMutating || !expert) ? 0.7 : 1,
-        }}>
-        {isMutating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />}
-        Approve
+      <button onClick={handleApprove} disabled={isMutating || !expert}
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#16a34a", border: "none", cursor: (isMutating || !expert) ? "not-allowed" : "pointer", opacity: (isMutating || !expert) ? 0.7 : 1 }}>
+        {isMutating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={15} />} Approve
       </button>
-
-      <button
-        onClick={() => setRejectOpen(true)}
-        disabled={isMutating || !expert}
-        style={{
-          display: "flex", alignItems: "center", gap: "6px",
-          padding: "10px 20px", borderRadius: "10px",
-          fontSize: "13px", fontWeight: 600,
-          color: "#dc2626", backgroundColor: "#fef2f2",
-          border: "1px solid #fecaca",
-          cursor: (isMutating || !expert) ? "not-allowed" : "pointer",
-          opacity: (isMutating || !expert) ? 0.7 : 1,
-        }}>
+      <button onClick={() => setRejectOpen(true)} disabled={isMutating || !expert}
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#dc2626", backgroundColor: "#fef2f2", border: "1px solid #fecaca", cursor: (isMutating || !expert) ? "not-allowed" : "pointer", opacity: (isMutating || !expert) ? 0.7 : 1 }}>
         <X size={14} /> Reject
       </button>
-
-      <a
-        href={mailtoHref}
-        style={{
-          marginLeft: "auto",
-          fontSize: "13px", fontWeight: 500,
-          color: "#6B7280", textDecoration: "none",
-          pointerEvents: !expert ? "none" : "auto",
-          opacity: !expert ? 0.4 : 1,
-        }}>
+      <a href={mailtoHref}
+        style={{ marginLeft: "auto", fontSize: "13px", fontWeight: 500, color: "#6B7280", textDecoration: "none", pointerEvents: !expert ? "none" : "auto", opacity: !expert ? 0.4 : 1 }}>
         Request More Info
       </a>
     </div>
@@ -156,150 +124,70 @@ export default function VerificationModal({ expert, onClose }: Props) {
 
   return (
     <>
-      <Modal
-        open
-        onClose={onClose}
-        title="Verification Detail"
-        footer={!isLoadingDetail ? footer : undefined}
-        size="md"
-      >
-        {/* ── Loading ── */}
+      <Modal open onClose={onClose} title="Verification Detail" footer={!isLoadingDetail ? footer : undefined} size="md">
+
         {isLoadingDetail ? (
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", gap: "8px", color: "#9CA3AF", fontSize: "14px" }}>
             <Loader2 size={18} className="animate-spin" /> Loading details...
           </div>
 
         ) : !expert ? (
-          /* ── Error ── */
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", fontSize: "14px", color: "#ef4444" }}>
             Failed to load verification detail.
           </div>
 
         ) : (
-          /* ── Detail ── */
           <div style={{ display: "flex", flexDirection: "column" }}>
 
             {/* Expert Information */}
             <Card>
               <SectionTitle title="Expert Information" />
-              <InfoRow label="Name:"            value={expert.name} />
-              <InfoRow label="Phone:"           value={expert.phone} />
-              <InfoRow label="Email:"           value={expert.email} />
-              <InfoRow label="Applied Tier:"    value={expert.appliedTier} />
-              <InfoRow label="Submitted:"       value={expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"} />
-              {expert.verificationFee && (
-                <InfoRow label="Verification Fee:" value={expert.verificationFee} />
-              )}
+              <InfoRow label="Name:"          value={expert.name} />
+              <InfoRow label="Email:"         value={expert.email} />
+              <InfoRow label="Phone:"         value={expert.phone} />
+              <InfoRow label="Gender:"        value={expert.gender} />
+              <InfoRow label="Role:"          value={expert.role} />
+              <InfoRow label="Category:"      value={expert.category} />
+              <InfoRow label="Skills:"        value={expert.skill?.join(", ")} />
+              <InfoRow label="Tier:"          value={`Tier ${expert.tier}`} />
+              <InfoRow label="Verification:"  value={expert.verification} />
+              <InfoRow label="Verified:"      value={expert.verify ? <VerifiedChip /> : <UnverifiedChip />} />
+              <InfoRow label="Status:"        value={expert.status} />
+              <InfoRow label="Payment Model:" value={expert.paymentModel} />
+              <InfoRow label="Joined:"        value={new Date(expert.createdAt).toLocaleDateString("en-GB")} />
             </Card>
 
-            {/* Documents */}
-            {expert.verificationDocuments && expert.verificationDocuments.length > 0 && (
+            {/* Location */}
+            <Card>
+              <SectionTitle title="Location" />
+              <InfoRow label="Address:" value={expert.location?.address} />
+              <InfoRow label="City:"    value={expert.location?.city} />
+              <InfoRow label="State:"   value={expert.location?.state} />
+            </Card>
+
+            {/* KYC / Document */}
+            <Card>
+              <SectionTitle title="KYC Document" />
+              <InfoRow label="Type:"     value={expert.document?.kycType} />
+              <InfoRow label="Number:"   value={expert.document?.number} />
+              <InfoRow label="Verified:" value={expert.document?.verified ? <VerifiedChip /> : <UnverifiedChip />} />
+            </Card>
+
+            {/* Bank Details */}
+            {expert.bankDetails && (
               <Card>
-                <SectionTitle title="Documents" />
-                {expert.verificationDocuments.map((doc, i) => (
-                  <div
-                    key={i}
-                    style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: i < expert.verificationDocuments!.length - 1 ? "10px" : 0 }}>
-                    <span style={{ flex: 1, fontSize: "13px", color: "#111827" }}>{doc.name}</span>
-                    {doc.url && (
-                      <>
-                        <a href={doc.url} target="_blank" rel="noopener noreferrer"
-                          style={{ color: "#2563eb", display: "flex", alignItems: "center" }} title="View">
-                          <Eye size={15} />
-                        </a>
-                        <a href={doc.url} download
-                          style={{ color: "#2563eb", display: "flex", alignItems: "center" }} title="Download">
-                          <Download size={15} />
-                        </a>
-                      </>
-                    )}
-                    <span style={{ flexShrink: 0 }}>
-                      {doc.status === "verified" ? <VerifiedChip /> : <PendingChip />}
-                    </span>
-                  </div>
-                ))}
+                <SectionTitle title="Bank Details" />
+                <InfoRow label="Bank:"           value={expert.bankDetails.bankName} />
+                <InfoRow label="Account Name:"   value={expert.bankDetails.accountName} />
+                <InfoRow label="Account Number:" value={expert.bankDetails.accountNumber} />
               </Card>
             )}
 
-            {/* Guarantor Verification */}
-            {expert.guarantor && (
+            {/* Bio */}
+            {expert.bio && (
               <Card>
-                <SectionTitle title="Guarantor Verification" />
-                <InfoRow label="Name:"       value={expert.guarantor.name} />
-                <InfoRow label="Phone:"      value={
-                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {expert.guarantor.phone}
-                    <a
-                      href={`tel:${expert.guarantor.phone}`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#2563eb", textDecoration: "none", fontWeight: 500 }}>
-                      <Phone size={12} /> Call Guarantor
-                    </a>
-                  </span>
-                } />
-                <InfoRow label="Occupation:" value={expert.guarantor.occupation} />
-                {expert.guarantor.status && (
-                  <InfoRow label="Status:" value={expert.guarantor.status} />
-                )}
-                <div style={{ marginTop: "12px" }}>
-                  <p style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", marginBottom: "6px" }}>Notes</p>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="enter your note...."
-                    rows={3}
-                    style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#111827", boxSizing: "border-box" }}
-                  />
-                </div>
-              </Card>
-            )}
-
-            {/* Police Clearance */}
-            {expert.policeClearance && (
-              <Card>
-                <SectionTitle title="Police Clearance Verification" />
-                <InfoRow label="Certificate #:" value={expert.policeClearance.certificateNo} />
-                <InfoRow label="Issued:"        value={expert.policeClearance.issued} />
-                <InfoRow label="Issuing State:" value={expert.policeClearance.issuingState} />
-                <InfoRow label="Status:"        value={
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#6B7280" }}>
-                    <Circle size={13} /> {expert.policeClearance.status}
-                  </span>
-                } />
-              </Card>
-            )}
-
-            {/* NIN Verification */}
-            {expert.ninVerification && (
-              <Card>
-                <SectionTitle title="NIN Verification" />
-                <InfoRow label="NIN Number:" value={expert.ninVerification.ninNumber} />
-                <InfoRow label="NIN Status:" value={<VerifiedChip />} />
-                <InfoRow label="Name Match:" value={expert.ninVerification.nameMatch ? <VerifiedChip /> : <PendingChip />} />
-                <InfoRow label="DOB Match:"  value={expert.ninVerification.dobMatch  ? <VerifiedChip /> : <PendingChip />} />
-              </Card>
-            )}
-
-            {/* Fallback — no detail sections */}
-            {!expert.verificationDocuments && !expert.guarantor && !expert.policeClearance && !expert.ninVerification && (
-              <Card>
-                <SectionTitle title="Document Progress" />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6B7280", marginBottom: "6px" }}>
-                  <span>{expert.documents} uploaded</span>
-                  <span>{expert.totalDocuments} required</span>
-                </div>
-                <div style={{ height: "8px", borderRadius: "999px", backgroundColor: "#E5E7EB", overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: "999px",
-                    backgroundColor: expert.documents === expert.totalDocuments ? "#16a34a" : "#f59e0b",
-                    width: `${expert.totalDocuments > 0 ? (expert.documents / expert.totalDocuments) * 100 : 0}%`,
-                    transition: "width 0.3s ease",
-                  }} />
-                </div>
-                {expert.documents < expert.totalDocuments && (
-                  <p style={{ fontSize: "12px", color: "#d97706", marginTop: "8px" }}>
-                    ⚠ {expert.totalDocuments - expert.documents} document(s) still missing
-                  </p>
-                )}
+                <SectionTitle title="Bio" />
+                <p style={{ fontSize: "13px", color: "#374151", lineHeight: 1.6, margin: 0 }}>{expert.bio}</p>
               </Card>
             )}
 
@@ -307,27 +195,18 @@ export default function VerificationModal({ expert, onClose }: Props) {
         )}
       </Modal>
 
-      {/* ── Reject confirmation modal ── */}
+      {/* Reject modal */}
       {expert && (
-        <Modal
-          open={rejectOpen}
-          onClose={() => setRejectOpen(false)}
-          title="Reject Verification"
-          size="sm"
+        <Modal open={rejectOpen} onClose={() => setRejectOpen(false)} title="Reject Verification" size="sm"
           footer={
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button
-                onClick={() => setRejectOpen(false)}
+              <button onClick={() => setRejectOpen(false)}
                 style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
                 Cancel
               </button>
-              <button
-                onClick={handleReject}
-                disabled={isMutating}
+              <button onClick={handleReject} disabled={isMutating}
                 style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: isMutating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
-                {isMutating
-                  ? <><Loader2 size={14} className="animate-spin" /> Rejecting...</>
-                  : "Confirm Reject"}
+                {isMutating ? <><Loader2 size={14} className="animate-spin" /> Rejecting...</> : "Confirm Reject"}
               </button>
             </div>
           }>
@@ -335,13 +214,9 @@ export default function VerificationModal({ expert, onClose }: Props) {
             <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
               Reason for rejecting <strong style={{ color: "#111827" }}>{expert.name}</strong>&apos;s verification.
             </p>
-            <textarea
-              placeholder="e.g. Document unclear, ID expired..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={3}
-              style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
-            />
+            <textarea placeholder="e.g. Document unclear, ID expired..." value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)} rows={3}
+              style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
           </div>
         </Modal>
       )}
