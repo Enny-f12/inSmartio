@@ -14,10 +14,19 @@ import type { TASTab, ActiveAgent, AgentStatus } from "@/components/tas/types";
 
 const TABS: TASTab[] = ["Applications", "Active TAS Agents"];
 
-// ── Parse tier string from API ─────────────────────────────
-// API returns: "Tier 2 (Senior, +5% bonus)" or plain "1" etc.
-const parseTier = (tierStr?: string): { num: number; label: string; bonus: string } => {
-  if (!tierStr) return { num: 1, label: "Bronze", bonus: "—" };
+// ── Parse tier from API ────────────────────────────────────
+// API returns a number (1, 2, 3) or occasionally a string like
+// "Tier 2 (Senior, +5% bonus)" — handle both safely.
+const parseTier = (tier?: string | number): { num: number; label: string; bonus: string } => {
+  if (tier === undefined || tier === null) return { num: 1, label: "Bronze", bonus: "—" };
+
+  // If it's already a number just use it directly
+  if (typeof tier === "number") {
+    return { num: tier, label: `Tier ${tier}`, bonus: "—" };
+  }
+
+  // String path
+  const tierStr    = String(tier);
   const numMatch   = tierStr.match(/\d+/);
   const num        = numMatch ? parseInt(numMatch[0]) : 1;
   const bonusMatch = tierStr.match(/\+[\d.]+%[^)"]*/);
@@ -29,7 +38,7 @@ const parseTier = (tierStr?: string): { num: number; label: string; bonus: strin
 
 // ── Map real ApiTas → ActiveAgent UI shape ─────────────────
 const toActiveAgent = (t: ApiTas): ActiveAgent => {
-  const { num, label, bonus } = parseTier(t.tier);
+  const { num, label, bonus } = parseTier(t.tier as string | number | undefined);
   const bank = t.bankDetails as { bankName?: string; accountNo?: string } | null;
   const loc  = t.location as Record<string, string> | undefined;
   const doc  = t.document as Record<string, string> | undefined;
@@ -70,7 +79,7 @@ export default function TASManagementPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, listError, selected } = useAppSelector((s) => s.tas);
 
-  const [activeTab,      setActiveTab]      = useState<TASTab>("Applications");
+  const [activeTab,       setActiveTab]       = useState<TASTab>("Applications");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   useEffect(() => {

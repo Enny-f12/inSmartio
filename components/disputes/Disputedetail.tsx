@@ -6,8 +6,9 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { PriorityLabel, DisputeStatusBadge } from "./DisputeBadges";
+import Modal from "@/components/ui/Modal";
 import { useAppDispatch } from "@/hooks/redux";
-import { editDispute, resolveDisputeThunk } from "@/lib/redux/disputeSlice";
+import { appealDisputeThunk } from "@/lib/redux/disputeSlice";
 import type { Dispute } from "@/components/disputes/types";
 import type { ResolutionType } from "@/lib/api/disputeApi";
 
@@ -52,46 +53,57 @@ interface Props {
 export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
   const dispatch = useAppDispatch();
 
+  // Submit Decision state
   const [resolution,     setResolution]     = useState<ResolutionType | null>(null);
   const [decisionReason, setDecisionReason] = useState("");
   const [submitting,     setSubmitting]     = useState(false);
-  const [drafting,       setDrafting]       = useState(false);
-  const [appealing,      setAppealing]      = useState(false);
 
-  // Submit Decision → Resolved
+  // Save Draft state
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  // Appeal Later modal state
+  const [appealOpen,   setAppealOpen]   = useState(false);
+  const [appealReason, setAppealReason] = useState("");
+  const [appealing,    setAppealing]    = useState(false);
+
+  // ── Submit Decision → POST /api/dispute/{id}/appeal ──────────
   const handleSubmitDecision = () => {
     if (!resolution) { toast.warning("Select a resolution option first."); return; }
+    if (!decisionReason.trim()) { toast.warning("Please provide a decision reason."); return; }
     setSubmitting(true);
-    dispatch(resolveDisputeThunk({
-      id: disputeId,
-      payload: {
-        resolution,
-        ...(decisionReason.trim() ? { reason: decisionReason.trim() } : {}),
-      },
-    }))
+    dispatch(
+      appealDisputeThunk({
+        id: disputeId,
+        payload: {
+          reason:     `[${resolution}] ${decisionReason.trim()}`,
+        },
+      })
+    )
       .unwrap()
-      .then(() => { toast.success("Decision submitted — dispute resolved"); onBack(); })
+      .then(() => { toast.success("Decision submitted successfully"); onBack(); })
       .catch((err: string) => toast.error("Failed to submit decision", { description: err }))
       .finally(() => setSubmitting(false));
   };
 
-  // Save Draft → IN_PROGRESS
+  // ── Save Draft — local only, no API call ─────────────────────
   const handleSaveDraft = () => {
-    setDrafting(true);
-    dispatch(editDispute({ id: disputeId, payload: { status: "IN_PROGRESS" } }))
-      .unwrap()
-      .then(() => { toast.success("Saved as draft — marked In Progress"); onBack(); })
-      .catch((err: string) => toast.error("Failed to save draft", { description: err }))
-      .finally(() => setDrafting(false));
+    setDraftSaved(true);
+    toast.success("Saved as draft");
   };
 
-  // Appeal Later → IN_PROGRESS
-  const handleAppealLater = () => {
+  // ── Appeal Later → POST /api/dispute/{id}/appeal ─────────────
+  const handleAppealSubmit = () => {
+    if (!appealReason.trim()) { toast.warning("Please provide a reason for the appeal."); return; }
     setAppealing(true);
-    dispatch(editDispute({ id: disputeId, payload: { status: "IN_PROGRESS" } }))
+    dispatch(
+      appealDisputeThunk({
+        id: disputeId,
+        payload: { reason: appealReason.trim() },
+      })
+    )
       .unwrap()
-      .then(() => { toast.success("Marked for appeal — status In Progress"); onBack(); })
-      .catch((err: string) => toast.error("Failed to update dispute", { description: err }))
+      .then(() => { toast.success("Appeal submitted"); setAppealOpen(false); onBack(); })
+      .catch((err: string) => toast.error("Failed to submit appeal", { description: err }))
       .finally(() => setAppealing(false));
   };
 
@@ -105,10 +117,9 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
         .dd-statements     { display: flex; flex-direction: column; border-bottom: 1px solid var(--color-border); }
         .dd-statement      { padding: 16px; border-bottom: 1px solid var(--color-border); background: #fff; }
         .dd-statement:last-child { border-bottom: none; }
-        .dd-footer         { display: grid; grid-template-columns: repeat(2, 1fr); flex-shrink: 0; border-top: 1px solid var(--color-border); background: var(--color-surface); }
-        .dd-footer-btn     { padding: 14px 10px; font-size: 13px; font-weight: 500; border: none; border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); cursor: pointer; background: none; color: var(--color-text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
-        .dd-footer-btn:nth-child(2n) { border-right: none; }
-        .dd-footer-btn:nth-last-child(-n+2) { border-bottom: none; }
+        .dd-footer         { display: grid; grid-template-columns: repeat(3, 1fr); flex-shrink: 0; border-top: 1px solid var(--color-border); background: var(--color-surface); }
+        .dd-footer-btn     { padding: 14px 10px; font-size: 13px; font-weight: 500; border: none; border-right: 1px solid var(--color-border); cursor: pointer; background: none; color: var(--color-text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .dd-footer-btn:last-child { border-right: none; }
         @media (min-width: 480px) {
           .drow-label { display: inline-block; width: 160px; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; margin-bottom: 0; line-height: 1.6; vertical-align: top; }
           .drow-value { display: inline; }
@@ -119,12 +130,11 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
           .dd-statement  { flex: 1; border-bottom: none; border-right: 1px solid var(--color-border); }
           .dd-statement:last-child { border-right: none; }
           .dd-footer     { display: flex; }
-          .dd-footer-btn { flex: 1; padding: 16px; border-right: 1px solid var(--color-border); border-bottom: none; }
-          .dd-footer-btn:last-child { border-right: none; }
+          .dd-footer-btn { flex: 1; padding: 16px; }
         }
       `}</style>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "var(--color-background)" }} className="sm:p-8">
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "var(--color-background)" }}>
 
         {/* Back */}
         <div style={{ marginBottom: "20px" }}>
@@ -205,40 +215,102 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
               {RESOLUTION_OPTIONS.map((opt) => (
                 <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "var(--color-text-main)" }}>
-                  <input type="radio" name="resolution" value={opt.value} checked={resolution === opt.value} onChange={() => setResolution(opt.value)}
-                    style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", flexShrink: 0 }} />
+                  <input
+                    type="radio"
+                    name="resolution"
+                    value={opt.value}
+                    checked={resolution === opt.value}
+                    onChange={() => setResolution(opt.value)}
+                    style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", flexShrink: 0 }}
+                  />
                   {opt.label}
                 </label>
               ))}
             </div>
             <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "8px" }}>
-              Decision reason:
+              Decision reason: <span style={{ color: "#ef4444" }}>*</span>
             </p>
-            <textarea rows={3} placeholder="Enter your decision reason..."
-              value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)}
+            <textarea
+              rows={3}
+              placeholder="Enter your decision reason..."
+              value={decisionReason}
+              onChange={(e) => setDecisionReason(e.target.value)}
               style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
             />
           </div>
+
         </div>
       </div>
 
-      {/* Sticky footer */}
+      {/* Sticky footer — 3 buttons */}
       <div className="dd-footer">
-        {/* Submit → Resolved */}
-        <button onClick={handleSubmitDecision} disabled={submitting} className="dd-footer-btn btn-primary" style={{ fontWeight: 600 }}>
-          {submitting ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : "Submit Decision"}
+
+        {/* Submit Decision → POST appeal with resolution + reason */}
+        <button
+          onClick={handleSubmitDecision}
+          disabled={submitting}
+          className="dd-footer-btn btn-primary"
+          style={{ fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
+          {submitting
+            ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
+            : "Submit Decision"}
         </button>
 
-        {/* Save Draft → In Progress */}
-        <button onClick={handleSaveDraft} disabled={drafting} className="dd-footer-btn">
-          {drafting ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : "Save Draft"}
+        {/* Save Draft — local only */}
+        <button
+          onClick={handleSaveDraft}
+          disabled={draftSaved}
+          className="dd-footer-btn"
+          style={{ color: draftSaved ? "#16a34a" : "var(--color-text-muted)", fontWeight: draftSaved ? 600 : 500 }}>
+          {draftSaved ? "✓ Saved as Draft" : "Save Draft"}
         </button>
 
-        {/* Appeal Later → In Progress */}
-        <button onClick={handleAppealLater} disabled={appealing} className="dd-footer-btn">
-          {appealing ? <><Loader2 size={14} className="animate-spin" /> Updating...</> : "Appeal Later"}
+        {/* Appeal Later — opens modal for reason */}
+        <button
+          onClick={() => setAppealOpen(true)}
+          className="dd-footer-btn">
+          Appeal Later
         </button>
+
       </div>
+
+      {/* ── Appeal Later Modal ── */}
+      <Modal
+        open={appealOpen}
+        onClose={() => setAppealOpen(false)}
+        title="Appeal Later"
+        size="sm"
+        footer={
+          <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+            <button
+              onClick={() => setAppealOpen(false)}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleAppealSubmit}
+              disabled={appealing}
+              className="btn-primary"
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: appealing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: appealing ? 0.7 : 1 }}>
+              {appealing
+                ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
+                : "Submit Appeal"}
+            </button>
+          </div>
+        }>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
+            Provide a reason for appealing this dispute later. This will be logged against the case.
+          </p>
+          <textarea
+            rows={4}
+            placeholder="e.g. I disagree with the resolution because..."
+            value={appealReason}
+            onChange={(e) => setAppealReason(e.target.value)}
+            style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

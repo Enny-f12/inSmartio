@@ -85,7 +85,7 @@ export const fetchVerificationById = createAsyncThunk(
   "verifications/fetchById",
   async (
     { id, type, summary }: { id: string; type: VerificationType; summary: ApiVerificationSummary },
-    { rejectWithValue }
+    { }
   ) => {
     try {
       const detail = await getVerificationById(id, type);
@@ -102,7 +102,7 @@ export const verifyExpertThunk = createAsyncThunk(
   "verifications/verify",
   async (
     { id, type, payload }: { id: string; type: VerificationType; payload: VerifyExpertPayload },
-    { rejectWithValue }
+    { }
   ) => {
     try {
       await verifyExpert(id, type, payload);

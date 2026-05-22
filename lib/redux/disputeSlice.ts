@@ -3,11 +3,11 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   getAllDisputes, getDisputeById, getDisputeByCaseId,
-  createDispute, updateDispute, deleteDispute, resolveDispute,
+  createDispute, updateDispute, deleteDispute, appealDispute,
   type ApiDispute,
   type CreateDisputePayload,
   type UpdateDisputePayload,
-  type ResolveDisputePayload,
+  type AppealDisputePayload,
 } from "@/lib/api/disputeApi";
 
 interface DisputeState {
@@ -32,8 +32,6 @@ const initialState: DisputeState = {
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
-
-// ── Thunks ────────────────────────────────────────────────
 
 export const fetchDisputes = createAsyncThunk(
   "disputes/fetchAll",
@@ -83,24 +81,25 @@ export const removeDispute = createAsyncThunk(
   }
 );
 
-// PROPOSED: POST /api/dispute/{id}/resolve
-// Submits decision — backend sets status to "Resolved" + releases escrow
-export const resolveDisputeThunk = createAsyncThunk(
-  "disputes/resolve",
-  async ({ id, payload }: { id: string; payload: ResolveDisputePayload }, { rejectWithValue }) => {
-    try { return await resolveDispute(id, payload); }
-    catch (err) { return rejectWithValue(errMsg(err, "Failed to resolve dispute")); }
+// POST /api/dispute/{id}/appeal
+// Used for Submit Decision (with resolution) and Appeal Later (with reason only)
+export const appealDisputeThunk = createAsyncThunk(
+  "disputes/appeal",
+  async (
+    { id, payload }: { id: string; payload: AppealDisputePayload },
+    { rejectWithValue }
+  ) => {
+    try { return await appealDispute(id, payload); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to submit appeal")); }
   }
 );
 
-// ── Helper to update a dispute in list + selected ─────────
 const updateInState = (state: DisputeState, updated: ApiDispute) => {
   const idx = state.list.findIndex((d) => d.id === updated.id);
   if (idx !== -1) state.list[idx] = updated;
   if (state.selected?.id === updated.id) state.selected = updated;
 };
 
-// ── Slice ─────────────────────────────────────────────────
 const disputeSlice = createSlice({
   name: "disputes",
   initialState,
@@ -120,7 +119,6 @@ const disputeSlice = createSlice({
       .addCase(fetchDisputes.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
       .addCase(fetchDisputes.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
 
-    // both fetchById + fetchByCaseId set selected
     [fetchDisputeById, fetchDisputeByCaseId].forEach((thunk) => {
       builder
         .addCase(thunk.pending,   (state) => { state.selectedStatus = "loading"; state.selected = null; })
@@ -147,11 +145,10 @@ const disputeSlice = createSlice({
       })
       .addCase(removeDispute.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
 
-    // resolve — proposed, updates dispute once backend confirms
     builder
-      .addCase(resolveDisputeThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
-      .addCase(resolveDisputeThunk.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })
-      .addCase(resolveDisputeThunk.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+      .addCase(appealDisputeThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
+      .addCase(appealDisputeThunk.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })
+      .addCase(appealDisputeThunk.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
   },
 });
 

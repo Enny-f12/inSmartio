@@ -1,7 +1,6 @@
 // lib/api/disputeApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Types ─────────────────────────────────────────────────
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
 export type DisputeStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
@@ -26,9 +25,6 @@ export interface ApiDispute {
   updatedAt?:      string;
 }
 
-// ── Create payload ────────────────────────────────────────
-// POST /api/dispute
-// Response: { status: true, message: string, data: ApiDispute }
 export interface CreateDisputePayload {
   jobId:           string;
   date:            string;
@@ -40,36 +36,28 @@ export interface CreateDisputePayload {
   chatId:          string;
 }
 
-// ── Update payload ────────────────────────────────────────
-// PUT /api/dispute/{id}
-// Used by frontend for status changes: Open → In Progress
-// Response: { status: true, message: string, data: ApiDispute }
 export interface UpdateDisputePayload extends Partial<CreateDisputePayload> {
   status?: DisputeStatus;
 }
 
-// ── PROPOSED: Resolve payload ─────────────────────────────
-// POST /api/dispute/{id}/resolve
-// Backend handles escrow release + sets status to "Resolved" automatically
-// Request:
-// {
-//   resolution: "full_expert" | "full_client" | "dismiss" | "partial_70" | "reperform",
-//   reason?: string
-// }
-// Response: { status: true, message: "Dispute resolved successfully", data: ApiDispute }
-export type ResolutionType =
-  | "full_expert"    // Full payment to expert
-  | "full_client"    // Full refund to client
-  | "dismiss"        // Dismiss dispute
-  | "partial_70"     // Partial payment (70%)
-  | "reperform";     // Re-performance ordered
-
-export interface ResolveDisputePayload {
-  resolution: ResolutionType;
-  reason?:    string;
+// POST /api/dispute/{id}/appeal
+// Used for: Submit Decision, Appeal Later
+export interface AppealDisputePayload {
+  reason: string;
 }
 
-// ── Response wrappers ─────────────────────────────────────
+export type ResolutionType =
+  | "full_expert"
+  | "full_client"
+  | "dismiss"
+  | "partial_70"
+  | "reperform";
+
+// Submit Decision extends appeal with resolution type
+export interface SubmitDecisionPayload extends AppealDisputePayload {
+  resolution: ResolutionType;
+}
+
 interface DisputesResponse {
   status:  boolean;
   message: string;
@@ -82,46 +70,40 @@ interface DisputeResponse {
   data:    ApiDispute;
 }
 
-// ── API functions ─────────────────────────────────────────
-
-// GET /api/dispute
 export const getAllDisputes = async (): Promise<ApiDispute[]> => {
   const { data } = await axiosInstance.get<DisputesResponse>("/dispute");
-  console.log("📋 Disputes API:", data);
   return data.data ?? [];
 };
 
-// GET /api/dispute/{id}
 export const getDisputeById = async (id: string): Promise<ApiDispute> => {
   const { data } = await axiosInstance.get<DisputeResponse>(`/dispute/${id}`);
   return data.data;
 };
 
-// GET /api/dispute/case/{caseId}
 export const getDisputeByCaseId = async (caseId: string): Promise<ApiDispute> => {
   const { data } = await axiosInstance.get<DisputeResponse>(`/dispute/case/${caseId}`);
   return data.data;
 };
 
-// POST /api/dispute
 export const createDispute = async (payload: CreateDisputePayload): Promise<ApiDispute> => {
   const { data } = await axiosInstance.post<DisputeResponse>("/dispute", payload);
   return data.data;
 };
 
-// PUT /api/dispute/{id}
 export const updateDispute = async (id: string, payload: UpdateDisputePayload): Promise<ApiDispute> => {
   const { data } = await axiosInstance.put<DisputeResponse>(`/dispute/${id}`, payload);
   return data.data;
 };
 
-// DELETE /api/dispute/{id}
 export const deleteDispute = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/dispute/${id}`);
 };
 
-// PROPOSED: POST /api/dispute/{id}/resolve
-export const resolveDispute = async (id: string, payload: ResolveDisputePayload): Promise<ApiDispute> => {
-  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/resolve`, payload);
+// POST /api/dispute/{id}/appeal — used for submit decision AND appeal later
+export const appealDispute = async (
+  id:      string,
+  payload: AppealDisputePayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/appeal`, payload);
   return data.data;
 };

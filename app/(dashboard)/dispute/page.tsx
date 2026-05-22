@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Download, Eye, Loader2, Plus } from "lucide-react";
+import { Search, Download, Eye, Loader2 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { PriorityLabel } from "@/components/disputes/DisputeBadges";
 import DisputeDetail from "@/components/disputes/Disputedetail";
@@ -148,9 +148,7 @@ export default function DisputesPage() {
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
             {listStatus === "succeeded" ? `${list.length} disputes total` : "Disputes"}
           </p>
-          <button onClick={() => setCreateOpen(true)} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
-            <Plus size={15} /> New Dispute
-          </button>
+          
         </div>
 
         {/* Stats */}
