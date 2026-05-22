@@ -7,17 +7,11 @@ import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchTransactions, fetchTransactionById, clearSelectedTransaction } from "@/lib/redux/paymentSlice";
 import type { ApiTransaction } from "@/lib/api/paymentApi";
 
+// ── Mock data (max 3) — only shown after API fails or returns empty ──
 const MOCK_TRANSACTIONS: ApiTransaction[] = [
-  { id: "txn_001", reference: "PAY-2026-001", amount: 75000,  type: "payment",    status: "success",  userId: "user_emeka",  jobId: "job_001", description: "Plumbing repair",     createdAt: "2026-05-01T10:00:00Z" },
-  { id: "txn_002", reference: "PAY-2026-002", amount: 50000,  type: "escrow",     status: "pending",  userId: "user_ngozi",  jobId: "job_002", description: "Electrician service", createdAt: "2026-05-03T14:22:00Z" },
-  { id: "txn_003", reference: "PAY-2026-003", amount: 120000, type: "payout",     status: "success",  userId: "user_chidi",  jobId: "job_003", description: "Expert payout",       createdAt: "2026-05-05T09:10:00Z" },
-  { id: "txn_004", reference: "PAY-2026-004", amount: 30000,  type: "refund",     status: "refunded", userId: "user_peter",  jobId: "job_004", description: "Service cancelled",   createdAt: "2026-05-07T16:45:00Z" },
-  { id: "txn_005", reference: "PAY-2026-005", amount: 200000, type: "payment",    status: "success",  userId: "user_mary",   jobId: "job_005", description: "AC installation",     createdAt: "2026-05-08T11:30:00Z" },
-  { id: "txn_006", reference: "PAY-2026-006", amount: 45000,  type: "escrow",     status: "pending",  userId: "user_john",   jobId: "job_006", description: "Carpentry work",      createdAt: "2026-05-10T08:15:00Z" },
-  { id: "txn_007", reference: "PAY-2026-007", amount: 90000,  type: "withdrawal", status: "success",  userId: "user_james",  jobId: "job_007", description: "TAS withdrawal",      createdAt: "2026-05-12T13:00:00Z" },
-  { id: "txn_008", reference: "PAY-2026-008", amount: 15000,  type: "payment",    status: "failed",   userId: "user_mayowa", jobId: "job_008", description: "Payment declined",    createdAt: "2026-05-14T17:20:00Z" },
-  { id: "txn_009", reference: "PAY-2026-009", amount: 60000,  type: "payout",     status: "success",  userId: "user_adebayo",jobId: "job_009", description: "Expert payout",       createdAt: "2026-05-16T10:45:00Z" },
-  { id: "txn_010", reference: "PAY-2026-010", amount: 180000, type: "escrow",     status: "success",  userId: "user_fatima", jobId: "job_010", description: "Home renovation",     createdAt: "2026-05-18T12:00:00Z" },
+  { id: "txn_001", reference: "PAY-2026-001", amount: 75000,  type: "payment", status: "success",  userId: "user_emeka", jobId: "job_001", description: "Plumbing repair",     createdAt: "2026-05-01T10:00:00Z" },
+  { id: "txn_002", reference: "PAY-2026-002", amount: 50000,  type: "escrow",  status: "pending",  userId: "user_ngozi", jobId: "job_002", description: "Electrician service", createdAt: "2026-05-03T14:22:00Z" },
+  { id: "txn_003", reference: "PAY-2026-003", amount: 120000, type: "payout",  status: "success",  userId: "user_chidi", jobId: "job_003", description: "Expert payout",       createdAt: "2026-05-05T09:10:00Z" },
 ];
 
 const PAGE_SIZE = 10;
@@ -69,7 +63,6 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-// ── Transaction detail panel ───────────────────────────────
 function TransactionDetail({ txn, onClose }: { txn: ApiTransaction; onClose: () => void }) {
   return (
     <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -103,7 +96,7 @@ function TransactionDetail({ txn, onClose }: { txn: ApiTransaction; onClose: () 
 
 export default function TransactionsTab() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.payments);
+  const { list, listStatus, selected, selectedStatus } = useAppSelector((s) => s.payments);
 
   const [search,   setSearch]   = useState("");
   const [searchBy, setSearchBy] = useState("Type");
@@ -113,8 +106,14 @@ export default function TransactionsTab() {
     if (listStatus === "idle") dispatch(fetchTransactions());
   }, [dispatch, listStatus]);
 
-  // Use real data if available, else mock
-  const transactions = listStatus === "succeeded" && list.length > 0 ? list : MOCK_TRANSACTIONS;
+  const isLoading = listStatus === "idle" || listStatus === "loading";
+
+  // Only show mock data after API has resolved and returned nothing
+  const transactions = listStatus === "succeeded"
+    ? (list.length > 0 ? list : MOCK_TRANSACTIONS)
+    : listStatus === "failed"
+    ? MOCK_TRANSACTIONS
+    : []; // empty while loading — no mock flash
 
   const filtered = transactions.filter((t) => {
     if (!search) return true;
@@ -127,7 +126,7 @@ export default function TransactionsTab() {
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
-  // Show detail panel
+  // Detail panel
   if (selectedStatus === "loading") return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
       <Loader2 size={18} className="animate-spin" /><span style={{ fontSize: "13px" }}>Loading transaction...</span>
@@ -142,7 +141,7 @@ export default function TransactionsTab() {
       <style>{`
         .txn-toolbar-row1 { display: flex; flex-direction: column; gap: 8px; }
         .txn-table-wrap   { display: none; }
-        .txn-cards        { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
+        .txn-cards        { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
         .txn-pagination   { flex-direction: column; gap: 8px; align-items: flex-start; }
         @media (min-width: 540px) { .txn-toolbar-row1 { flex-direction: row; align-items: center; } }
         @media (min-width: 768px) {
@@ -172,18 +171,23 @@ export default function TransactionsTab() {
           </div>
         </div>
 
-        {/* Loading */}
-        {listStatus === "loading" && list.length === 0 && (
+        {/* Loading spinner — no data shown while fetching */}
+        {isLoading && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
-            <Loader2 size={18} className="animate-spin" /><span style={{ fontSize: "13px" }}>Loading transactions...</span>
+            <Loader2 size={18} className="animate-spin" />
+            <span style={{ fontSize: "13px" }}>Loading transactions...</span>
           </div>
         )}
 
+        {/* Error */}
         {listStatus === "failed" && (
-          <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
+          <p style={{ textAlign: "center", padding: "4px 0 0", fontSize: "12px", color: "#d97706" }}>
+            Could not load live data — showing sample transactions.
+          </p>
         )}
 
-        {(listStatus === "succeeded" || listStatus === "loading" || listStatus === "idle") && (
+        {/* Table + cards — only after loading resolves */}
+        {!isLoading && (
           <>
             {/* Desktop table */}
             <div className="txn-table-wrap" style={{ overflowX: "auto" }}>
@@ -219,12 +223,12 @@ export default function TransactionsTab() {
             </div>
 
             {/* Mobile cards */}
-            <div className="txn-cards" style={{ backgroundColor: "var(--color-background)", padding: "12px" }}>
+            <div className="txn-cards" style={{ backgroundColor: "var(--color-background)" }}>
               {paginated.length === 0 ? (
                 <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No transactions found.</p>
               ) : paginated.map((t) => (
-                <div key={t.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}
-                  onClick={() => dispatch(fetchTransactionById(t.id))}>
+                <div key={t.id} onClick={() => dispatch(fetchTransactionById(t.id))}
+                  style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px", gap: "8px" }}>
                     <div>
                       <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{t.type}</p>
@@ -245,8 +249,8 @@ export default function TransactionsTab() {
           </>
         )}
 
-        {/* Pagination */}
-        {(listStatus === "succeeded" || listStatus === "loading" || listStatus === "idle") && (
+        {/* Pagination — only after loading resolves */}
+        {!isLoading && (
           <div className="txn-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
             <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
               {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
@@ -265,6 +269,7 @@ export default function TransactionsTab() {
             </div>
           </div>
         )}
+
       </div>
     </>
   );

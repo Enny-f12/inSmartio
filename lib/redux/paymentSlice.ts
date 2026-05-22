@@ -4,24 +4,41 @@ import axios from "axios";
 import {
   getTransactionHistory, getTransactionById,
   refundTransaction, getBalances,
+  getEscrows, releaseEscrow,
+  getPayouts, retryPayout,
   type ApiTransaction, type ApiBalances, type RefundPayload,
+  type ApiEscrow, type ReleaseEscrowPayload,
+  type ApiPayout,
 } from "@/lib/api/paymentApi";
 
+type Status = "idle" | "loading" | "succeeded" | "failed";
+
 interface PaymentState {
-  // transactions list
+  // transactions
   list:           ApiTransaction[];
-  listStatus:     "idle" | "loading" | "succeeded" | "failed";
+  listStatus:     Status;
   listError:      string | null;
-  // single transaction
   selected:       ApiTransaction | null;
-  selectedStatus: "idle" | "loading" | "succeeded" | "failed";
+  selectedStatus: Status;
   // balances
   balances:       ApiBalances | null;
-  balancesStatus: "idle" | "loading" | "succeeded" | "failed";
+  balancesStatus: Status;
   balancesError:  string | null;
-  // mutations (refund)
-  mutateStatus:   "idle" | "loading" | "succeeded" | "failed";
+  // refund
+  mutateStatus:   Status;
   mutateError:    string | null;
+  // escrows
+  escrows:        ApiEscrow[];
+  escrowsStatus:  Status;
+  escrowsError:   string | null;
+  releaseStatus:  Status;
+  releaseError:   string | null;
+  // payouts
+  payouts:        ApiPayout[];
+  payoutsStatus:  Status;
+  payoutsError:   string | null;
+  retryStatus:    Status;
+  retryError:     string | null;
 }
 
 const initialState: PaymentState = {
@@ -35,14 +52,23 @@ const initialState: PaymentState = {
   balancesError:  null,
   mutateStatus:   "idle",
   mutateError:    null,
+  escrows:        [],
+  escrowsStatus:  "idle",
+  escrowsError:   null,
+  releaseStatus:  "idle",
+  releaseError:   null,
+  payouts:        [],
+  payoutsStatus:  "idle",
+  payoutsError:   null,
+  retryStatus:    "idle",
+  retryError:     null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
 
-// ── Thunks ────────────────────────────────────────────────
+// ── Transaction thunks ────────────────────────────────────
 
-// GET /api/admin/transaction-history
 export const fetchTransactions = createAsyncThunk(
   "payments/fetchAll",
   async (_, { rejectWithValue }) => {
@@ -51,7 +77,6 @@ export const fetchTransactions = createAsyncThunk(
   }
 );
 
-// GET /api/admin/transaction/{id}
 export const fetchTransactionById = createAsyncThunk(
   "payments/fetchById",
   async (id: string, { rejectWithValue }) => {
@@ -60,7 +85,6 @@ export const fetchTransactionById = createAsyncThunk(
   }
 );
 
-// POST /api/admin/transaction/{id}/refund
 export const refundTransactionThunk = createAsyncThunk(
   "payments/refund",
   async ({ id, payload }: { id: string; payload?: RefundPayload }, { rejectWithValue }) => {
@@ -69,12 +93,51 @@ export const refundTransactionThunk = createAsyncThunk(
   }
 );
 
-// GET /api/admin/balances
 export const fetchBalances = createAsyncThunk(
   "payments/fetchBalances",
   async (_, { rejectWithValue }) => {
     try { return await getBalances(); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch balances")); }
+  }
+);
+
+// ── Escrow thunks ─────────────────────────────────────────
+
+// GET /api/admin/escrows
+export const fetchEscrows = createAsyncThunk(
+  "payments/fetchEscrows",
+  async (_, { rejectWithValue }) => {
+    try { return await getEscrows(); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch escrows")); }
+  }
+);
+
+// POST /api/admin/escrows/{escrowId}/release
+export const releaseEscrowThunk = createAsyncThunk(
+  "payments/releaseEscrow",
+  async ({ escrowId, payload }: { escrowId: string; payload?: ReleaseEscrowPayload }, { rejectWithValue }) => {
+    try { return await releaseEscrow(escrowId, payload); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to release escrow")); }
+  }
+);
+
+// ── Payout thunks ─────────────────────────────────────────
+
+// GET /api/admin/payouts
+export const fetchPayouts = createAsyncThunk(
+  "payments/fetchPayouts",
+  async (_, { rejectWithValue }) => {
+    try { return await getPayouts(); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch payouts")); }
+  }
+);
+
+// POST /api/admin/payouts/{payoutId}/retry
+export const retryPayoutThunk = createAsyncThunk(
+  "payments/retryPayout",
+  async (payoutId: string, { rejectWithValue }) => {
+    try { return await retryPayout(payoutId); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to retry payout")); }
   }
 );
 
@@ -91,6 +154,14 @@ const paymentSlice = createSlice({
       state.mutateStatus = "idle";
       state.mutateError  = null;
     },
+    resetReleaseStatus: (state) => {
+      state.releaseStatus = "idle";
+      state.releaseError  = null;
+    },
+    resetRetryStatus: (state) => {
+      state.retryStatus = "idle";
+      state.retryError  = null;
+    },
   },
   extraReducers: (builder) => {
     // fetchTransactions
@@ -105,7 +176,7 @@ const paymentSlice = createSlice({
       .addCase(fetchTransactionById.fulfilled, (state, action) => { state.selectedStatus = "succeeded"; state.selected = action.payload; })
       .addCase(fetchTransactionById.rejected,  (state) => { state.selectedStatus = "failed"; });
 
-    // refundTransaction — update in list + selected
+    // refundTransaction
     builder
       .addCase(refundTransactionThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
       .addCase(refundTransactionThunk.fulfilled, (state, action) => {
@@ -124,8 +195,52 @@ const paymentSlice = createSlice({
       .addCase(fetchBalances.pending,   (state) => { state.balancesStatus = "loading"; state.balancesError = null; })
       .addCase(fetchBalances.fulfilled, (state, action) => { state.balancesStatus = "succeeded"; state.balances = action.payload; })
       .addCase(fetchBalances.rejected,  (state, action) => { state.balancesStatus = "failed"; state.balancesError = action.payload as string; });
+
+    // fetchEscrows
+    builder
+      .addCase(fetchEscrows.pending,   (state) => { state.escrowsStatus = "loading"; state.escrowsError = null; })
+      .addCase(fetchEscrows.fulfilled, (state, action) => { state.escrowsStatus = "succeeded"; state.escrows = action.payload; })
+      .addCase(fetchEscrows.rejected,  (state, action) => { state.escrowsStatus = "failed"; state.escrowsError = action.payload as string; });
+
+    // releaseEscrow — update in-list record
+    builder
+      .addCase(releaseEscrowThunk.pending,   (state) => { state.releaseStatus = "loading"; state.releaseError = null; })
+      .addCase(releaseEscrowThunk.fulfilled, (state, action) => {
+        state.releaseStatus = "succeeded";
+        const idx = state.escrows.findIndex((e) => e.id === action.payload.id);
+        if (idx !== -1) state.escrows[idx] = action.payload;
+      })
+      .addCase(releaseEscrowThunk.rejected, (state, action) => {
+        state.releaseStatus = "failed";
+        state.releaseError  = action.payload as string;
+      });
+
+    // fetchPayouts
+    builder
+      .addCase(fetchPayouts.pending,   (state) => { state.payoutsStatus = "loading"; state.payoutsError = null; })
+      .addCase(fetchPayouts.fulfilled, (state, action) => { state.payoutsStatus = "succeeded"; state.payouts = action.payload; })
+      .addCase(fetchPayouts.rejected,  (state, action) => { state.payoutsStatus = "failed"; state.payoutsError = action.payload as string; });
+
+    // retryPayout — update in-list record
+    builder
+      .addCase(retryPayoutThunk.pending,   (state) => { state.retryStatus = "loading"; state.retryError = null; })
+      .addCase(retryPayoutThunk.fulfilled, (state, action) => {
+        state.retryStatus = "succeeded";
+        const idx = state.payouts.findIndex((p) => p.id === action.payload.id);
+        if (idx !== -1) state.payouts[idx] = action.payload;
+      })
+      .addCase(retryPayoutThunk.rejected, (state, action) => {
+        state.retryStatus = "failed";
+        state.retryError  = action.payload as string;
+      });
   },
 });
 
-export const { clearSelectedTransaction, resetMutateStatus } = paymentSlice.actions;
+export const {
+  clearSelectedTransaction,
+  resetMutateStatus,
+  resetReleaseStatus,
+  resetRetryStatus,
+} = paymentSlice.actions;
+
 export default paymentSlice.reducer;
