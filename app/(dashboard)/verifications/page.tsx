@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
   fetchVerifications,
-  selectVerification,
+  fetchVerificationById,
   clearSelectedVerification,
 } from "@/lib/redux/verificationSlice";
 import type { ApiVerificationSummary, VerificationTier } from "@/lib/api/verificationApi";
@@ -131,7 +131,9 @@ const statusVariant = (s: string): "green" | "yellow" | "red" | "gray" => {
 
 export default function VerificationsPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected } = useAppSelector((s) => s.verifications);
+  const { list, listStatus, listError, selected, selectedStatus } = useAppSelector(
+    (s) => s.verifications
+  );
 
   const [activeTier, setActiveTier] = useState<TierLabel>("Tier 1");
   const [search,     setSearch]     = useState("");
@@ -142,16 +144,12 @@ export default function VerificationsPage() {
   }, [dispatch, listStatus]);
 
   // Merge real API data with mock — real data wins, mock fills the rest
-  // Real API items get tier assigned by index position (first third = tier1 etc.)
-  // until backend adds a tier field
   const mergedData: ApiVerificationSummary[] = (() => {
     if (listStatus === "succeeded" && list.length > 0) {
-      // Assign tiers to real data by index until backend provides tier field
       const withTiers = list.map((item, i): ApiVerificationSummary => ({
         ...item,
         tier: item.tier ?? (i % 3 === 0 ? "tier1" : i % 3 === 1 ? "tier2" : "tier3"),
       }));
-      // Supplement with mock data for tiers that have no real entries
       const realTiers = new Set(withTiers.map((i) => i.tier));
       const mockFill  = MOCK_VERIFICATIONS.filter((m) => !realTiers.has(m.tier));
       return [...withTiers, ...mockFill];
@@ -172,12 +170,21 @@ export default function VerificationsPage() {
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
-  // Counts per tier for the badge
   const tierCounts: Record<VerificationTier, number> = {
     tier1: mergedData.filter((e) => e.tier === "tier1").length,
     tier2: mergedData.filter((e) => e.tier === "tier2").length,
     tier3: mergedData.filter((e) => e.tier === "tier3").length,
   };
+
+  const handleOpenDetail = (expert: ApiVerificationSummary) => {
+    dispatch(fetchVerificationById({ id: expert.id, type: expert.tier ?? "tier1" }));
+  };
+
+  const handleCloseModal = () => {
+    dispatch(clearSelectedVerification());
+  };
+
+  const isModalOpen = selectedStatus === "loading" || selectedStatus === "succeeded";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
@@ -211,7 +218,7 @@ export default function VerificationsPage() {
           {/* Tier filters */}
           <div className="ver-tiers">
             {TIERS.map((tier) => {
-              const count = tierCounts[tierLabelToKey[tier]];
+              const count    = tierCounts[tierLabelToKey[tier]];
               const isActive = tier === activeTier;
               return (
                 <button key={tier} onClick={() => { setActiveTier(tier); setPage(1); }}
@@ -282,7 +289,8 @@ export default function VerificationsPage() {
                         <td style={{ padding: "16px 24px" }}><StatusBadge label={expert.status ?? "pending"} variant={statusVariant(expert.status ?? "")} /></td>
                         <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{getDocLabel(expert)}</td>
                         <td style={{ padding: "16px 24px" }}>
-                          <button onClick={() => dispatch(selectVerification(expert))}
+                          <button
+                            onClick={() => handleOpenDetail(expert)}
                             style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
                             <Eye size={17} strokeWidth={1.8} />
                           </button>
@@ -307,7 +315,8 @@ export default function VerificationsPage() {
                         <span style={{ fontSize: "12px", color: "#6B7280" }}>Docs: {getDocLabel(expert)}</span>
                       </div>
                     </div>
-                    <button onClick={() => dispatch(selectVerification(expert))}
+                    <button
+                      onClick={() => handleOpenDetail(expert)}
                       style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
                       <Eye size={16} strokeWidth={1.8} />
                     </button>
@@ -336,8 +345,12 @@ export default function VerificationsPage() {
         </div>
       </main>
 
-      {selected && (
-        <VerificationModal expert={selected} onClose={() => dispatch(clearSelectedVerification())} />
+      {/* Modal — opens on loading (spinner inside) or succeeded (full detail) */}
+      {isModalOpen && (
+        <VerificationModal
+          expert={selected}
+          onClose={handleCloseModal}
+        />
       )}
     </div>
   );
