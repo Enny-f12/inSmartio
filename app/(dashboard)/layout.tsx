@@ -1,9 +1,16 @@
-import React from 'react'
+// app/(dashboard)/layout.tsx
+import { SidebarProvider } from "@/context/SidebarContext";
+import SidebarWrapper from "@/components/layout/SidebarWrapper";
 
-const layout = () => {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div>layout</div>
-  )
+    <SidebarProvider>
+      <div className="flex w-full min-h-screen bg-background">
+        <SidebarWrapper />
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {children}
+        </div>
+      </div>
+    </SidebarProvider>
+  );
 }
-
-export default layout
