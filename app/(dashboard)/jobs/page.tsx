@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Eye, SlidersHorizontal, Loader2 } from "lucide-react";
+import { Download, Eye, SlidersHorizontal, Loader2, ArrowLeft } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { StatusBadge } from "@/components/ui/Badge";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
@@ -14,9 +14,15 @@ type StatusVariant = "green" | "yellow" | "purple" | "red" | "gray";
 
 const getStatusVariant = (status: string): StatusVariant => {
   const map: Record<string, StatusVariant> = {
-    completed: "green", inprogress: "yellow", in_progress: "yellow",
-    active: "yellow", bidding: "purple", open: "purple",
-    disputed: "red", cancelled: "gray", closed: "gray",
+    completed:   "green",
+    inprogress:  "yellow",
+    in_progress: "yellow",
+    active:      "yellow",
+    bidding:     "purple",
+    open:        "purple",
+    disputed:    "red",
+    cancelled:   "gray",
+    closed:      "gray",
   };
   return map[status?.toLowerCase()] ?? "gray";
 };
@@ -27,11 +33,159 @@ const MONTH_OPTIONS  = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", 
 const val = (job: ApiJob, ...keys: string[]): string => {
   for (const key of keys) {
     const v = job[key];
-    if (v !== undefined && v !== null) return String(v);
+    if (v !== undefined && v !== null && v !== "") return String(v);
   }
   return "—";
 };
 
+const fmt = (iso?: string | null) => {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleDateString("en-GB"); }
+  catch { return String(iso); }
+};
+
+// ── Shared detail sub-components ─────────────────────────────────
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6B7280", margin: "0 0 16px" }}>
+      {text}
+    </p>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
+      <span style={{ minWidth: "150px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function BidStatusChip({ status }: { status: string }) {
+  const s = status?.toLowerCase();
+  const color       = s === "accepted" ? "#16a34a" : s === "rejected" ? "#dc2626" : "#d97706";
+  const bgColor     = s === "accepted" ? "#f0fdf4"  : s === "rejected" ? "#fef2f2"  : "#fffbeb";
+  const borderColor = s === "accepted" ? "#bbf7d0"  : s === "rejected" ? "#fecaca"  : "#fde68a";
+  return (
+    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "999px", color, backgroundColor: bgColor, border: `1px solid ${borderColor}`, textTransform: "capitalize" }}>
+      {status}
+    </span>
+  );
+}
+
+// ── Job detail view ──────────────────────────────────────────────
+function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
+  const locationObj = job["location"] as { city?: string; address?: string } | undefined;
+  const location    = locationObj
+    ? [locationObj.address, locationObj.city].filter(Boolean).join(", ")
+    : val(job, "location");
+
+  const budgetObj     = job["budget"] as { amount?: number } | undefined;
+  const budget        = budgetObj?.amount ? `₦${budgetObj.amount.toLocaleString()}` : val(job, "budget");
+
+  const closed        = job["closed"] as boolean | undefined;
+  const verified      = job["verified"] as boolean | undefined;
+  const derivedStatus = closed ? "closed" : verified ? "active" : "bidding";
+  const status        = val(job, "status") !== "—" ? val(job, "status") : derivedStatus;
+
+  const bids = (job["bids"] as {
+    id: string;
+    expertId: string;
+    bidAmount: number;
+    currency: string;
+    status: string;
+    proposalText: string;
+    offerCashPayment: boolean;
+    createdAt: string;
+  }[]) ?? [];
+
+  const acceptedBid = bids.find((b) => b.status === "accepted");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
+      <Topbar title="Jobs" />
+      <main style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        <style>{`@media(min-width:640px){ .jd-main{ padding: 24px 32px !important; } }`}</style>
+
+        {/* Back */}
+        <button
+          onClick={onBack}
+          style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", fontWeight: 500, color: "#111827", background: "none", border: "none", cursor: "pointer", marginBottom: "24px" }}>
+          <ArrowLeft size={16} /> Jobs
+        </button>
+
+        {/* White card container */}
+        <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #E5E7EB", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>
+
+          {/* ── Job Information ── */}
+          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
+            <SectionLabel text="Job Information" />
+            <InfoRow label="Job ID:"         value={val(job, "id", "_id")} />
+            <InfoRow label="Title:"          value={val(job, "title")} />
+            <InfoRow label="Description:"    value={val(job, "description")} />
+            <InfoRow label="Category:"       value={val(job, "category")} />
+            <InfoRow label="Sub-Category:"   value={val(job, "subCategory")} />
+            <InfoRow label="Location:"       value={location} />
+            <InfoRow label="Budget:"         value={budget} />
+            <InfoRow label="Payment Method:" value={val(job, "paymentMethod")} />
+            <InfoRow label="Verification:"   value={val(job, "verification")} />
+            <InfoRow label="Start Date:"     value={fmt(job["startDate"] as string)} />
+            <InfoRow label="Deadline:"       value={fmt(job["deadline"] as string)} />
+            <InfoRow label="Posted:"         value={fmt(job["createdAt"] as string)} />
+            <InfoRow label="Posted By:"      value={val(job, "postedBy")} />
+            <InfoRow label="Status:"         value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
+          </div>
+
+          {/* ── Accepted Bid ── */}
+          {acceptedBid && (
+            <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
+              <SectionLabel text="Accepted Bid" />
+              <InfoRow label="Expert ID:"    value={acceptedBid.expertId} />
+              <InfoRow label="Bid Amount:"   value={`₦${acceptedBid.bidAmount.toLocaleString()} ${acceptedBid.currency}`} />
+              <InfoRow label="Cash Payment:" value={acceptedBid.offerCashPayment ? "Yes" : "No"} />
+              <InfoRow label="Proposal:"     value={acceptedBid.proposalText} />
+              <InfoRow label="Submitted:"    value={fmt(acceptedBid.createdAt)} />
+            </div>
+          )}
+
+          {/* ── All Bids ── */}
+          <div style={{ padding: "24px 32px" }}>
+            <SectionLabel text={`Bids (${bids.length})`} />
+            {bids.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No bids placed yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {bids.map((bid, i) => (
+                  <div key={bid.id ?? i} style={{ borderRadius: "10px", border: "1px solid #E5E7EB", padding: "14px 16px", backgroundColor: "#F9FAFB" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>
+                        ₦{bid.bidAmount.toLocaleString()} <span style={{ fontWeight: 400, fontSize: "12px", color: "#6B7280" }}>{bid.currency}</span>
+                      </span>
+                      <BidStatusChip status={bid.status} />
+                    </div>
+                    <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 4px" }}>
+                      Expert ID: <span style={{ color: "#111827", fontWeight: 500 }}>{bid.expertId}</span>
+                    </p>
+                    <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 6px" }}>
+                      {bid.proposalText}
+                    </p>
+                    <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0 }}>
+                      Submitted: {fmt(bid.createdAt)} · Cash payment: {bid.offerCashPayment ? "Yes" : "No"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ── Main list page ───────────────────────────────────────────────
 export default function JobsPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.jobs);
@@ -45,19 +199,16 @@ export default function JobsPage() {
   }, [dispatch, listStatus]);
 
   useEffect(() => {
-    if (listStatus === "succeeded" && list.length > 0) console.log("📋 Jobs API response shape:", list[0]);
+    if (listStatus === "succeeded" && list.length > 0)
+      console.log("📋 Jobs list item shape:", list[0]);
   }, [listStatus, list]);
 
-  useEffect(() => {
-    if (selectedStatus === "succeeded" && selected) console.log("📋 Job detail API response shape:", selected);
-  }, [selectedStatus, selected]);
-
-  // ── Detail loading ──
+  // ── Loading detail ──
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
         <Topbar title="Jobs" />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: "10px", color: "var(--color-text-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: "10px", color: "#9CA3AF" }}>
           <Loader2 size={18} className="animate-spin" />
           <span style={{ fontSize: "13px" }}>Loading job...</span>
         </div>
@@ -67,42 +218,19 @@ export default function JobsPage() {
 
   // ── Detail view ──
   if (selectedStatus === "succeeded" && selected) {
-    return (
-      <div className="flex flex-col flex-1">
-        <Topbar title="Jobs" />
-        <main className="flex-1 overflow-y-auto" style={{ padding: "16px" }}>
-          <style>{`@media(min-width:640px){ .job-detail-main{ padding: 24px 32px !important; } }`}</style>
-          <button onClick={() => dispatch(clearSelectedJob())} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px" }}>
-            ← Jobs
-          </button>
-          <div className="bg-surface rounded-2xl border border-border p-6">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-4">Job Details</p>
-            <div className="space-y-2">
-              {Object.entries(selected).map(([key, value]) => (
-                <div key={key} style={{ display: "flex", gap: "12px", fontSize: "13px", flexWrap: "wrap" }}>
-                  <span style={{ minWidth: "140px", flexShrink: 0, fontWeight: 500, color: "var(--color-text-muted)", textTransform: "capitalize" }}>{key}:</span>
-                  <span className="text-text-main" style={{ wordBreak: "break-word", flex: 1 }}>
-                    {typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
-      </div>
-    );
+    return <JobDetailView job={selected} onBack={() => dispatch(clearSelectedJob())} />;
   }
 
   const filtered = list.filter((j: ApiJob) => {
     const status = val(j, "status");
-    const title  = val(j, "title", "description", "jobTitle").toLowerCase();
+    const title  = val(j, "title", "description").toLowerCase();
     const matchStatus = statusFilter === "All" || status.toLowerCase() === statusFilter.toLowerCase();
     const matchSearch = !search || title.includes(search.toLowerCase());
     return matchStatus && matchSearch;
   });
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1" style={{ backgroundColor: "#F4F5F7" }}>
       <Topbar title="Jobs" />
 
       <style>{`
@@ -125,7 +253,7 @@ export default function JobsPage() {
 
       {/* Sub-header */}
       <div className="jobs-header flex items-center justify-between">
-        <p className="text-sm font-semibold text-text-main">
+        <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>
           {listStatus === "succeeded" ? `${list.length} jobs total` : "Jobs List"}
         </p>
         <button className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
@@ -134,34 +262,33 @@ export default function JobsPage() {
       </div>
 
       <main className="jobs-main flex-1">
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+        {/* White card */}
+        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
 
           {/* Filter toolbar */}
-          <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <SlidersHorizontal size={15} className="text-text-muted" />
-              <span className="text-sm font-semibold text-text-main">Filter</span>
+          <div style={{ padding: "16px", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
             </div>
             <div className="jobs-filter-row flex">
-              {/* Search */}
-              <div className="relative" style={{ flex: 1 }}>
-                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <div style={{ position: "relative", flex: 1 }}>
+                <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input
                   type="text"
                   placeholder="Search jobs..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
                 />
               </div>
-              {/* Dropdowns */}
               <div className="jobs-filter-dropdowns">
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Status:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Status:</span>
                   <FilterDropdown value={statusFilter} options={STATUS_OPTIONS} onChange={setStatusFilter} />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Date:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Date:</span>
                   <FilterDropdown value={monthFilter} options={MONTH_OPTIONS} onChange={setMonthFilter} />
                 </div>
               </div>
@@ -170,49 +297,65 @@ export default function JobsPage() {
 
           {/* Loading */}
           {listStatus === "loading" && (
-            <div className="flex items-center justify-center py-16 gap-3 text-text-muted">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "64px", gap: "10px", color: "#9CA3AF" }}>
               <Loader2 size={18} className="animate-spin" />
-              <span className="text-[13px]">Loading jobs...</span>
+              <span style={{ fontSize: "13px" }}>Loading jobs...</span>
             </div>
           )}
 
           {/* Error */}
           {listStatus === "failed" && (
-            <p className="text-center py-16 text-[13px] text-red-500">{listError}</p>
+            <p style={{ textAlign: "center", padding: "64px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
 
           {listStatus === "succeeded" && (
             <>
               {/* Desktop table */}
-              <div className="jobs-table overflow-x-auto">
-                <table className="w-full">
+              <div className="jobs-table" style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr className="border-b border-border bg-background">
-                      {["Job ID", "Title", "Client", "Expert", "Amount", "Status", "Actions"].map((h) => (
-                        <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
+                    <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                      {["Job ID", "Title", "Category", "Budget", "Status", "Posted", "Actions"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B7280" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center py-14 text-sm text-text-muted">
+                      <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>
                         {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
                       </td></tr>
-                    ) : filtered.map((job: ApiJob) => (
-                      <tr key={job.id} className="hover:bg-background transition-colors">
-                        <td className="px-6 py-4 text-[13px] font-semibold text-text-main">{val(job, "id", "jobId")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted max-w-45 truncate">{val(job, "title", "jobTitle", "description")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted">{val(job, "client", "clientName", "userId")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted">{val(job, "expert", "expertName", "assignedTo")}</td>
-                        <td className="px-6 py-4 text-[13px] font-medium text-text-main">{val(job, "amount", "budget", "price", "finalPrice")}</td>
-                        <td className="px-6 py-4"><StatusBadge label={val(job, "status")} variant={getStatusVariant(val(job, "status"))} /></td>
-                        <td className="px-6 py-4">
-                          <button onClick={() => dispatch(fetchJobById(job.id))} className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors" title="View job">
-                            <Eye size={17} strokeWidth={1.8} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    ) : filtered.map((job: ApiJob) => {
+                      const budgetObj     = job["budget"] as { amount?: number } | undefined;
+                      const budgetDisplay = budgetObj?.amount ? `₦${budgetObj.amount.toLocaleString()}` : val(job, "budget");
+                      const closed        = job["closed"] as boolean | undefined;
+                      const verified      = job["verified"] as boolean | undefined;
+                      const status        = val(job, "status") !== "—" ? val(job, "status") : closed ? "closed" : verified ? "active" : "bidding";
+                      return (
+                        <tr key={String(job.id)} style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                          <td style={{ padding: "16px 24px", fontSize: "12px", fontFamily: "monospace", color: "#6B7280", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={String(job.id)}>
+                            {String(job.id).slice(0, 12)}…
+                          </td>
+                          <td style={{ padding: "16px 24px", fontSize: "13px", color: "#111827", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {val(job, "title")}
+                          </td>
+                          <td style={{ padding: "16px 24px", fontSize: "13px", color: "#6B7280" }}>{val(job, "category")}</td>
+                          <td style={{ padding: "16px 24px", fontSize: "13px", fontWeight: 500, color: "#111827" }}>{budgetDisplay}</td>
+                          <td style={{ padding: "16px 24px" }}><StatusBadge label={status} variant={getStatusVariant(status)} /></td>
+                          <td style={{ padding: "16px 24px", fontSize: "13px", color: "#6B7280" }}>{fmt(job["createdAt"] as string)}</td>
+                          <td style={{ padding: "16px 24px" }}>
+                            <button
+                              onClick={() => dispatch(fetchJobById(String(job.id)))}
+                              style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}
+                              title="View job">
+                              <Eye size={17} strokeWidth={1.8} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -220,38 +363,47 @@ export default function JobsPage() {
               {/* Mobile cards */}
               <div className="jobs-cards">
                 {filtered.length === 0 ? (
-                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>
-                    {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF" }}>
+                    {list.length === 0 ? "No jobs posted yet." : "No jobs match your filter."}
                   </p>
-                ) : filtered.map((job: ApiJob) => (
-                  <div key={job.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {val(job, "title", "jobTitle", "description")}
-                      </p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                        <StatusBadge label={val(job, "status")} variant={getStatusVariant(val(job, "status"))} />
-                        <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{val(job, "client", "clientName")}</span>
-                        <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-main)" }}>{val(job, "amount", "budget", "price")}</span>
+                ) : filtered.map((job: ApiJob) => {
+                  const budgetObj     = job["budget"] as { amount?: number } | undefined;
+                  const budgetDisplay = budgetObj?.amount ? `₦${budgetObj.amount.toLocaleString()}` : val(job, "budget");
+                  const closed        = job["closed"] as boolean | undefined;
+                  const verified      = job["verified"] as boolean | undefined;
+                  const status        = val(job, "status") !== "—" ? val(job, "status") : closed ? "closed" : verified ? "active" : "bidding";
+                  return (
+                    <div key={String(job.id)} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {val(job, "title")}
+                        </p>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <StatusBadge label={status} variant={getStatusVariant(status)} />
+                          <span style={{ fontSize: "12px", color: "#6B7280" }}>{val(job, "category")}</span>
+                          <span style={{ fontSize: "12px", fontWeight: 500, color: "#111827" }}>{budgetDisplay}</span>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => dispatch(fetchJobById(String(job.id)))}
+                        style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                        <Eye size={16} strokeWidth={1.8} />
+                      </button>
                     </div>
-                    <button onClick={() => dispatch(fetchJobById(job.id))} style={{ padding: "8px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}>
-                      <Eye size={16} strokeWidth={1.8} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
 
           {/* Pagination */}
           {listStatus === "succeeded" && (
-            <div className="jobs-pagination flex items-center justify-between px-4 py-4 border-t border-border bg-background">
-              <p className="text-[12px] text-text-muted">Showing {filtered.length} of {list.length} jobs</p>
-              <div className="flex items-center gap-1.5">
-                <button className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted opacity-40 cursor-not-allowed">Prev</button>
-                <button className="w-8 h-8 rounded-lg text-[12px] font-medium btn-primary">1</button>
-                <button className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background">Next</button>
+            <div className="jobs-pagination" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+              <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>Showing {filtered.length} of {list.length} jobs</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: "not-allowed", opacity: 0.4 }}>Previous</button>
+                <button style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: "none", backgroundColor: "#16a34a", color: "#ffffff", cursor: "pointer" }}>1</button>
+                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: "pointer" }}>Next</button>
               </div>
             </div>
           )}
