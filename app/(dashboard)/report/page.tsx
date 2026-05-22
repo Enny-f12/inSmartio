@@ -24,17 +24,11 @@ import {
 import type {
   MonthlyUserGrowthItem,
   RevenueTrendItem,
-  TopCityItem,
+  TopCitiesData,
 } from "@/lib/api/reportApi";
 import type { ApiReportType } from "@/lib/api/reportApi";
 
 // ── Helpers ───────────────────────────────────────────────
-// "DD/MM/YYYY" → "YYYY-MM-DD"
-const toIso = (d: string): string => {
-  const [dd, mm, yyyy] = d.split("/");
-  return `${yyyy}-${mm}-${dd}`;
-};
-
 const toCsv = (rows: unknown[]): string => {
   if (!rows.length) return "";
   const asRecords = rows as Record<string, unknown>[];
@@ -65,26 +59,32 @@ const reportTypeToApi: Record<ReportType, ApiReportType> = {
   "Top Cities":           "top-cities",
 };
 
-// ── Build a live ReportConfig from API data ───────────────
-// Falls back to mock config values when API data is empty
+// Format "YYYY-MM-DD" → "DD/MM/YYYY" for display
+const fmtDisplay = (iso: string) => {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
+// ── Build live ReportConfig from API data ─────────────────
 const buildConfig = (
-  reportType: ReportType,
+  reportType:    ReportType,
   userGrowth:    MonthlyUserGrowthItem[],
   revenueTrend:  RevenueTrendItem[],
-  topCities:     TopCityItem[],
+  topCitiesData: TopCitiesData | null,
   topCategories: { categories: { category: string; percentage: number }[] } | null,
   dateFrom: string,
   dateTo:   string,
 ): ReportConfig => {
   const mock = reportConfigs[reportType];
+  const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
 
   switch (reportType) {
     case "User Growth Report": {
       if (!userGrowth.length) return mock;
-      const total   = userGrowth.reduce((s, d) => s + d.count, 0);
+      const total = userGrowth.reduce((s, d) => s + d.count, 0);
       return {
         ...mock,
-        title:      `User Growth · ${dateFrom} – ${dateTo}`,
+        title:      `User Growth · ${range}`,
         weeks:      userGrowth.map((d) => d.count),
         weekLabels: userGrowth.map((d) => d.month.slice(0, 3)),
         summary:    [{ label: "Total New Users:", value: total.toLocaleString() }],
@@ -95,7 +95,7 @@ const buildConfig = (
       const total = revenueTrend.reduce((s, d) => s + d.revenue, 0);
       return {
         ...mock,
-        title:      `Revenue Trend · ${dateFrom} – ${dateTo}`,
+        title:      `Revenue Trend · ${range}`,
         weeks:      revenueTrend.map((d) => d.revenue),
         weekLabels: revenueTrend.map((d) => d.month.slice(0, 3)),
         summary:    [{ label: "Total Revenue:", value: `₦${total.toLocaleString()}` }],
@@ -119,16 +119,26 @@ const buildConfig = (
       };
     }
     case "Top Cities": {
-      if (!topCities.length) return mock;
+      const cities = topCitiesData?.cities ?? [];
+      const overall = topCitiesData?.overall;
+      if (!cities.length) return mock;
       return {
         ...mock,
-        title:      `Top Cities · ${dateFrom} – ${dateTo}`,
-        weeks:      topCities.map((c) => c.totalUsersInCity),
-        weekLabels: topCities.map((c) => c.city),
-        summary:    topCities.map((c) => ({
-          label: `${c.city}:`,
-          value: `${c.totalUsersInCity.toLocaleString()} (${c.totalUsersInCityPercentageOfOverall.toFixed(0)}%)`,
-        })),
+        title:      `Top Cities · ${range}`,
+        weeks:      cities.map((c) => c.totalUsersInCity),
+        weekLabels: cities.map((c) => c.city),
+        summary: [
+          ...(overall ? [
+            { label: "Total Users:", value: overall.totalUsers.toLocaleString() },
+            { label: "Clients:",     value: `${overall.clients.count.toLocaleString()} (${overall.clients.percentage.toFixed(0)}%)` },
+            { label: "Experts:",     value: `${overall.experts.count.toLocaleString()} (${overall.experts.percentage.toFixed(0)}%)` },
+            { label: "TAS:",         value: `${overall.tas.count.toLocaleString()} (${overall.tas.percentage.toFixed(0)}%)` },
+          ] : []),
+          ...cities.map((c) => ({
+            label: `${c.city}:`,
+            value: `${c.totalUsersInCity.toLocaleString()} (${c.totalUsersInCityPercentageOfOverall.toFixed(0)}%)`,
+          })),
+        ],
       };
     }
   }
@@ -141,11 +151,12 @@ export default function ReportsPage() {
 
   const [reportType, setReportType] = useState<ReportType>("User Growth Report");
   const [format,     setFormat]     = useState<FormatType>("PDF");
-  const [dateFrom,   setDateFrom]   = useState("01/03/2026");
-  const [dateTo,     setDateTo]     = useState("31/03/2026");
+  // ISO dates — native date inputs use YYYY-MM-DD directly
+  const [dateFrom,   setDateFrom]   = useState("2025-05-01");
+  const [dateTo,     setDateTo]     = useState(new Date().toISOString().split("T")[0]);
   const [generated,  setGenerated]  = useState(false);
 
-  const query = { fromDate: toIso(dateFrom), toDate: toIso(dateTo) };
+  const query = { fromDate: dateFrom, toDate: dateTo };
 
   const isLoading =
     report.userGrowthStatus    === "loading" ||
@@ -167,7 +178,7 @@ export default function ReportsPage() {
     dispatch(downloadReportThunk({
       reportType: reportTypeToApi[reportType],
       query,
-      filename:   `${reportTypeToApi[reportType]}_report.pdf`,
+      filename:   `${reportTypeToApi[reportType]}_${dateFrom}_${dateTo}.pdf`,
     }))
       .unwrap()
       .catch(() => toast.error("Failed to download PDF"));
@@ -179,15 +190,22 @@ export default function ReportsPage() {
         case "User Growth Report":   return report.userGrowth;
         case "Revenue Trend Report": return report.revenueTrend;
         case "Top Service Category": return report.topCategories?.categories ?? [];
-        case "Top Cities":           return report.topCities;
+        case "Top Cities":           return report.topCitiesData?.cities ?? [];
       }
     })();
     if (!rows.length) { toast.warning("No data to export — generate the report first"); return; }
-    triggerCsvDownload(toCsv(rows), `${reportTypeToApi[reportType]}_report.csv`);
+    triggerCsvDownload(toCsv(rows), `${reportTypeToApi[reportType]}_${dateFrom}_${dateTo}.csv`);
   };
 
   const handleEmail = () => {
-    window.location.href = `mailto:?subject=${encodeURIComponent(reportType)}&body=${encodeURIComponent(`Please find the ${reportType} attached.\n\nDate range: ${dateFrom} to ${dateTo}`)}`;
+    const subject = encodeURIComponent(`${reportType} — ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)}`);
+    const body    = encodeURIComponent(
+      `Please find the ${reportType} for the period ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)} below.\n\n` +
+      `Report Type: ${reportType}\n` +
+      `Date Range:  ${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}\n\n` +
+      `Please download the attached report or visit the admin dashboard to view the full data.`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
 
   const handleExport = () => {
@@ -196,19 +214,15 @@ export default function ReportsPage() {
     else handleDownloadCsv();
   };
 
-  // Build config — uses live API data if available, mock otherwise
   const config = buildConfig(
     reportType,
     report.userGrowth,
     report.revenueTrend,
-    report.topCities,
+    report.topCitiesData ?? null,
     report.topCategories,
     dateFrom,
     dateTo,
   );
-
-  // Inject live action handlers into ReportCard via a wrapper
-  const configWithActions: ReportConfig = config;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -232,8 +246,8 @@ export default function ReportsPage() {
           dateTo={dateTo}
           onReportType={(v) => { setReportType(v); setGenerated(false); }}
           onFormat={setFormat}
-          onDateFrom={setDateFrom}
-          onDateTo={setDateTo}
+          onDateFrom={(v) => { setDateFrom(v); setGenerated(false); }}
+          onDateTo={(v)   => { setDateTo(v);   setGenerated(false); }}
           onGenerate={handleGenerate}
           onExport={handleExport}
         />
@@ -253,7 +267,7 @@ export default function ReportsPage() {
           </div>
         ) : (
           <ReportCard
-            config={configWithActions}
+            config={config}
             onDownloadPdf={handleDownloadPdf}
             onDownloadCsv={handleDownloadCsv}
             onEmail={handleEmail}
