@@ -54,8 +54,8 @@ export default function ReportCard({
           <DonutChart segments={config.segments} title={config.title} />
         )}
 
-        {/* Summary stats */}
-        {config.summary.length > 0 && (
+        {/* Summary stats — line charts only (donut legend already shows this) */}
+        {config.chartType !== "donut" && config.summary.length > 0 && (
           <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "6px" }}>
             {config.summary.map((s) => (
               <div key={s.label} className="rc-summary-row">

@@ -10,7 +10,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { login, resetAuthStatus } from "@/lib/redux/authSlice";
 
 import cleanerImage1 from "@/public/login/login-1.jpg";
-import cleanerImage2 from "@/public/login/login-2.png";
+import cleanerImage2 from "@/public/login/login-2.jpg";
 
 const slides = [cleanerImage1, cleanerImage2];
 

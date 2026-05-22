@@ -5,7 +5,7 @@ import { Download } from "lucide-react";
 import Topbar            from "@/components/layout/Navbar";
 import TransactionsTab   from "@/components/payments/Transactionstab";
 import EscrowReleasesTab from "@/components/payments/EscrowReleasetab";
-import PayoutsTab        from "@/components/payments/Payouttabs";
+//import PayoutsTab        from "@/components/payments/Payouttabs";
 import RefundsTab        from "@/components/payments/Refundstab";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchBalances } from "@/lib/redux/paymentSlice";
@@ -217,7 +217,7 @@ export default function PaymentsPage() {
 
         {activeTab === "Transactions"    && <TransactionsTab />}
         {activeTab === "Escrow Releases" && <EscrowReleasesTab />}
-        {activeTab === "Payouts"         && <PayoutsTab />}
+        
         {activeTab === "Refunds"         && <RefundsTab />}
       </main>
     </div>
