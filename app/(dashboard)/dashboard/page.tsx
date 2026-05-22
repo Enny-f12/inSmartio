@@ -7,13 +7,14 @@ import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchAdminStats } from "@/lib/redux/usersSlice";
+import { fetchTopCategoriesThunk } from "@/lib/redux/reportSlice";
 
-// ── Realistic rise-and-fall data ──────────────────────────
+// ── Static chart data (mock until report API covers these) ─
 const userGrowthData = {
   title:  "Monthly User Growth",
   yLabel: "Total Users",
   color:  "#7C3AED",
-  data:   [980, 1450, 2100, 1200,  1750, 4100, 3200, 2800,  6400, 3600, 5200, 4800,],
+  data:   [980, 1450, 2100, 1200, 1750, 4100, 3200, 2800, 6400, 3600, 5200, 4800],
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   xLabel: "Month",
 };
@@ -22,25 +23,39 @@ const revenueData = {
   title:  "Revenue Trend",
   yLabel: "Revenue (₦)",
   color:  "#2563eb",
-  data:   [420000, 890000,  1200000, 650000, 980000, 1800000, 1550000, 1100000, 1750000,  1400000, 2100000,  2600000],
+  data:   [420000, 890000, 1200000, 650000, 980000, 1800000, 1550000, 1100000, 1750000, 1400000, 2100000, 2600000],
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   xLabel: "Month",
 };
 
-const donutSegments = [
+// Fallback donut segments shown while loading or if API returns empty
+const FALLBACK_SEGMENTS = [
   { label: "Auto Repair",           value: 32, color: "#2563eb" },
   { label: "Creativity",            value: 27, color: "#F9A826" },
   { label: "Repair & Construction", value: 23, color: "#2E7D32" },
   { label: "Housekeeping",          value: 18, color: "#7B3F9E" },
 ];
 
+const CHART_COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
+
+// Wide date range for the donut — last 12 months
+const today     = new Date().toISOString().split("T")[0];
+const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
 export default function DashboardPage() {
   const dispatch = useAppDispatch();
   const { adminStats, statsStatus } = useAppSelector((s) => s.users);
+  const { topCategories, topCategoriesStatus } = useAppSelector((s) => s.report);
 
   useEffect(() => {
     if (statsStatus === "idle") dispatch(fetchAdminStats());
   }, [dispatch, statsStatus]);
+
+  useEffect(() => {
+    if (topCategoriesStatus === "idle") {
+      dispatch(fetchTopCategoriesThunk({ fromDate: oneYearAgo, toDate: today }));
+    }
+  }, [dispatch, topCategoriesStatus]);
 
   const isLoading = statsStatus === "loading" || statsStatus === "idle";
   const s = adminStats as {
@@ -51,11 +66,25 @@ export default function DashboardPage() {
   } | null;
 
   const stats = [
-    { label: "Total Users",      value: isLoading ? "—" : String(s?.totalUsers ?? "—"),                         icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
-    { label: "Verified Experts", value: isLoading ? "—" : String(s?.verifiedExperts ?? "—"),                    icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
-    { label: "Revenue",          value: isLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,       icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
-    { label: "Growth",           value: isLoading ? "—" : `+${s?.growthRate ?? 0}%`,                            icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
+    { label: "Total Users",      value: isLoading ? "—" : String(s?.totalUsers ?? "—"),                   icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Verified Experts", value: isLoading ? "—" : String(s?.verifiedExperts ?? "—"),              icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",          value: isLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`, icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",           value: isLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
+
+  // Build donut segments from real API data, fall back to mock if empty/loading
+  const donutSegments = (() => {
+    if (topCategories?.categories?.length) {
+      return topCategories.categories.map((c, i) => ({
+        label: c.category,
+        value: Math.round(c.percentage),
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      }));
+    }
+    return FALLBACK_SEGMENTS;
+  })();
+
+  const isDonutLoading = topCategoriesStatus === "loading" || topCategoriesStatus === "idle";
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: "#ffffff",
@@ -96,6 +125,17 @@ export default function DashboardPage() {
           .db-stat-label { font-size: 11px; }
           .db-stat-icon  { width: 36px; height: 36px; }
         }
+
+        .db-donut-skeleton {
+          display: flex; align-items: center; justify-content: center;
+          height: 280px; color: #9CA3AF; font-size: 13px; gap: 8px;
+        }
+        .db-spin {
+          width: 18px; height: 18px; border-radius: 50%;
+          border: 2px solid #E5E7EB; border-top-color: #2563eb;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       <main className="db-main" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -129,30 +169,42 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Donut Chart */}
+        {/* Donut Chart — Top Service Category from API */}
         <div style={{ ...cardStyle, padding: "20px" }}>
-          <div className="db-donut-desktop">
-            <DonutChart segments={donutSegments} title="Top Service Category" size={280} />
-          </div>
-          <div className="db-donut-mobile">
-            <DonutSVGOnly segments={donutSegments} size={200} />
-            <div style={{ width: "100%" }}>
-              <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", marginBottom: "12px", textAlign: "center" }}>
-                Top Service Category
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {donutSegments.map((seg) => (
-                  <div key={seg.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "13px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: seg.color, flexShrink: 0, display: "inline-block" }} />
-                      <span style={{ fontWeight: 500, color: "#111827" }}>{seg.label}</span>
-                    </div>
-                    <span style={{ color: "#6B7280" }}>{seg.value}%</span>
-                  </div>
-                ))}
-              </div>
+          {isDonutLoading ? (
+            <div className="db-donut-skeleton">
+              <div className="db-spin" />
+              Loading top categories…
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Desktop */}
+              <div className="db-donut-desktop">
+                <DonutChart segments={donutSegments} title="Top Service Category" size={280} />
+              </div>
+
+              {/* Mobile */}
+              <div className="db-donut-mobile">
+                <DonutSVGOnly segments={donutSegments} size={200} />
+                <div style={{ width: "100%" }}>
+                  <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", marginBottom: "12px", textAlign: "center" }}>
+                    Top Service Category
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {donutSegments.map((seg) => (
+                      <div key={seg.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "13px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: seg.color, flexShrink: 0, display: "inline-block" }} />
+                          <span style={{ fontWeight: 500, color: "#111827" }}>{seg.label}</span>
+                        </div>
+                        <span style={{ color: "#6B7280" }}>{seg.value}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
       </main>
@@ -160,17 +212,19 @@ export default function DashboardPage() {
   );
 }
 
-function DonutSVGOnly({ segments, size = 200 }: { segments: typeof donutSegments; size?: number }) {
+function DonutSVGOnly({ segments }: { segments: { label: string; value: number; color: string }[]; size?: number }) {
+  const size = 200;
   const cx = size / 2, cy = size / 2;
   const R = size * 0.375, r = size * 0.2167;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const total = segments.reduce((s, seg) => s + seg.value, 0) || 100;
   const startAngles = segments.map((_, i) =>
-    segments.slice(0, i).reduce((sum, s) => sum + (s.value / 100) * 360, -90)
+    segments.slice(0, i).reduce((sum, s) => sum + (s.value / total) * 360, -90)
   );
   const arcs = segments.map((seg, i) => {
     const start = startAngles[i];
-    const sweep = (seg.value / 100) * 360;
-    const end = start + sweep;
+    const sweep = (seg.value / total) * 360;
+    const end   = start + sweep;
     const large = sweep > 180 ? 1 : 0;
     const x1  = cx + R * Math.cos(toRad(start)), y1  = cy + R * Math.sin(toRad(start));
     const x2  = cx + R * Math.cos(toRad(end)),   y2  = cy + R * Math.sin(toRad(end));
