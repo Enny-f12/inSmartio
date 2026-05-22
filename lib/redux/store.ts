@@ -12,7 +12,9 @@ import verificationReducer from "./verificationSlice";
 import tasReducer          from "./tasSlice";
 import paymentReducer      from "./paymentSlice";
 import reportReducer  from "./reportSlice";
-
+import faqReducer     from "./faqSlice";
+import notificationReducer from "./notificationSlice";
+import commissionReducer from "./commissionSlice"
 export const store = configureStore({
   reducer: {
     counter:       counterReducer,
@@ -28,6 +30,9 @@ export const store = configureStore({
     tas:           tasReducer,
     payments:      paymentReducer,
     report: reportReducer,
+    faq:    faqReducer,
+    notifications: notificationReducer,
+    commission: commissionReducer,
   },
 });
 
