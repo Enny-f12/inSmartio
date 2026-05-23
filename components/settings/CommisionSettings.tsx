@@ -236,7 +236,9 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
                   onToggle={() => handleToggle(c)}
                   isMutating={isMutating} />
               ))
-            : STATIC_EXPERT.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
+            : listStatus === "succeeded"
+              ? STATIC_EXPERT.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
+              : null
           }
 
           {/* TAS */}
@@ -250,7 +252,9 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
                     onToggle={() => handleToggle(c)}
                     isMutating={isMutating} />
                 ))
-              : STATIC_TAS.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
+              : listStatus === "succeeded"
+                ? STATIC_TAS.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
+                : null
             }
           </div>
 
