@@ -4,8 +4,8 @@
 import { useState } from "react";
 import {
   ArrowLeft, User, Hash, Phone, Mail, Layers, Percent,
-  CalendarDays, ShieldCheck, Users, TrendingUp, Wallet,
-  Clock, PiggyBank, Hourglass,
+  CalendarDays, ShieldCheck, MapPin, FileText, Building2,
+  Users, Wallet, GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AgentBadge } from "./Tasbadges";
@@ -27,7 +27,13 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-function InfoRow({ icon: Icon, label, value, children }: { icon: React.ElementType; label: string; value?: string | number; children?: React.ReactNode }) {
+function InfoRow({ icon: Icon, label, value, children }: {
+  icon: React.ElementType;
+  label: string;
+  value?: string | number | null;
+  children?: React.ReactNode;
+}) {
+  if (!value && !children) return null; // skip empty rows
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "10px" }}>
       <Icon size={14} style={{ color: "#9CA3AF", marginTop: "2px", flexShrink: 0 }} />
@@ -39,7 +45,15 @@ function InfoRow({ icon: Icon, label, value, children }: { icon: React.ElementTy
   );
 }
 
+const fmt = (iso?: string | null) => {
+  if (!iso) return null;
+  try { return new Date(iso).toLocaleDateString("en-GB"); }
+  catch { return iso; }
+};
+
 export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
+  // Extended cast — add gender, referral, parentTasId to ActiveAgent in types.ts to remove this
+  const ext = agent as ActiveAgent & { gender?: string; referral?: string; parentTasId?: string };
   const dispatch = useAppDispatch();
   const { mutateStatus } = useAppSelector((s) => s.tas);
 
@@ -62,7 +76,17 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
     }
   };
 
-  const mailtoHref = `mailto:${agent.email}?subject=TAS%20Account%20-%20Action%20Required&body=Dear%20${encodeURIComponent(agent.fullName)}%2C%0A%0A`;
+  const mailtoHref =
+    `mailto:${agent.email}` +
+    `?subject=${encodeURIComponent("TAS Account – More Information Needed")}` +
+    `&body=${encodeURIComponent(`Dear ${agent.fullName},\n\nWe have reviewed your TAS account and require some additional information before we can proceed.\n\nPlease respond to this email at your earliest convenience.\n\nThank you.`)}`;
+
+  // Location from API
+  const loc = agent.location as { city?: string; state?: string; address?: string } | undefined;
+  const locationStr = [loc?.address, loc?.city, loc?.state].filter(Boolean).join(", ") || null;
+
+  // Document from API
+  const doc = agent.document as { url?: string; type?: string } | undefined;
 
   return (
     <>
@@ -70,15 +94,13 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
         .inforow-label { font-size: 13px; font-weight: 500; color: #6B7280; margin: 0 0 1px; }
         .inforow-value { font-size: 13px; color: #111827; word-break: break-word; margin: 0; }
         .ad-section { padding: 20px 24px; }
-        .experts-desktop { display: none !important; }
-        .experts-mobile  { display: flex !important; flex-direction: column; gap: 10px; }
         .ad-action-bar { display: grid; grid-template-columns: repeat(2, 1fr); }
         .ad-act-btn {
           padding: 16px 10px; font-size: 13px; font-weight: 500;
           border: none; border-right: 1px solid #E5E7EB; border-top: 1px solid #E5E7EB;
           cursor: pointer; background: #ffffff; color: #6B7280;
           transition: background 0.15s; text-decoration: none;
-          display: flex; align-items: center; justify-content: center;
+          display: flex; align-items: center; justify-content: center; gap: 6px;
         }
         .ad-act-btn:hover { background: #F9FAFB; }
         .ad-act-btn:nth-child(2n) { border-right: none; }
@@ -90,8 +112,6 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
         }
         @media (min-width: 640px) {
           .ad-section { padding: 24px 32px; }
-          .experts-desktop { display: block !important; }
-          .experts-mobile  { display: none !important; }
           .ad-action-bar { display: flex; grid-template-columns: none; }
           .ad-act-btn { border-right: 1px solid #E5E7EB !important; flex: 1; }
           .ad-act-btn:last-child { border-right: none !important; }
@@ -104,120 +124,99 @@ export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
         {/* Back */}
         <button onClick={onBack}
           style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#111827", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-          <ArrowLeft size={16} /> Active TAS Agents
+          <ArrowLeft size={16} /> TAS Management
         </button>
 
         <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
 
-          {/* Job Information */}
+          {/* ── Profile ── */}
           <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Job Information" />
-            <InfoRow icon={User}         label="Name"   value={agent.fullName} />
-            <InfoRow icon={Hash}         label="TAS ID" value={agent.tasId} />
-            <InfoRow icon={Phone}        label="Phone"  value={agent.phone} />
-            <InfoRow icon={Mail}         label="Email"  value={agent.email} />
-            <InfoRow icon={Layers}       label="Tier"   value={`${agent.tier} (${agent.tierLabel})`} />
-            <InfoRow icon={Percent}      label="Bonus"  value={agent.bonus} />
-            <InfoRow icon={CalendarDays} label="Joined" value={agent.joined} />
+            <SectionLabel text="Profile" />
+            <InfoRow icon={User}         label="Full Name"  value={agent.fullName} />
+            <InfoRow icon={Hash}         label="Username"   value={agent.tasId} />
+            <InfoRow icon={Phone}        label="Phone"      value={agent.phone} />
+            <InfoRow icon={Mail}         label="Email"      value={agent.email} />
+            <InfoRow icon={User}         label="Gender"     value={ext.gender} />
+            <InfoRow icon={CalendarDays} label="Date of Birth" value={fmt(agent.dob)} />
+            <InfoRow icon={CalendarDays} label="Joined"     value={agent.joined} />
             <InfoRow icon={ShieldCheck}  label="Status">
               <AgentBadge status={agent.status} />
             </InfoRow>
           </div>
 
-          {/* Performance Metrics */}
+          {/* ── TAS Info ── */}
           <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Performance Metrics" />
-            <InfoRow icon={Users}      label="Total Experts Recruited"      value={agent.experts} />
-            <InfoRow icon={TrendingUp} label="Active Experts (3-month avg)" value={agent.activeExperts} />
-            <InfoRow icon={Wallet}     label="Total Earnings"               value={agent.totalEarnings} />
-            <InfoRow icon={Clock}      label="This Month"                   value={agent.thisMonth} />
-            <InfoRow icon={PiggyBank}  label="Available Balance"            value={agent.availableBalance} />
-            <InfoRow icon={Hourglass}  label="Pending Balance"              value={agent.pendingBalance} />
+            <SectionLabel text="TAS Information" />
+            <InfoRow icon={Layers}    label="Tier"             value={`Tier ${agent.tier}`} />
+            <InfoRow icon={Percent}   label="Bonus"            value={agent.bonus !== "—" ? agent.bonus : null} />
+            <InfoRow icon={Hash}      label="Referral Code"    value={ext.referral} />
+            <InfoRow icon={GitBranch} label="Parent TAS ID"    value={ext.parentTasId} />
+            <InfoRow icon={Users}     label="Application Code" value={agent.applicationCode} />
           </div>
 
-          {/* Recruited Experts */}
-          <div className="ad-section">
-            <SectionLabel text="Recruited Experts" />
+          {/* ── Location ── */}
+          {locationStr && (
+            <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
+              <SectionLabel text="Location" />
+              <InfoRow icon={MapPin} label="Location" value={locationStr} />
+            </div>
+          )}
 
-            {agent.recruitedExperts.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No recruited experts yet.</p>
-            ) : (
-              <>
-                {/* Mobile cards */}
-                <div className="experts-mobile">
-                  {agent.recruitedExperts.map((expert, i) => (
-                    <div key={i} style={{ padding: "12px 14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: 0 }}>{expert.name}</p>
-                        <AgentBadge status={expert.subTas} />
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px" }}>
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}><span style={{ fontWeight: 500, color: "#111827" }}>Earnings: </span>{expert.earningsHistory}</span>
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}><span style={{ fontWeight: 500, color: "#111827" }}>Payouts: </span>{expert.payouts}</span>
-                        {expert.notes && <span style={{ fontSize: "12px", color: "#6B7280", width: "100%", marginTop: "2px" }}><span style={{ fontWeight: 500, color: "#111827" }}>Notes: </span>{expert.notes}</span>}
-                      </div>
-                    </div>
-                  ))}
+          {/* ── Document ── */}
+          {doc?.type && (
+            <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
+              <SectionLabel text="Document" />
+              <InfoRow icon={FileText} label="Type" value={doc.type} />
+              {doc.url && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                  <FileText size={14} style={{ color: "#9CA3AF", flexShrink: 0 }} />
+                  <div>
+                    <p className="inforow-label">Document URL</p>
+                    <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: "13px", color: "#2563eb", wordBreak: "break-all" }}>
+                      View Document
+                    </a>
+                  </div>
                 </div>
+              )}
+            </div>
+          )}
 
-                {/* Desktop table */}
-                <div className="experts-desktop">
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #E5E7EB" }}>
-                        {["Recruited Experts", "Earnings History", "Sub-TAS", "Payouts", "Notes"].map((h) => (
-                          <th key={h} style={{ textAlign: "left", paddingBottom: "12px", paddingRight: "24px", fontSize: "12px", fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agent.recruitedExperts.map((expert, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#111827" }}>{expert.name}</td>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#6B7280" }}>{expert.earningsHistory}</td>
-                          <td style={{ padding: "14px 24px 14px 0" }}><AgentBadge status={expert.subTas} /></td>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#111827" }}>{expert.payouts}</td>
-                          <td style={{ padding: "14px 0", fontSize: "13.5px", color: "#6B7280" }}>{expert.notes}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
+          {/* ── Bank Details ── */}
+          {agent.bankName && (
+            <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
+              <SectionLabel text="Bank Details" />
+              <InfoRow icon={Building2} label="Bank Name"      value={agent.bankName} />
+              <InfoRow icon={Hash}      label="Account Number" value={agent.accountNo} />
+            </div>
+          )}
 
-            <button style={{ marginTop: "16px", fontSize: "13px", fontWeight: 500, color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: 0, display: "block" }}>
-              View All {agent.experts} Experts
-            </button>
+          {/* ── Earnings (placeholder until API provides) ── */}
+          <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
+            <SectionLabel text="Earnings" />
+            <InfoRow icon={Wallet} label="Total Earnings"    value={agent.totalEarnings} />
+            <InfoRow icon={Wallet} label="This Month"        value={agent.thisMonth} />
+            <InfoRow icon={Wallet} label="Available Balance" value={agent.availableBalance} />
+            <InfoRow icon={Wallet} label="Pending Balance"   value={agent.pendingBalance} />
           </div>
 
-          {/* Action bar */}
-          <div className="ad-action-bar" style={{ borderTop: "1px solid #E5E7EB" }}>
-
-            {/* Adjust Tier — blue, always first */}
+          {/* ── Action bar ── */}
+          <div className="ad-action-bar">
             <button onClick={() => setAdjustTierAgent(agent)} disabled={isMutating} className="ad-act-btn">
               Adjust Tier
             </button>
-
-            {/* Suspend / Reinstate — toggles based on status */}
             <button
               onClick={handleSuspendToggle}
               disabled={isMutating}
               className="ad-act-btn"
-              style={{ color: isSuspended ? "#16a34a" : "#d97706" }}
-            >
+              style={{ color: isSuspended ? "#16a34a" : "#d97706" }}>
               {isMutating ? "Please wait…" : isSuspended ? "Reinstate TAS" : "Suspend TAS"}
             </button>
-
-            {/* Force Payout */}
-            <button className="ad-act-btn">Force Payout</button>
-
-            {/* Request More Info — opens mailto */}
             <a href={mailtoHref} className="ad-act-btn">
               Request Info
             </a>
-
           </div>
+
         </div>
       </div>
 

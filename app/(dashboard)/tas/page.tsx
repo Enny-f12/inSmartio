@@ -8,24 +8,16 @@ import ApplicationsTab from "@/components/tas/Applicationstab";
 import ActiveAgentsTab from "@/components/tas/Activeagentstab";
 import AgentDetail from "@/components/tas/Agentdetail";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchTas, selectTas, clearSelectedTas } from "@/lib/redux/tasSlice";
+import { fetchTas, fetchTasById, clearSelectedTas } from "@/lib/redux/tasSlice";
 import type { ApiTas } from "@/lib/api/tasApi";
 import type { TASTab, ActiveAgent, AgentStatus } from "@/components/tas/types";
 
 const TABS: TASTab[] = ["Applications", "Active TAS Agents"];
 
 // ── Parse tier from API ────────────────────────────────────
-// API returns a number (1, 2, 3) or occasionally a string like
-// "Tier 2 (Senior, +5% bonus)" — handle both safely.
 const parseTier = (tier?: string | number): { num: number; label: string; bonus: string } => {
   if (tier === undefined || tier === null) return { num: 1, label: "Bronze", bonus: "—" };
-
-  // If it's already a number just use it directly
-  if (typeof tier === "number") {
-    return { num: tier, label: `Tier ${tier}`, bonus: "—" };
-  }
-
-  // String path
+  if (typeof tier === "number") return { num: tier, label: `Tier ${tier}`, bonus: "—" };
   const tierStr    = String(tier);
   const numMatch   = tierStr.match(/\d+/);
   const num        = numMatch ? parseInt(numMatch[0]) : 1;
@@ -43,6 +35,10 @@ const toActiveAgent = (t: ApiTas): ActiveAgent => {
   const loc  = t.location as Record<string, string> | undefined;
   const doc  = t.document as Record<string, string> | undefined;
 
+  // experts from API is a Prisma findMany descriptor object, not a count
+  // use commissionsGiven length as a proxy until a real count is available
+  const expertCount = Array.isArray(t.commissionsGiven) ? t.commissionsGiven.length : 0;
+
   return {
     id:               t.id,
     name:             t.name ?? "—",
@@ -55,7 +51,7 @@ const toActiveAgent = (t: ApiTas): ActiveAgent => {
     bonus:            bonus,
     joined:           t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-GB") : "—",
     status:           (t.status === "suspended" ? "Suspended" : "Active") as AgentStatus,
-    experts:          0,
+    experts:          expertCount,
     activeExperts:    0,
     earnings:         "—",
     totalEarnings:    "—",
@@ -77,10 +73,9 @@ const toActiveAgent = (t: ApiTas): ActiveAgent => {
 
 export default function TASManagementPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected } = useAppSelector((s) => s.tas);
+  const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.tas);
 
-  const [activeTab,       setActiveTab]       = useState<TASTab>("Applications");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TASTab>("Applications");
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchTas());
@@ -90,32 +85,43 @@ export default function TASManagementPage() {
     listStatus === "succeeded" ? list.map(toActiveAgent) : [],
   [listStatus, list]);
 
-  // Applications = not yet verified (verify: false)
   const applicationAgents = useMemo(() =>
     allAgents.filter((a) => !a.verified),
   [allAgents]);
 
-  // Active = verified agents (verify: true)
   const activeAgents = useMemo(() =>
     allAgents.filter((a) => a.verified),
   [allAgents]);
 
-  // Keep selected in sync with freshly fetched list (e.g. after tier adjust)
+  // Build display agent from selected (detail API) or fall back to list item
   const displayAgent = useMemo(() => {
-    if (!selectedAgentId) return null;
-    if (selected?.id === selectedAgentId) return toActiveAgent(selected);
-    return allAgents.find((a) => a.id === selectedAgentId) ?? null;
-  }, [selectedAgentId, selected, allAgents]);
+    if (selectedStatus === "idle") return null;
+    if (selected) return toActiveAgent(selected);
+    return null;
+  }, [selectedStatus, selected]);
 
   const handleSelectAgent = (agent: ActiveAgent) => {
-    setSelectedAgentId(agent.id);
-    dispatch(selectTas(agent.id));
+    // Find the raw ApiTas from the list to use as fallback
+    const raw = list.find((t) => t.id === agent.id) ?? list[0];
+    dispatch(fetchTasById({ id: agent.id, fallback: raw }));
   };
 
   const handleBack = () => {
-    setSelectedAgentId(null);
     dispatch(clearSelectedTas());
   };
+
+  // ── Loading detail spinner ──
+  if (selectedStatus === "loading") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+        <Topbar title="TAS Management" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: "10px", color: "var(--color-text-muted)" }}>
+          <Loader2 size={18} className="animate-spin" />
+          <span style={{ fontSize: "13px" }}>Loading agent...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>

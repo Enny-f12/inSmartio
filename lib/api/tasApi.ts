@@ -13,17 +13,19 @@ export interface ApiTas {
   gender?:          string;
   dateOfBirth?:     string;
   username?:        string;
-  tier?:            string;
-  category?:        string[];
+  tier?:            string | number;
+  category?:        string[] | null;
   location?:        Record<string, unknown>;
   account?:         { bvn?: string; bankName?: string; accountName?: string; accountNumber?: string; accountCode?: string } | null;
   bankDetails?:     { bankName?: string; accountNo?: string } | null;
   document?:        Record<string, unknown>;
   applicationCode?: string;
   referral?:        string | null;
+  parentTasId?:     string | null;
   recruitExpectations?: string | null;
   commission?:      unknown;
   commissionsGiven?: unknown[];
+  // experts from API is a Prisma findMany descriptor, not a count — ignore it
   experts?:         unknown;
   createdAt:        string;
   updatedAt:        string;
@@ -52,17 +54,23 @@ export const getAllTas = async (): Promise<ApiTas[]> => {
   return data.data ?? [];
 };
 
+// GET /api/admin/tas-managements/{id}
+export const getTasById = async (id: string): Promise<ApiTas> => {
+  const { data } = await axiosInstance.get<TasOneResponse>(`/admin/tas-managements/${id}`);
+  return data.data;
+};
+
 // PUT /api/admin/tas-managements/{id}/adjust-tier
 export const adjustTasTier = async (id: string, payload: AdjustTierPayload): Promise<void> => {
   await axiosInstance.put<TasOneResponse>(`/admin/tas-managements/${id}/adjust-tier`, payload);
 };
 
-// PUT /api/admin/users/suspend/tas/{id}
+// PUT /api/admin/users/suspend/{type}/{id}  (type = "tas")
 export const suspendTas = async (id: string): Promise<void> => {
   await axiosInstance.put(`/admin/users/suspend/tas/${id}`);
 };
 
-// PUT /api/admin/users/activate/tas/{id}
+// PUT /api/admin/users/activate/{type}/{id}  (type = "tas")
 export const activateTas = async (id: string): Promise<void> => {
   await axiosInstance.put(`/admin/users/activate/tas/${id}`);
 };

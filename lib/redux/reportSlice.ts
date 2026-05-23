@@ -5,7 +5,7 @@ import {
   fetchUserGrowth, fetchRevenueTrend, fetchTopServiceCategory, fetchTopCities,
   downloadReportPdf,
   type MonthlyUserGrowthItem, type RevenueTrendItem,
-  type TopServiceCategoryData, type TopCityItem,
+  type TopServiceCategoryData, type TopCitiesData,
   type ReportQuery, type ApiReportType,
 } from "@/lib/api/reportApi";
 
@@ -21,7 +21,8 @@ interface ReportState {
   topCategories:       TopServiceCategoryData | null;
   topCategoriesStatus: Status;
 
-  topCities:       TopCityItem[];
+  // now stores the full { overall, cities } shape
+  topCitiesData:   TopCitiesData | null;
   topCitiesStatus: Status;
 
   downloadStatus: Status;
@@ -35,7 +36,7 @@ const initialState: ReportState = {
   revenueTrendStatus:  "idle",
   topCategories:       null,
   topCategoriesStatus: "idle",
-  topCities:           [],
+  topCitiesData:       null,
   topCitiesStatus:     "idle",
   downloadStatus:      "idle",
   error:               null,
@@ -76,10 +77,12 @@ export const fetchTopCitiesThunk = createAsyncThunk(
   }
 );
 
-// Downloads PDF and triggers browser download
 export const downloadReportThunk = createAsyncThunk(
   "report/download",
-  async ({ reportType, query, filename }: { reportType: ApiReportType; query: ReportQuery; filename: string }, { rejectWithValue }) => {
+  async (
+    { reportType, query, filename }: { reportType: ApiReportType; query: ReportQuery; filename: string },
+    { rejectWithValue }
+  ) => {
     try {
       const url = await downloadReportPdf(reportType, query);
       const a   = document.createElement("a");
@@ -101,29 +104,29 @@ const reportSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchUserGrowthThunk.pending,   (state) => { state.userGrowthStatus = "loading"; state.error = null; })
-      .addCase(fetchUserGrowthThunk.fulfilled, (state, action) => { state.userGrowthStatus = "succeeded"; state.userGrowth = action.payload; })
-      .addCase(fetchUserGrowthThunk.rejected,  (state, action) => { state.userGrowthStatus = "failed"; state.error = action.payload as string; });
+      .addCase(fetchUserGrowthThunk.pending,   (s) => { s.userGrowthStatus = "loading"; s.error = null; })
+      .addCase(fetchUserGrowthThunk.fulfilled, (s, a) => { s.userGrowthStatus = "succeeded"; s.userGrowth = a.payload; })
+      .addCase(fetchUserGrowthThunk.rejected,  (s, a) => { s.userGrowthStatus = "failed"; s.error = a.payload as string; });
 
     builder
-      .addCase(fetchRevenueTrendThunk.pending,   (state) => { state.revenueTrendStatus = "loading"; state.error = null; })
-      .addCase(fetchRevenueTrendThunk.fulfilled, (state, action) => { state.revenueTrendStatus = "succeeded"; state.revenueTrend = action.payload; })
-      .addCase(fetchRevenueTrendThunk.rejected,  (state, action) => { state.revenueTrendStatus = "failed"; state.error = action.payload as string; });
+      .addCase(fetchRevenueTrendThunk.pending,   (s) => { s.revenueTrendStatus = "loading"; s.error = null; })
+      .addCase(fetchRevenueTrendThunk.fulfilled, (s, a) => { s.revenueTrendStatus = "succeeded"; s.revenueTrend = a.payload; })
+      .addCase(fetchRevenueTrendThunk.rejected,  (s, a) => { s.revenueTrendStatus = "failed"; s.error = a.payload as string; });
 
     builder
-      .addCase(fetchTopCategoriesThunk.pending,   (state) => { state.topCategoriesStatus = "loading"; state.error = null; })
-      .addCase(fetchTopCategoriesThunk.fulfilled, (state, action) => { state.topCategoriesStatus = "succeeded"; state.topCategories = action.payload; })
-      .addCase(fetchTopCategoriesThunk.rejected,  (state, action) => { state.topCategoriesStatus = "failed"; state.error = action.payload as string; });
+      .addCase(fetchTopCategoriesThunk.pending,   (s) => { s.topCategoriesStatus = "loading"; s.error = null; })
+      .addCase(fetchTopCategoriesThunk.fulfilled, (s, a) => { s.topCategoriesStatus = "succeeded"; s.topCategories = a.payload; })
+      .addCase(fetchTopCategoriesThunk.rejected,  (s, a) => { s.topCategoriesStatus = "failed"; s.error = a.payload as string; });
 
     builder
-      .addCase(fetchTopCitiesThunk.pending,   (state) => { state.topCitiesStatus = "loading"; state.error = null; })
-      .addCase(fetchTopCitiesThunk.fulfilled, (state, action) => { state.topCitiesStatus = "succeeded"; state.topCities = action.payload; })
-      .addCase(fetchTopCitiesThunk.rejected,  (state, action) => { state.topCitiesStatus = "failed"; state.error = action.payload as string; });
+      .addCase(fetchTopCitiesThunk.pending,   (s) => { s.topCitiesStatus = "loading"; s.error = null; })
+      .addCase(fetchTopCitiesThunk.fulfilled, (s, a) => { s.topCitiesStatus = "succeeded"; s.topCitiesData = a.payload; })
+      .addCase(fetchTopCitiesThunk.rejected,  (s, a) => { s.topCitiesStatus = "failed"; s.error = a.payload as string; });
 
     builder
-      .addCase(downloadReportThunk.pending,   (state) => { state.downloadStatus = "loading"; })
-      .addCase(downloadReportThunk.fulfilled, (state) => { state.downloadStatus = "succeeded"; })
-      .addCase(downloadReportThunk.rejected,  (state) => { state.downloadStatus = "failed"; });
+      .addCase(downloadReportThunk.pending,   (s) => { s.downloadStatus = "loading"; })
+      .addCase(downloadReportThunk.fulfilled, (s) => { s.downloadStatus = "succeeded"; })
+      .addCase(downloadReportThunk.rejected,  (s) => { s.downloadStatus = "failed"; });
   },
 });
 
