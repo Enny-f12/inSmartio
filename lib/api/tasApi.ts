@@ -25,7 +25,6 @@ export interface ApiTas {
   recruitExpectations?: string | null;
   commission?:      unknown;
   commissionsGiven?: unknown[];
-  // experts from API is a Prisma findMany descriptor, not a count — ignore it
   experts?:         unknown;
   createdAt:        string;
   updatedAt:        string;
@@ -33,44 +32,30 @@ export interface ApiTas {
 }
 
 export interface AdjustTierPayload {
-  newTier: string;
+  newTier: number;  // number, not string
 }
 
-interface TasListResponse {
-  status:  boolean;
-  message: string;
-  data:    ApiTas[];
-}
+interface TasListResponse { status: boolean; message: string; data: ApiTas[]; }
+interface TasOneResponse  { status: boolean; message: string; data: ApiTas;   }
 
-interface TasOneResponse {
-  status:  boolean;
-  message: string;
-  data:    ApiTas;
-}
-
-// GET /api/admin/tas-managements
 export const getAllTas = async (): Promise<ApiTas[]> => {
   const { data } = await axiosInstance.get<TasListResponse>("/admin/tas-managements");
   return data.data ?? [];
 };
 
-// GET /api/admin/tas-managements/{id}
 export const getTasById = async (id: string): Promise<ApiTas> => {
   const { data } = await axiosInstance.get<TasOneResponse>(`/admin/tas-managements/${id}`);
   return data.data;
 };
 
-// PUT /api/admin/tas-managements/{id}/adjust-tier
 export const adjustTasTier = async (id: string, payload: AdjustTierPayload): Promise<void> => {
   await axiosInstance.put<TasOneResponse>(`/admin/tas-managements/${id}/adjust-tier`, payload);
 };
 
-// PUT /api/admin/users/suspend/{type}/{id}  (type = "tas")
 export const suspendTas = async (id: string): Promise<void> => {
   await axiosInstance.put(`/admin/users/suspend/tas/${id}`);
 };
 
-// PUT /api/admin/users/activate/{type}/{id}  (type = "tas")
 export const activateTas = async (id: string): Promise<void> => {
   await axiosInstance.put(`/admin/users/activate/tas/${id}`);
 };

@@ -222,7 +222,8 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
           <p style={{ textAlign: "center", color: "#ef4444", fontSize: "13px" }}>{listError}</p>
         )}
 
-        {/* Commission Settings */}
+        {/* All cards — only render after API responds */}
+        {(listStatus === "succeeded" || listStatus === "failed") && (<>
         <div style={CARD}>
           <SectionLabel text="Commission Settings" />
 
@@ -236,7 +237,7 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
                   onToggle={() => handleToggle(c)}
                   isMutating={isMutating} />
               ))
-            : listStatus === "succeeded"
+            : (listStatus === "succeeded" && expertItems.length === 0)
               ? STATIC_EXPERT.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
               : null
           }
@@ -252,7 +253,7 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
                     onToggle={() => handleToggle(c)}
                     isMutating={isMutating} />
                 ))
-              : listStatus === "succeeded"
+              : (listStatus === "succeeded" && tasItems.length === 0)
                 ? STATIC_TAS.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)
                 : null
             }
@@ -306,6 +307,7 @@ export default function CommissionSettings({ onBack }: { onBack: () => void }) {
             );
           })}
         </div>
+        </>)}
 
       </div>
 

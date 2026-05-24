@@ -7,28 +7,13 @@ import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchAdminStats } from "@/lib/redux/usersSlice";
-import { fetchTopCategoriesThunk } from "@/lib/redux/reportSlice";
+import {
+  fetchUserGrowthThunk,
+  fetchRevenueTrendThunk,
+  fetchTopCategoriesThunk,
+} from "@/lib/redux/reportSlice";
 
-// ── Static chart data (mock until report API covers these) ─
-const userGrowthData = {
-  title:  "Monthly User Growth",
-  yLabel: "Total Users",
-  color:  "#7C3AED",
-  data:   [980, 1450, 2100, 1200, 1750, 4100, 3200, 2800, 6400, 3600, 5200, 4800],
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-  xLabel: "Month",
-};
-
-const revenueData = {
-  title:  "Revenue Trend",
-  yLabel: "Revenue (₦)",
-  color:  "#2563eb",
-  data:   [420000, 890000, 1200000, 650000, 980000, 1800000, 1550000, 1100000, 1750000, 1400000, 2100000, 2600000],
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-  xLabel: "Month",
-};
-
-// Fallback donut segments shown while loading or if API returns empty
+const CHART_COLORS  = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
 const FALLBACK_SEGMENTS = [
   { label: "Auto Repair",           value: 32, color: "#2563eb" },
   { label: "Creativity",            value: 27, color: "#F9A826" },
@@ -36,55 +21,66 @@ const FALLBACK_SEGMENTS = [
   { label: "Housekeeping",          value: 18, color: "#7B3F9E" },
 ];
 
-const CHART_COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
-
-// Wide date range for the donut — last 12 months
-const today     = new Date().toISOString().split("T")[0];
+const today      = new Date().toISOString().split("T")[0];
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+const query      = { fromDate: oneYearAgo, toDate: today };
 
 export default function DashboardPage() {
   const dispatch = useAppDispatch();
-  const { adminStats, statsStatus } = useAppSelector((s) => s.users);
-  const { topCategories, topCategoriesStatus } = useAppSelector((s) => s.report);
+  const { adminStats, statsStatus }               = useAppSelector((s) => s.users);
+  const { userGrowth, userGrowthStatus,
+          revenueTrend, revenueTrendStatus,
+          topCategories, topCategoriesStatus }     = useAppSelector((s) => s.report);
 
   useEffect(() => {
-    if (statsStatus === "idle") dispatch(fetchAdminStats());
-  }, [dispatch, statsStatus]);
+    if (statsStatus           === "idle") dispatch(fetchAdminStats());
+    if (userGrowthStatus      === "idle") dispatch(fetchUserGrowthThunk(query));
+    if (revenueTrendStatus    === "idle") dispatch(fetchRevenueTrendThunk(query));
+    if (topCategoriesStatus   === "idle") dispatch(fetchTopCategoriesThunk(query));
+  }, [dispatch, statsStatus, userGrowthStatus, revenueTrendStatus, topCategoriesStatus]);
 
-  useEffect(() => {
-    if (topCategoriesStatus === "idle") {
-      dispatch(fetchTopCategoriesThunk({ fromDate: oneYearAgo, toDate: today }));
-    }
-  }, [dispatch, topCategoriesStatus]);
-
-  const isLoading = statsStatus === "loading" || statsStatus === "idle";
+  // ── Stat cards ────────────────────────────────────────
+  const isStatsLoading = statsStatus === "loading" || statsStatus === "idle";
   const s = adminStats as {
-    totalUsers?: number;
-    verifiedExperts?: number;
-    revenue?: number;
-    growthRate?: number;
+    totalUsers?: number; verifiedExperts?: number;
+    revenue?: number; growthRate?: number;
   } | null;
 
   const stats = [
-    { label: "Total Users",      value: isLoading ? "—" : String(s?.totalUsers ?? "—"),                   icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
-    { label: "Verified Experts", value: isLoading ? "—" : String(s?.verifiedExperts ?? "—"),              icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
-    { label: "Revenue",          value: isLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`, icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
-    { label: "Growth",           value: isLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
+    { label: "Total Users",      value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                   icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Verified Experts", value: isStatsLoading ? "—" : String(s?.verifiedExperts ?? "—"),              icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",          value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`, icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
-  // Build donut segments from real API data, fall back to mock if empty/loading
-  const donutSegments = (() => {
-    if (topCategories?.categories?.length) {
-      return topCategories.categories.map((c, i) => ({
+  // ── User growth chart ─────────────────────────────────
+  const isGrowthLoading = userGrowthStatus === "loading" || userGrowthStatus === "idle";
+  const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const FLAT_DATA    = [0,0,0,0,0,0,0,0,0,0,0,0];
+
+  const hasGrowthData   = userGrowth.length > 0 && userGrowth.some((d) => d.count > 0);
+  const userGrowthChart = hasGrowthData
+    ? { data: userGrowth.map((d) => d.count), labels: userGrowth.map((d) => d.month.slice(0, 3)) }
+    : { data: FLAT_DATA, labels: MONTH_LABELS };
+  const totalUsersValue = s?.totalUsers ?? 0;
+
+  // ── Revenue trend chart ───────────────────────────────
+  const isRevenueLoading  = revenueTrendStatus === "loading" || revenueTrendStatus === "idle";
+  const hasRevenueData    = revenueTrend.length > 0 && revenueTrend.some((d) => d.revenue > 0);
+  const revenueTrendChart = hasRevenueData
+    ? { data: revenueTrend.map((d) => d.revenue), labels: revenueTrend.map((d) => d.month.slice(0, 3)) }
+    : { data: FLAT_DATA, labels: MONTH_LABELS };
+  const totalRevenueValue = s?.revenue ?? 0;
+
+  // ── Donut ─────────────────────────────────────────────
+  const isDonutLoading = topCategoriesStatus === "loading" || topCategoriesStatus === "idle";
+  const donutSegments  = topCategories?.categories?.length
+    ? topCategories.categories.map((c, i) => ({
         label: c.category,
         value: Math.round(c.percentage),
         color: CHART_COLORS[i % CHART_COLORS.length],
-      }));
-    }
-    return FALLBACK_SEGMENTS;
-  })();
-
-  const isDonutLoading = topCategoriesStatus === "loading" || topCategoriesStatus === "idle";
+      }))
+    : FALLBACK_SEGMENTS;
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: "#ffffff",
@@ -100,42 +96,21 @@ export default function DashboardPage() {
       <style>{`
         .db-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         @media (min-width: 640px) { .db-stats { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
-
-        .db-stat-card {
-          background: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px;
-          padding: 20px 16px; display: flex; flex-direction: column;
-          align-items: center; justify-content: center; text-align: center; gap: 6px;
-        }
-        .db-stat-icon  { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
-        .db-stat-value { font-size: 28px; font-weight: 700; color: #111827; line-height: 1.1; }
-        .db-stat-label { font-size: 13px; font-weight: 400; color: #6B7280; }
-
-        .db-charts { display: grid; grid-template-columns: 1fr; gap: 16px; }
-        @media (min-width: 768px) { .db-charts { grid-template-columns: 1fr 1fr; } }
-
-        .db-donut-desktop { display: none; }
-        .db-donut-mobile  { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        @media (min-width: 768px) { .db-donut-desktop { display: block; } .db-donut-mobile { display: none; } }
-
-        .db-main { padding: 16px; }
-        @media (min-width: 768px) { .db-main { padding: 24px 32px; } }
-
-        @media (max-width: 380px) {
-          .db-stat-value { font-size: 22px; }
-          .db-stat-label { font-size: 11px; }
-          .db-stat-icon  { width: 36px; height: 36px; }
-        }
-
-        .db-donut-skeleton {
-          display: flex; align-items: center; justify-content: center;
-          height: 280px; color: #9CA3AF; font-size: 13px; gap: 8px;
-        }
-        .db-spin {
-          width: 18px; height: 18px; border-radius: 50%;
-          border: 2px solid #E5E7EB; border-top-color: #2563eb;
-          animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .db-stat-card { background:#fff; border:1px solid #E5E7EB; border-radius:16px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:6px; }
+        .db-stat-icon  { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:2px; }
+        .db-stat-value { font-size:28px; font-weight:700; color:#111827; line-height:1.1; }
+        .db-stat-label { font-size:13px; font-weight:400; color:#6B7280; }
+        .db-charts { display:grid; grid-template-columns:1fr; gap:16px; }
+        @media (min-width:768px) { .db-charts { grid-template-columns:1fr 1fr; } }
+        .db-donut-desktop { display:none; }
+        .db-donut-mobile  { display:flex; flex-direction:column; align-items:center; gap:20px; }
+        @media (min-width:768px) { .db-donut-desktop { display:block; } .db-donut-mobile { display:none; } }
+        .db-main { padding:16px; }
+        @media (min-width:768px) { .db-main { padding:24px 32px; } }
+        @media (max-width:380px) { .db-stat-value { font-size:22px; } .db-stat-label { font-size:11px; } .db-stat-icon { width:36px; height:36px; } }
+        .db-skeleton { display:flex; align-items:center; justify-content:center; color:#9CA3AF; font-size:13px; gap:8px; }
+        .db-spin { width:18px; height:18px; border-radius:50%; border:2px solid #E5E7EB; border-top-color:#2563eb; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
       `}</style>
 
       <main className="db-main" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -155,37 +130,58 @@ export default function DashboardPage() {
 
         {/* Line Charts */}
         <div className="db-charts">
+          {/* User Growth */}
           <div style={cardStyle}>
-            <DashboardLineChart
-              {...userGrowthData}
-              statValue={`${userGrowthData.data[userGrowthData.data.length - 1].toLocaleString()} users`}
-            />
+            {isGrowthLoading ? (
+              <div className="db-skeleton" style={{ height: 200 }}>
+                <div className="db-spin" /> Loading user growth…
+              </div>
+            ) : (
+              <DashboardLineChart
+                title="Monthly User Growth"
+                yLabel="Total Users"
+                color="#7C3AED"
+                data={userGrowthChart.data}
+                labels={userGrowthChart.labels}
+                xLabel="Month"
+                statValue={`${Number(totalUsersValue).toLocaleString()} users`}
+              />
+            )}
           </div>
+
+          {/* Revenue Trend */}
           <div style={cardStyle}>
-            <DashboardLineChart
-              {...revenueData}
-              statValue={`₦${revenueData.data[revenueData.data.length - 1].toLocaleString()}`}
-            />
+            {isRevenueLoading ? (
+              <div className="db-skeleton" style={{ height: 200 }}>
+                <div className="db-spin" /> Loading revenue…
+              </div>
+            ) : (
+              <DashboardLineChart
+                title="Revenue Trend"
+                yLabel="Revenue (₦)"
+                color="#2563eb"
+                data={revenueTrendChart.data}
+                labels={revenueTrendChart.labels}
+                xLabel="Month"
+                statValue={`₦${Number(totalRevenueValue).toLocaleString()}`}
+              />
+            )}
           </div>
         </div>
 
-        {/* Donut Chart — Top Service Category from API */}
+        {/* Donut Chart */}
         <div style={{ ...cardStyle, padding: "20px" }}>
           {isDonutLoading ? (
-            <div className="db-donut-skeleton">
-              <div className="db-spin" />
-              Loading top categories…
+            <div className="db-skeleton" style={{ height: 280 }}>
+              <div className="db-spin" /> Loading top categories…
             </div>
           ) : (
             <>
-              {/* Desktop */}
               <div className="db-donut-desktop">
                 <DonutChart segments={donutSegments} title="Top Service Category" size={280} />
               </div>
-
-              {/* Mobile */}
               <div className="db-donut-mobile">
-                <DonutSVGOnly segments={donutSegments} size={200} />
+                <DonutSVGOnly segments={donutSegments}  />
                 <div style={{ width: "100%" }}>
                   <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", marginBottom: "12px", textAlign: "center" }}>
                     Top Service Category
@@ -212,7 +208,7 @@ export default function DashboardPage() {
   );
 }
 
-function DonutSVGOnly({ segments }: { segments: { label: string; value: number; color: string }[]; size?: number }) {
+function DonutSVGOnly({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const size = 200;
   const cx = size / 2, cy = size / 2;
   const R = size * 0.375, r = size * 0.2167;

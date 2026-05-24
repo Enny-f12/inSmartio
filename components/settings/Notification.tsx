@@ -1,4 +1,3 @@
-// components/settings/NotificationTemplates.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,7 +5,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SubPageShell } from "./SettingsShared";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchTemplates, saveTemplate } from "@/lib/redux/notificationSlice";
+import { fetchTemplates, saveTemplate } from "@/lib/redux/notificationtemplateSlice";
+import type { ApiNotificationTemplate } from "@/lib/api/notificationtemplateApi";
 
 // ── Draft shape stored in localStorage ───────────────────
 interface Draft {
@@ -45,7 +45,11 @@ const inp: React.CSSProperties = {
 
 export default function NotificationTemplates({ onBack }: { onBack: () => void }) {
   const dispatch = useAppDispatch();
-  const { templates, templateStatus, saveStatus } = useAppSelector((s) => s.notifications);
+
+  // ✅ Fixed: was s.notifications — now correctly points at notificationtemplateSlice
+  const { templates, templateStatus, saveStatus } = useAppSelector(
+    (s) => s.notificationTemplates
+  );
 
   const isSaving  = saveStatus     === "loading";
   const isLoading = templateStatus === "loading" || templateStatus === "idle";
@@ -63,15 +67,14 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
   }, [dispatch, templateStatus]);
 
   // Build dropdown options: default + drafts + api templates
-  const apiTemplateNames = templates.map((t) => t.name);
-  const draftNames       = drafts.map((d) => d.name);
+  const apiTemplateNames = templates.map((t: ApiNotificationTemplate) => t.name);
+  const draftNames       = drafts.map((d: Draft) => d.name);
   const allOptions       = ["New Bid Received", ...apiTemplateNames, ...draftNames]
     .filter((v, i, a) => a.indexOf(v) === i); // dedupe
 
   const handleSelect = (name: string) => {
     setSelected(name);
-    // Try draft first, then API template, then default
-    const draft = drafts.find((d) => d.name === name);
+    const draft = drafts.find((d: Draft) => d.name === name);
     if (draft) {
       setSubject(draft.subject);
       setBody(draft.body);
@@ -79,7 +82,7 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
       setViewAllUrl(draft.viewAllUrl);
       return;
     }
-    const api = templates.find((t) => t.name === name);
+    const api = templates.find((t: ApiNotificationTemplate) => t.name === name);
     if (api) {
       setSubject(api.subject);
       setBody(api.body);
@@ -87,7 +90,6 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
       setViewAllUrl("");
       return;
     }
-    // default
     setSubject(DEFAULT.subject);
     setBody(DEFAULT.body);
     setBidAmount(DEFAULT.bidAmount);
@@ -97,9 +99,9 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
   // ── Save Draft ────────────────────────────────────────
   const handleSaveDraft = () => {
     const draft: Draft = { name: selected, subject, body, bidAmount, viewAllUrl };
-    const existing = drafts.findIndex((d) => d.name === selected);
+    const existing = drafts.findIndex((d: Draft) => d.name === selected);
     const updated  = existing !== -1
-      ? drafts.map((d, i) => i === existing ? draft : d)
+      ? drafts.map((d: Draft, i: number) => i === existing ? draft : d)
       : [...drafts, draft];
     setDrafts(updated);
     saveDrafts(updated);
@@ -112,8 +114,7 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
       .unwrap()
       .then(() => {
         toast.success("Template created successfully");
-        // Remove from drafts if it was a draft
-        const updated = drafts.filter((d) => d.name !== selected);
+        const updated = drafts.filter((d: Draft) => d.name !== selected);
         setDrafts(updated);
         saveDrafts(updated);
       })
@@ -141,13 +142,11 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
         onBack={onBack}
         action={
           <div style={{ display: "flex", gap: "8px" }}>
-            {/* Save as Draft */}
             <button
               onClick={handleSaveDraft}
               style={{ padding: "8px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#374151", cursor: "pointer" }}>
               Save as Draft
             </button>
-            {/* Create */}
             <button
               onClick={handleCreate}
               disabled={isSaving}
@@ -177,7 +176,7 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
                   style={{ ...inp, appearance: "none", paddingRight: "36px", cursor: "pointer", backgroundColor: "#ffffff" } as React.CSSProperties}>
                   {allOptions.map((name) => (
                     <option key={name} value={name}>
-                      {name}{drafts.some((d) => d.name === name) ? " (draft)" : ""}
+                      {name}{drafts.some((d: Draft) => d.name === name) ? " (draft)" : ""}
                     </option>
                   ))}
                 </select>
@@ -186,52 +185,28 @@ export default function NotificationTemplates({ onBack }: { onBack: () => void }
             )}
           </div>
 
-          {/* Form card — matches Figma layout */}
+          {/* Form card */}
           <div style={{ borderRadius: "16px", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-            {/* Subject */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "8px" }}>Subject:</label>
-              <input
-                style={inp}
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="New bid received for your job"
-              />
+              <input style={inp} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="New bid received for your job" />
             </div>
 
-            {/* Body */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "8px" }}>Body:</label>
-              <textarea
-                rows={5}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Template body..."
-                style={{ ...inp, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 } as React.CSSProperties}
-              />
+              <textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Template body..."
+                style={{ ...inp, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 } as React.CSSProperties} />
             </div>
 
-            {/* Bid amount */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "8px" }}>Bid amount:</label>
-              <input
-                style={inp}
-                value={bidAmount}
-                onChange={(e) => setBidAmount(e.target.value)}
-                placeholder="₦ 15,000"
-              />
+              <input style={inp} value={bidAmount} onChange={(e) => setBidAmount(e.target.value)} placeholder="₦ 15,000" />
             </div>
 
-            {/* View all bids */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "8px" }}>View all bids:</label>
-              <input
-                style={inp}
-                value={viewAllUrl}
-                onChange={(e) => setViewAllUrl(e.target.value)}
-                placeholder="www.inSmartio"
-              />
+              <input style={inp} value={viewAllUrl} onChange={(e) => setViewAllUrl(e.target.value)} placeholder="www.inSmartio" />
             </div>
 
           </div>

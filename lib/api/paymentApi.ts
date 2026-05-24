@@ -121,7 +121,7 @@ interface PayoutOneResponse {
 
 // GET /api/admin/transaction-history
 export const getTransactionHistory = async (): Promise<ApiTransaction[]> => {
-  const { data } = await axiosInstance.get<TransactionListResponse>("/admin/transaction-history");
+  const { data } = await axiosInstance.get<TransactionListResponse>("/admin/escrows");
   return data.data ?? [];
 };
 
@@ -134,7 +134,7 @@ export const getTransactionById = async (id: string): Promise<ApiTransaction> =>
 // POST /api/admin/transaction/{id}/refund
 export const refundTransaction = async (id: string, payload?: RefundPayload): Promise<ApiTransaction> => {
   const { data } = await axiosInstance.post<TransactionOneResponse>(
-    `/admin/transaction/${id}/refund`,
+    `admin/escrows/${id}/refund`,
     payload ?? {}
   );
   return data.data;

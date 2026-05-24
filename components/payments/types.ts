@@ -1,5 +1,5 @@
-export type PayTab = "Transactions" | "Escrow Releases" | "Payouts" | "Refunds";
-export const PAY_TABS: PayTab[] = ["Transactions", "Escrow Releases", "Payouts", "Refunds"];
+export type PayTab = "Transactions" | "Escrow Releases"  | "Refunds";
+export const PAY_TABS: PayTab[] = ["Transactions", "Escrow Releases", "Refunds"];
 
 export interface Transaction {
   id: string;

@@ -111,7 +111,7 @@ export default function PaymentsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-      <Topbar title="Payments & Payouts" />
+      <Topbar title="Payments" />
 
       <style>{`
         .pay-main { padding: 12px; gap: 20px; }

@@ -11,28 +11,31 @@ import announcementReducer from "./announcementSlice";
 import verificationReducer from "./verificationSlice";
 import tasReducer          from "./tasSlice";
 import paymentReducer      from "./paymentSlice";
-import reportReducer  from "./reportSlice";
-import faqReducer     from "./faqSlice";
-import notificationReducer from "./notificationSlice";
-import commissionReducer from "./commissionSlice"
+import reportReducer       from "./reportSlice";
+import faqReducer          from "./faqSlice";
+import notificationReducer from "./notificationtemplateSlice";
+import commissionReducer   from "./commissionSlice";
+import notificationsReducer from "./notificationSlice";
+
 export const store = configureStore({
   reducer: {
-    counter:       counterReducer,
-    auth:          authReducer,
-    users:         usersReducer,
-    categories:    categoriesReducer,
-    jobs:          jobsReducer,
-    admin:         adminReducer,
-    disputes:      disputeReducer,
-    banners:       bannerReducer,
-    announcements: announcementReducer,
-    verifications: verificationReducer,
-    tas:           tasReducer,
-    payments:      paymentReducer,
-    report: reportReducer,
-    faq:    faqReducer,
-    notifications: notificationReducer,
-    commission: commissionReducer,
+    counter:               counterReducer,
+    auth:                  authReducer,
+    users:                 usersReducer,
+    categories:            categoriesReducer,
+    jobs:                  jobsReducer,
+    admin:                 adminReducer,
+    disputes:              disputeReducer,
+    banners:               bannerReducer,
+    announcements:         announcementReducer,
+    verifications:         verificationReducer,
+    tas:                   tasReducer,
+    payments:              paymentReducer,
+    report:                reportReducer,
+    faq:                   faqReducer,
+    notificationTemplates: notificationReducer,  // was: notifications
+    commission:            commissionReducer,
+    notifications:         notificationsReducer, // was: notification
   },
 });
 
