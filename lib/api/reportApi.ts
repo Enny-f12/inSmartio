@@ -41,7 +41,6 @@ export interface TopCityItem {
   };
 }
 
-// Overall stats returned alongside cities
 export interface TopCitiesOverall {
   totalUsers: number;
   clients:    { count: number; percentage: number };
@@ -55,11 +54,25 @@ export interface TopCitiesData {
   cities:  TopCityItem[];
 }
 
-export type ApiReportType =
-  | "monthly-user-growth"
-  | "revenue-trend"
-  | "top-service-category"
-  | "top-cities";
+// All backend reportType values
+export type DownloadReportType =
+  | "users"
+  | "jobs"
+  | "escrows"
+  | "dispute"
+  | "userGrowth"
+  | "revenueTrend"
+  | "serviceCategory"
+  | "cities";
+
+export type ReportFileType = "pdf" | "csv";
+
+export interface DownloadReportPayload {
+  reportType: DownloadReportType;
+  type:       ReportFileType;
+  fromDate:   string;
+  toDate:     string;
+}
 
 export const fetchUserGrowth = async (q: ReportQuery): Promise<MonthlyUserGrowthItem[]> => {
   const { data } = await axiosInstance.get("/report/monthly-user-growth", { params: q });
@@ -76,18 +89,14 @@ export const fetchTopServiceCategory = async (q: ReportQuery): Promise<TopServic
   return data.data;
 };
 
-// Returns full { overall, cities } shape
 export const fetchTopCities = async (q: ReportQuery): Promise<TopCitiesData> => {
   const { data } = await axiosInstance.get("/report/top-cities", { params: q });
   return data.data;
 };
 
-
-// GET /api/report/download?reportType=...&fromDate=...&toDate=...
-// reportType is a query param (confirmed in Swagger)
-export const downloadReportPdf = async (reportType: ApiReportType, q: ReportQuery): Promise<string> => {
-  const response = await axiosInstance.get("/report/download", {
-    params:       { reportType, ...q },
+// POST /report/download — body: { reportType, type, fromDate, toDate }
+export const downloadReport = async (payload: DownloadReportPayload): Promise<string> => {
+  const response = await axiosInstance.post("/report/download", payload, {
     responseType: "blob",
   });
   return URL.createObjectURL(response.data as Blob);

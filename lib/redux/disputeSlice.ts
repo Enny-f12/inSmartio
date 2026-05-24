@@ -3,10 +3,12 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   getAllDisputes, getDisputeById, getDisputeByCaseId,
-  createDispute, updateDispute, deleteDispute, appealDispute,
+  createDispute, updateDispute, deleteDispute,
+  resolveDispute, appealDispute,
   type ApiDispute,
   type CreateDisputePayload,
   type UpdateDisputePayload,
+  type ResolveDisputePayload,
   type AppealDisputePayload,
 } from "@/lib/api/disputeApi";
 
@@ -81,8 +83,19 @@ export const removeDispute = createAsyncThunk(
   }
 );
 
-// POST /api/dispute/{id}/appeal
-// Used for Submit Decision (with resolution) and Appeal Later (with reason only)
+// POST /api/dispute/{id}/resolve — Submit Decision
+export const resolveDisputeThunk = createAsyncThunk(
+  "disputes/resolve",
+  async (
+    { id, payload }: { id: string; payload: ResolveDisputePayload },
+    { rejectWithValue }
+  ) => {
+    try { return await resolveDispute(id, payload); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to submit decision")); }
+  }
+);
+
+// POST /api/dispute/{id}/appeal — Appeal Later
 export const appealDisputeThunk = createAsyncThunk(
   "disputes/appeal",
   async (
@@ -145,6 +158,13 @@ const disputeSlice = createSlice({
       })
       .addCase(removeDispute.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
 
+    // resolve — Submit Decision
+    builder
+      .addCase(resolveDisputeThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
+      .addCase(resolveDisputeThunk.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })
+      .addCase(resolveDisputeThunk.rejected,  (state, action) => { state.mutateStatus = "failed"; state.mutateError = action.payload as string; });
+
+    // appeal — Appeal Later
     builder
       .addCase(appealDisputeThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
       .addCase(appealDisputeThunk.fulfilled, (state, action) => { state.mutateStatus = "succeeded"; updateInState(state, action.payload); })

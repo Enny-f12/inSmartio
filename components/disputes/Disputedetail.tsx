@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { PriorityLabel, DisputeStatusBadge } from "./DisputeBadges";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch } from "@/hooks/redux";
-import { appealDisputeThunk } from "@/lib/redux/disputeSlice";
+import { resolveDisputeThunk, appealDisputeThunk } from "@/lib/redux/disputeSlice";
 import type { Dispute } from "@/components/disputes/types";
 import type { ResolutionType } from "@/lib/api/disputeApi";
 
@@ -36,12 +36,15 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+// ── Resolution options — values match backend enum exactly ──
 const RESOLUTION_OPTIONS: { value: ResolutionType; label: string }[] = [
-  { value: "full_expert", label: "Full payment to expert"  },
-  { value: "full_client", label: "Full refund to client"   },
-  { value: "dismiss",     label: "Dismiss dispute"         },
-  { value: "partial_70",  label: "Partial payment (70%)"   },
-  { value: "reperform",   label: "Re-performance ordered"  },
+  { value: "REFUND_EXPERT",          label: "Full payment to expert"          },
+  { value: "REFUND_CLIENT",          label: "Full refund to client"           },
+  { value: "SPLIT_REFUND",           label: "Split refund (50/50)"            },
+  { value: "PARTIAL_REFUND_EXPERT",  label: "Partial refund — favour expert"  },
+  { value: "PARTIAL_REFUND_CLIENT",  label: "Partial refund — favour client"  },
+  { value: "DISMISS_DISPUTE",        label: "Dismiss dispute"                 },
+  { value: "RE_PERFORM",             label: "Re-performance ordered"          },
 ];
 
 interface Props {
@@ -53,54 +56,39 @@ interface Props {
 export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
   const dispatch = useAppDispatch();
 
-  // Submit Decision state
   const [resolution,     setResolution]     = useState<ResolutionType | null>(null);
   const [decisionReason, setDecisionReason] = useState("");
   const [submitting,     setSubmitting]     = useState(false);
+  const [draftSaved,     setDraftSaved]     = useState(false);
+  const [appealOpen,     setAppealOpen]     = useState(false);
+  const [appealReason,   setAppealReason]   = useState("");
+  const [appealing,      setAppealing]      = useState(false);
 
-  // Save Draft state
-  const [draftSaved, setDraftSaved] = useState(false);
-
-  // Appeal Later modal state
-  const [appealOpen,   setAppealOpen]   = useState(false);
-  const [appealReason, setAppealReason] = useState("");
-  const [appealing,    setAppealing]    = useState(false);
-
-  // ── Submit Decision → POST /api/dispute/{id}/appeal ──────────
+  // POST /dispute/{id}/resolve
   const handleSubmitDecision = () => {
-    if (!resolution) { toast.warning("Select a resolution option first."); return; }
+    if (!resolution)            { toast.warning("Select a resolution option first."); return; }
     if (!decisionReason.trim()) { toast.warning("Please provide a decision reason."); return; }
     setSubmitting(true);
-    dispatch(
-      appealDisputeThunk({
-        id: disputeId,
-        payload: {
-          reason:     `[${resolution}] ${decisionReason.trim()}`,
-        },
-      })
-    )
+    dispatch(resolveDisputeThunk({
+      id: disputeId,
+      payload: { resolution, reason: decisionReason.trim() },
+    }))
       .unwrap()
       .then(() => { toast.success("Decision submitted successfully"); onBack(); })
       .catch((err: string) => toast.error("Failed to submit decision", { description: err }))
       .finally(() => setSubmitting(false));
   };
 
-  // ── Save Draft — local only, no API call ─────────────────────
-  const handleSaveDraft = () => {
-    setDraftSaved(true);
-    toast.success("Saved as draft");
-  };
+  const handleSaveDraft = () => { setDraftSaved(true); toast.success("Saved as draft"); };
 
-  // ── Appeal Later → POST /api/dispute/{id}/appeal ─────────────
+  // POST /dispute/{id}/appeal
   const handleAppealSubmit = () => {
     if (!appealReason.trim()) { toast.warning("Please provide a reason for the appeal."); return; }
     setAppealing(true);
-    dispatch(
-      appealDisputeThunk({
-        id: disputeId,
-        payload: { reason: appealReason.trim() },
-      })
-    )
+    dispatch(appealDisputeThunk({
+      id: disputeId,
+      payload: { reason: appealReason.trim() },
+    }))
       .unwrap()
       .then(() => { toast.success("Appeal submitted"); setAppealOpen(false); onBack(); })
       .catch((err: string) => toast.error("Failed to submit appeal", { description: err }))
@@ -136,7 +124,6 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "var(--color-background)" }}>
 
-        {/* Back */}
         <div style={{ marginBottom: "20px" }}>
           <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer" }}>
             <ArrowLeft size={16} /> Disputes
@@ -242,59 +229,33 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
         </div>
       </div>
 
-      {/* Sticky footer — 3 buttons */}
+      {/* Sticky footer */}
       <div className="dd-footer">
-
-        {/* Submit Decision → POST appeal with resolution + reason */}
-        <button
-          onClick={handleSubmitDecision}
-          disabled={submitting}
+        <button onClick={handleSubmitDecision} disabled={submitting}
           className="dd-footer-btn btn-primary"
           style={{ fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
-          {submitting
-            ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
-            : "Submit Decision"}
+          {submitting ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : "Submit Decision"}
         </button>
-
-        {/* Save Draft — local only */}
-        <button
-          onClick={handleSaveDraft}
-          disabled={draftSaved}
-          className="dd-footer-btn"
+        <button onClick={handleSaveDraft} disabled={draftSaved} className="dd-footer-btn"
           style={{ color: draftSaved ? "#16a34a" : "var(--color-text-muted)", fontWeight: draftSaved ? 600 : 500 }}>
           {draftSaved ? "✓ Saved as Draft" : "Save Draft"}
         </button>
-
-        {/* Appeal Later — opens modal for reason */}
-        <button
-          onClick={() => setAppealOpen(true)}
-          className="dd-footer-btn">
+        <button onClick={() => setAppealOpen(true)} className="dd-footer-btn">
           Appeal Later
         </button>
-
       </div>
 
-      {/* ── Appeal Later Modal ── */}
-      <Modal
-        open={appealOpen}
-        onClose={() => setAppealOpen(false)}
-        title="Appeal Later"
-        size="sm"
+      {/* Appeal Later Modal */}
+      <Modal open={appealOpen} onClose={() => setAppealOpen(false)} title="Appeal Later" size="sm"
         footer={
           <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-            <button
-              onClick={() => setAppealOpen(false)}
+            <button onClick={() => setAppealOpen(false)}
               style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
               Cancel
             </button>
-            <button
-              onClick={handleAppealSubmit}
-              disabled={appealing}
-              className="btn-primary"
+            <button onClick={handleAppealSubmit} disabled={appealing} className="btn-primary"
               style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: appealing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: appealing ? 0.7 : 1 }}>
-              {appealing
-                ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
-                : "Submit Appeal"}
+              {appealing ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : "Submit Appeal"}
             </button>
           </div>
         }>
@@ -302,11 +263,8 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
             Provide a reason for appealing this dispute later. This will be logged against the case.
           </p>
-          <textarea
-            rows={4}
-            placeholder="e.g. I disagree with the resolution because..."
-            value={appealReason}
-            onChange={(e) => setAppealReason(e.target.value)}
+          <textarea rows={4} placeholder="e.g. I disagree with the resolution because..."
+            value={appealReason} onChange={(e) => setAppealReason(e.target.value)}
             style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
           />
         </div>

@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchJobs, fetchJobById, clearSelectedJob } from "@/lib/redux/jobSlice";
+import { downloadReport } from "@/lib/api/reportApi";
+import { toast } from "sonner";
 import type { ApiJob } from "@/lib/api/jobApi";
 
 type StatusVariant = "green" | "yellow" | "purple" | "red" | "gray";
@@ -44,7 +46,6 @@ const fmt = (iso?: string | null) => {
   catch { return String(iso); }
 };
 
-// ── Shared detail sub-components ─────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
   return (
     <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6B7280", margin: "0 0 16px" }}>
@@ -63,7 +64,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function BidStatusChip({ status }: { status: string }) {
-  const s = status?.toLowerCase();
+  const s           = status?.toLowerCase();
   const color       = s === "accepted" ? "#16a34a" : s === "rejected" ? "#dc2626" : "#d97706";
   const bgColor     = s === "accepted" ? "#f0fdf4"  : s === "rejected" ? "#fef2f2"  : "#fffbeb";
   const borderColor = s === "accepted" ? "#bbf7d0"  : s === "rejected" ? "#fecaca"  : "#fde68a";
@@ -74,7 +75,6 @@ function BidStatusChip({ status }: { status: string }) {
   );
 }
 
-// ── Job detail view ──────────────────────────────────────────────
 function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
   const locationObj = job["location"] as { city?: string; address?: string } | undefined;
   const location    = locationObj
@@ -108,17 +108,13 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
       <main style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
         <style>{`@media(min-width:640px){ .jd-main{ padding: 24px 32px !important; } }`}</style>
 
-        {/* Back */}
-        <button
-          onClick={onBack}
+        <button onClick={onBack}
           style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", fontWeight: 500, color: "#111827", background: "none", border: "none", cursor: "pointer", marginBottom: "24px" }}>
           <ArrowLeft size={16} /> Jobs
         </button>
 
-        {/* White card container */}
         <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #E5E7EB", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>
 
-          {/* ── Job Information ── */}
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Job Information" />
             <InfoRow label="Job ID:"         value={val(job, "id", "_id")} />
@@ -137,7 +133,6 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
             <InfoRow label="Status:"         value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
           </div>
 
-          {/* ── Accepted Bid ── */}
           {acceptedBid && (
             <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
               <SectionLabel text="Accepted Bid" />
@@ -149,7 +144,6 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
             </div>
           )}
 
-          {/* ── All Bids ── */}
           <div style={{ padding: "24px 32px" }}>
             <SectionLabel text={`Bids (${bids.length})`} />
             {bids.length === 0 ? (
@@ -167,9 +161,7 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
                     <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 4px" }}>
                       Expert ID: <span style={{ color: "#111827", fontWeight: 500 }}>{bid.expertId}</span>
                     </p>
-                    <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 6px" }}>
-                      {bid.proposalText}
-                    </p>
+                    <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 6px" }}>{bid.proposalText}</p>
                     <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0 }}>
                       Submitted: {fmt(bid.createdAt)} · Cash payment: {bid.offerCashPayment ? "Yes" : "No"}
                     </p>
@@ -178,32 +170,51 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
               </div>
             )}
           </div>
-
         </div>
       </main>
     </div>
   );
 }
 
-// ── Main list page ───────────────────────────────────────────────
+// ── Main list page ────────────────────────────────────────
 export default function JobsPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.jobs);
 
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [monthFilter,  setMonthFilter]  = useState("All");
-  const [search,       setSearch]       = useState("");
+  const [statusFilter,   setStatusFilter]   = useState("All");
+  const [monthFilter,    setMonthFilter]    = useState("All");
+  const [search,         setSearch]         = useState("");
+  const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchJobs());
   }, [dispatch, listStatus]);
 
-  useEffect(() => {
-    if (listStatus === "succeeded" && list.length > 0)
-      console.log("📋 Jobs list item shape:", list[0]);
-  }, [listStatus, list]);
+  // ── Export handler ────────────────────────────────────
+  const handleExport = async () => {
+    setDownloading(true);
+    try {
+      const today    = new Date().toISOString().split("T")[0];
+      const fromDate = "2024-01-01"; // full history
+      const url      = await downloadReport({
+        reportType: "jobs",
+        type:       "pdf",
+        fromDate,
+        toDate:     today,
+      });
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `jobs_report_${today}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Jobs report downloaded");
+    } catch {
+      toast.error("Failed to download jobs report");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
-  // ── Loading detail ──
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -216,7 +227,6 @@ export default function JobsPage() {
     );
   }
 
-  // ── Detail view ──
   if (selectedStatus === "succeeded" && selected) {
     return <JobDetailView job={selected} onBack={() => dispatch(clearSelectedJob())} />;
   }
@@ -256,13 +266,18 @@ export default function JobsPage() {
         <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>
           {listStatus === "succeeded" ? `${list.length} jobs total` : "Jobs List"}
         </p>
-        <button className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
-          <Download size={15} /> Export
+        <button
+          onClick={handleExport}
+          disabled={downloading}
+          className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold"
+          style={{ opacity: downloading ? 0.7 : 1, cursor: downloading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
+          {downloading
+            ? <><Loader2 size={14} className="animate-spin" /> Exporting...</>
+            : <><Download size={15} /> Export</>}
         </button>
       </div>
 
       <main className="jobs-main flex-1">
-        {/* White card */}
         <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
 
           {/* Filter toolbar */}
@@ -274,10 +289,7 @@ export default function JobsPage() {
             <div className="jobs-filter-row flex">
               <div style={{ position: "relative", flex: 1 }}>
                 <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input
-                  type="text"
-                  placeholder="Search jobs..."
-                  value={search}
+                <input type="text" placeholder="Search jobs..." value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
                 />
@@ -295,7 +307,6 @@ export default function JobsPage() {
             </div>
           </div>
 
-          {/* Loading */}
           {listStatus === "loading" && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "64px", gap: "10px", color: "#9CA3AF" }}>
               <Loader2 size={18} className="animate-spin" />
@@ -303,7 +314,6 @@ export default function JobsPage() {
             </div>
           )}
 
-          {/* Error */}
           {listStatus === "failed" && (
             <p style={{ textAlign: "center", padding: "64px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
@@ -346,8 +356,7 @@ export default function JobsPage() {
                           <td style={{ padding: "16px 24px" }}><StatusBadge label={status} variant={getStatusVariant(status)} /></td>
                           <td style={{ padding: "16px 24px", fontSize: "13px", color: "#6B7280" }}>{fmt(job["createdAt"] as string)}</td>
                           <td style={{ padding: "16px 24px" }}>
-                            <button
-                              onClick={() => dispatch(fetchJobById(String(job.id)))}
+                            <button onClick={() => dispatch(fetchJobById(String(job.id)))}
                               style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}
                               title="View job">
                               <Eye size={17} strokeWidth={1.8} />
@@ -384,8 +393,7 @@ export default function JobsPage() {
                           <span style={{ fontSize: "12px", fontWeight: 500, color: "#111827" }}>{budgetDisplay}</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => dispatch(fetchJobById(String(job.id)))}
+                      <button onClick={() => dispatch(fetchJobById(String(job.id)))}
                         style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
                         <Eye size={16} strokeWidth={1.8} />
                       </button>

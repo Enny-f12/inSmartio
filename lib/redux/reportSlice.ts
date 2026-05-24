@@ -3,30 +3,25 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   fetchUserGrowth, fetchRevenueTrend, fetchTopServiceCategory, fetchTopCities,
-  downloadReportPdf,
+  downloadReport,
   type MonthlyUserGrowthItem, type RevenueTrendItem,
   type TopServiceCategoryData, type TopCitiesData,
-  type ReportQuery, type ApiReportType,
+  type ReportQuery, type DownloadReportPayload,
 } from "@/lib/api/reportApi";
 
 type Status = "idle" | "loading" | "succeeded" | "failed";
 
 interface ReportState {
-  userGrowth:        MonthlyUserGrowthItem[];
-  userGrowthStatus:  Status;
-
-  revenueTrend:       RevenueTrendItem[];
-  revenueTrendStatus: Status;
-
+  userGrowth:          MonthlyUserGrowthItem[];
+  userGrowthStatus:    Status;
+  revenueTrend:        RevenueTrendItem[];
+  revenueTrendStatus:  Status;
   topCategories:       TopServiceCategoryData | null;
   topCategoriesStatus: Status;
-
-  // now stores the full { overall, cities } shape
-  topCitiesData:   TopCitiesData | null;
-  topCitiesStatus: Status;
-
-  downloadStatus: Status;
-  error:          string | null;
+  topCitiesData:       TopCitiesData | null;
+  topCitiesStatus:     Status;
+  downloadStatus:      Status;
+  error:               string | null;
 }
 
 const initialState: ReportState = {
@@ -77,16 +72,17 @@ export const fetchTopCitiesThunk = createAsyncThunk(
   }
 );
 
+// POST /report/download — body: { reportType, type, fromDate, toDate }
 export const downloadReportThunk = createAsyncThunk(
   "report/download",
   async (
-    { reportType, query, filename }: { reportType: ApiReportType; query: ReportQuery; filename: string },
+    { payload, filename }: { payload: DownloadReportPayload; filename: string },
     { rejectWithValue }
   ) => {
     try {
-      const url = await downloadReportPdf(reportType, query);
-      const a   = document.createElement("a");
-      a.href    = url;
+      const url  = await downloadReport(payload);
+      const a    = document.createElement("a");
+      a.href     = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);

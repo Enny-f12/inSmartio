@@ -25,41 +25,43 @@ import type {
   MonthlyUserGrowthItem,
   RevenueTrendItem,
   TopCitiesData,
+  DownloadReportType,
 } from "@/lib/api/reportApi";
-import type { ApiReportType } from "@/lib/api/reportApi";
 
 // ── Helpers ───────────────────────────────────────────────
 const toCsv = (rows: unknown[]): string => {
   if (!rows.length) return "";
   const asRecords = rows as Record<string, unknown>[];
   const headers   = Object.keys(asRecords[0]);
-  const lines     = [
+  return [
     headers.join(","),
-    ...asRecords.map((r) =>
-      headers.map((h) => JSON.stringify(r[h] ?? "")).join(",")
-    ),
-  ];
-  return lines.join("\n");
+    ...asRecords.map((r) => headers.map((h) => JSON.stringify(r[h] ?? "")).join(",")),
+  ].join("\n");
 };
 
 const triggerCsvDownload = (content: string, filename: string) => {
   const blob = new Blob([content], { type: "text/csv" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
-  a.href     = url;
-  a.download = filename;
-  a.click();
+  a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 };
 
-const reportTypeToApi: Record<ReportType, ApiReportType> = {
-  "User Growth Report":   "monthly-user-growth",
+// UI label → backend reportType for download endpoint
+const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
+  "User Growth Report":   "userGrowth",
+  "Revenue Trend Report": "revenueTrend",
+  "Top Service Category": "serviceCategory",
+  "Top Cities":           "cities",
+};
+
+const reportTypeToSlug: Record<ReportType, string> = {
+  "User Growth Report":   "user-growth",
   "Revenue Trend Report": "revenue-trend",
-  "Top Service Category": "top-service-category",
+  "Top Service Category": "service-category",
   "Top Cities":           "top-cities",
 };
 
-// Format "YYYY-MM-DD" → "DD/MM/YYYY" for display
 const fmtDisplay = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
@@ -72,10 +74,10 @@ const buildConfig = (
   revenueTrend:  RevenueTrendItem[],
   topCitiesData: TopCitiesData | null,
   topCategories: { categories: { category: string; percentage: number }[] } | null,
-  dateFrom: string,
-  dateTo:   string,
+  dateFrom:      string,
+  dateTo:        string,
 ): ReportConfig => {
-  const mock = reportConfigs[reportType];
+  const mock  = reportConfigs[reportType];
   const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
 
   switch (reportType) {
@@ -119,7 +121,7 @@ const buildConfig = (
       };
     }
     case "Top Cities": {
-      const cities = topCitiesData?.cities ?? [];
+      const cities  = topCitiesData?.cities ?? [];
       const overall = topCitiesData?.overall;
       if (!cities.length) return mock;
       return {
@@ -151,7 +153,6 @@ export default function ReportsPage() {
 
   const [reportType, setReportType] = useState<ReportType>("User Growth Report");
   const [format,     setFormat]     = useState<FormatType>("PDF");
-  // ISO dates — native date inputs use YYYY-MM-DD directly
   const [dateFrom,   setDateFrom]   = useState("2025-05-01");
   const [dateTo,     setDateTo]     = useState(new Date().toISOString().split("T")[0]);
   const [generated,  setGenerated]  = useState(false);
@@ -176,9 +177,13 @@ export default function ReportsPage() {
 
   const handleDownloadPdf = () => {
     dispatch(downloadReportThunk({
-      reportType: reportTypeToApi[reportType],
-      query,
-      filename:   `${reportTypeToApi[reportType]}_${dateFrom}_${dateTo}.pdf`,
+      payload: {
+        reportType: reportTypeToDownload[reportType],
+        type:       "pdf",
+        fromDate:   dateFrom,
+        toDate:     dateTo,
+      },
+      filename: `${reportTypeToSlug[reportType]}_${dateFrom}_${dateTo}.pdf`,
     }))
       .unwrap()
       .catch(() => toast.error("Failed to download PDF"));
@@ -194,16 +199,15 @@ export default function ReportsPage() {
       }
     })();
     if (!rows.length) { toast.warning("No data to export — generate the report first"); return; }
-    triggerCsvDownload(toCsv(rows), `${reportTypeToApi[reportType]}_${dateFrom}_${dateTo}.csv`);
+    triggerCsvDownload(toCsv(rows), `${reportTypeToSlug[reportType]}_${dateFrom}_${dateTo}.csv`);
   };
 
   const handleEmail = () => {
     const subject = encodeURIComponent(`${reportType} — ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)}`);
     const body    = encodeURIComponent(
       `Please find the ${reportType} for the period ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)} below.\n\n` +
-      `Report Type: ${reportType}\n` +
-      `Date Range:  ${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}\n\n` +
-      `Please download the attached report or visit the admin dashboard to view the full data.`
+      `Report Type: ${reportType}\nDate Range: ${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}\n\n` +
+      `Visit the admin dashboard to view the full data.`
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
@@ -230,20 +234,14 @@ export default function ReportsPage() {
 
       <style>{`
         .report-main { padding: 12px; gap: 12px; }
-        @media (min-width: 640px) {
-          .report-main { padding: 24px 32px; gap: 20px; }
-        }
+        @media (min-width: 640px) { .report-main { padding: 24px 32px; gap: 20px; } }
       `}</style>
 
-      <main
-        className="report-main"
-        style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "var(--color-background)" }}
-      >
+      <main className="report-main"
+        style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "var(--color-background)" }}>
+
         <ReportControls
-          reportType={reportType}
-          format={format}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
+          reportType={reportType} format={format} dateFrom={dateFrom} dateTo={dateTo}
           onReportType={(v) => { setReportType(v); setGenerated(false); }}
           onFormat={setFormat}
           onDateFrom={(v) => { setDateFrom(v); setGenerated(false); }}

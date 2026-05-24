@@ -1,7 +1,6 @@
 // components/report/ReportControls.tsx
 "use client";
 
-import { Download } from "lucide-react";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
 import type { ReportType, FormatType } from "@/components/report/types";
 import { REPORT_TYPES, FORMATS } from "@/components/report/types";
@@ -33,7 +32,7 @@ const inputStyle: React.CSSProperties = {
 export default function ReportControls({
   reportType, format, dateFrom, dateTo,
   onReportType, onFormat, onDateFrom, onDateTo,
-  onGenerate, onExport,
+  onGenerate,
 }: Props) {
   return (
     <>
@@ -93,9 +92,7 @@ export default function ReportControls({
 
           <div className="rc-actions">
             <button onClick={onGenerate} className="rc-generate">Generate</button>
-            <button onClick={onExport} className="btn-primary rc-export">
-              <Download size={15} /> Export
-            </button>
+            
           </div>
         </div>
 

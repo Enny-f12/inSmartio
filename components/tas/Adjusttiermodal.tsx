@@ -1,14 +1,28 @@
 // components/tas/Adjusttiermodal.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { adjustTier } from "@/lib/redux/tasSlice";
 import type { ActiveAgent } from "@/components/tas/types";
-import { TAS_TIERS } from "@/components/tas/types";
+
+// Tier labels keyed by number — no dependency on TAS_TIERS string array
+const TIER_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "Tier 1 — Associate (0% bonus)"        },
+  { value: 2, label: "Tier 2 — Senior (+5% bonus)"          },
+  { value: 3, label: "Tier 3 — Master (+10% bonus)"         },
+  { value: 4, label: "Tier 4 — Regional Lead (+12% bonus)"  },
+  { value: 5, label: "Tier 5 — National Director (+15% bonus)" },
+  { value: 6, label: "Tier 6 — Elite Ambassador (+20% bonus)"  },
+];
+
+const safeTier = (raw: string | number | null | undefined): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 6 ? Math.round(n) : 1;
+};
 
 interface AdjustTierModalProps {
   agent:   ActiveAgent | null;
@@ -19,22 +33,25 @@ export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps
   const dispatch = useAppDispatch();
   const { mutateStatus } = useAppSelector((s) => s.tas);
 
-  // Keep selected as string to avoid type coercion issues with radio inputs
-  // Ensure we always have a valid tier string — agent.tier may be null/0/undefined
-  const initialTier = agent?.tier != null && agent.tier !== 0 ? String(agent.tier) : "1";
-  const [selected, setSelected] = useState(initialTier);
+  const [selected, setSelected] = useState<number>(safeTier(agent?.tier));
   const [reason,   setReason]   = useState("");
+
+  // Re-sync when a different agent opens the modal
+  useEffect(() => {
+    if (agent) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelected(safeTier(agent.tier));
+      setReason("");
+    }
+  }, [agent?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoading = mutateStatus === "loading";
 
   if (!agent) return null;
 
   const handleConfirm = () => {
-    console.log("🔧 Adjusting tier:", { id: agent.id, selected, asNumber: Number(selected) });
-    dispatch(adjustTier({
-      id:      agent.id,
-      payload: { newTier: Number(selected) },  // convert to number only at dispatch
-    }))
+    console.log("🔧 Adjusting tier:", { id: agent.id, newTier: selected });
+    dispatch(adjustTier({ id: agent.id, payload: { newTier: selected } }))
       .unwrap()
       .then(() => { toast.success(`Tier adjusted to ${selected} for ${agent.name}`); onClose(); })
       .catch((err: string) => toast.error("Failed to adjust tier", { description: err }));
@@ -47,7 +64,7 @@ export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps
         Cancel
       </button>
       <button onClick={handleConfirm} disabled={isLoading} className="btn-primary"
-        style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isLoading ? 0.7 : 1 }}>
+        style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: isLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isLoading ? 0.7 : 1 }}>
         {isLoading ? <><Loader2 size={14} className="animate-spin" /> Adjusting...</> : "Confirm Adjustment"}
       </button>
     </div>
@@ -65,7 +82,7 @@ export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps
           </p>
           <p style={{ margin: 0 }}>
             <span style={{ fontWeight: 500, color: "var(--color-text-main)" }}>Current Tier:</span>{" "}
-            Tier {agent.tier} ({agent.tierLabel})
+            Tier {safeTier(agent.tier)} — {agent.tierLabel}
           </p>
         </div>
 
@@ -73,16 +90,14 @@ export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps
         <div>
           <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "10px" }}>New Tier:</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {TAS_TIERS.map((tier) => {
-              const tierStr    = String(tier);
-              const isCurrent  = tierStr === String(agent.tier);
-              const isSelected = selected === tierStr;
+            {TIER_OPTIONS.map(({ value, label }) => {
+              const isCurrent  = value === safeTier(agent.tier);
+              const isSelected = value === selected;
               return (
                 <label
-                  key={tierStr}
-                  onClick={() => setSelected(tierStr)}
+                  key={value}
+                  onClick={() => setSelected(value)}
                   style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "var(--color-text-main)", userSelect: "none" }}>
-                  {/* Custom radio to avoid browser inconsistencies */}
                   <div style={{
                     width: "16px", height: "16px", borderRadius: "50%", flexShrink: 0,
                     border: `2px solid ${isSelected ? "var(--color-primary, #2563eb)" : "#D1D5DB"}`,
@@ -92,9 +107,9 @@ export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps
                   }}>
                     {isSelected && <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#ffffff" }} />}
                   </div>
-                  Tier {tierStr}
+                  {label}
                   {isCurrent && (
-                    <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>— Current</span>
+                    <span style={{ fontSize: "11px", color: "var(--color-text-muted)", marginLeft: "2px" }}>— Current</span>
                   )}
                 </label>
               );

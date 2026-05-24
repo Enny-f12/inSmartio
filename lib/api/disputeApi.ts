@@ -2,7 +2,7 @@
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
-export type DisputeStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
+export type DisputeStatus   = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
 export interface DisputeParty {
   id:        string;
@@ -40,22 +40,25 @@ export interface UpdateDisputePayload extends Partial<CreateDisputePayload> {
   status?: DisputeStatus;
 }
 
-// POST /api/dispute/{id}/appeal
-// Used for: Submit Decision, Appeal Later
-export interface AppealDisputePayload {
-  reason: string;
+// ── Resolution enum — matches backend exactly ─────────────
+export type ResolutionType =
+  | "REFUND_EXPERT"
+  | "REFUND_CLIENT"
+  | "SPLIT_REFUND"
+  | "PARTIAL_REFUND_EXPERT"
+  | "PARTIAL_REFUND_CLIENT"
+  | "DISMISS_DISPUTE"
+  | "RE_PERFORM";
+
+// POST /api/dispute/{id}/resolve
+export interface ResolveDisputePayload {
+  resolution: ResolutionType;
+  reason:     string;
 }
 
-export type ResolutionType =
-  | "full_expert"
-  | "full_client"
-  | "dismiss"
-  | "partial_70"
-  | "reperform";
-
-// Submit Decision extends appeal with resolution type
-export interface SubmitDecisionPayload extends AppealDisputePayload {
-  resolution: ResolutionType;
+// POST /api/dispute/{id}/appeal
+export interface AppealDisputePayload {
+  reason: string;
 }
 
 interface DisputesResponse {
@@ -99,7 +102,16 @@ export const deleteDispute = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/dispute/${id}`);
 };
 
-// POST /api/dispute/{id}/appeal — used for submit decision AND appeal later
+// POST /api/dispute/{id}/resolve — Submit Decision
+export const resolveDispute = async (
+  id:      string,
+  payload: ResolveDisputePayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/resolve`, payload);
+  return data.data;
+};
+
+// POST /api/dispute/{id}/appeal — Appeal Later
 export const appealDispute = async (
   id:      string,
   payload: AppealDisputePayload,
