@@ -3,24 +3,24 @@
 
 import { useState, useEffect } from "react";
 import { Search, Download, Eye, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import { PriorityLabel } from "@/components/disputes/DisputeBadges";
 import DisputeDetail from "@/components/disputes/Disputedetail";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDisputes, fetchDisputeById, clearSelectedDispute, addDispute } from "@/lib/redux/disputeSlice";
+import { downloadReport } from "@/lib/api/reportApi";
 import type { ApiDispute, CreateDisputePayload } from "@/lib/api/disputeApi";
 import type { Dispute } from "@/components/disputes/types";
-import { toast } from "sonner";
 
 const normalizeStatus = (s?: string): "Open" | "In Progress" | "Resolved" => {
   const upper = s?.toUpperCase() ?? "";
   if (upper === "IN_PROGRESS") return "In Progress";
   if (upper === "RESOLVED" || upper === "CLOSE") return "Resolved";
-  return "Open"; // OPEN or anything else
+  return "Open";
 };
 
-// ── Map ApiDispute → UI Dispute ───
 const toDispute = (d: ApiDispute): Dispute => ({
   id:              d.id,
   jobId:           d.jobId ?? "—",
@@ -44,10 +44,11 @@ export default function DisputesPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.disputes);
 
-  const [search,     setSearch]     = useState("");
-  const [page,       setPage]       = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [creating,   setCreating]   = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [page,        setPage]        = useState(1);
+  const [createOpen,  setCreateOpen]  = useState(false);
+  const [creating,    setCreating]    = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [form, setForm] = useState<CreateDisputePayload>({
     jobId: "", date: "", time: "", priority: "MEDIUM", amountInEscrows: 0,
     client: { id: "", statement: "", evidence: [] },
@@ -72,6 +73,29 @@ export default function DisputesPage() {
       .finally(() => setCreating(false));
   };
 
+  const handleExport = async () => {
+    setDownloading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const url   = await downloadReport({
+        reportType: "dispute",
+        type:       "pdf",
+        fromDate:   "2026-05-15",
+        toDate:     today,
+      });
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `disputes_report_${today}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Disputes report downloaded");
+    } catch {
+      toast.error("Failed to download disputes report");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const stats = {
     open:       list.filter((d) => !d.status || d.status === "OPEN").length,
     inProgress: list.filter((d) => d.status === "IN_PROGRESS").length,
@@ -90,7 +114,6 @@ export default function DisputesPage() {
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
-  // Detail loading
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -103,16 +126,11 @@ export default function DisputesPage() {
     );
   }
 
-  // Detail view
   if (selectedStatus === "succeeded" && selected) {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <Topbar title="Disputes Resolution" />
-        <DisputeDetail
-          dispute={toDispute(selected)}
-          disputeId={selected.id}
-          onBack={() => dispatch(clearSelectedDispute())}
-        />
+        <DisputeDetail dispute={toDispute(selected)} disputeId={selected.id} onBack={() => dispatch(clearSelectedDispute())} />
       </div>
     );
   }
@@ -143,12 +161,10 @@ export default function DisputesPage() {
 
       <div className="disp-outer" style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-background)", display: "flex", flexDirection: "column" }}>
 
-        {/* Header row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
             {listStatus === "succeeded" ? `${list.length} disputes total` : "Disputes"}
           </p>
-          
         </div>
 
         {/* Stats */}
@@ -179,8 +195,11 @@ export default function DisputesPage() {
                 style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
               />
             </div>
-            <button style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer", flexShrink: 0 }}>
-              <Download size={14} /> Export
+            <button
+              onClick={handleExport}
+              disabled={downloading}
+              style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: downloading ? "not-allowed" : "pointer", flexShrink: 0, opacity: downloading ? 0.7 : 1 }}>
+              {downloading ? <><Loader2 size={14} className="animate-spin" /> Exporting...</> : <><Download size={14} /> Export</>}
             </button>
           </div>
 
@@ -196,7 +215,6 @@ export default function DisputesPage() {
 
           {listStatus === "succeeded" && (
             <>
-              {/* Desktop table */}
               <div className="disp-table-wrap" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -225,9 +243,7 @@ export default function DisputesPage() {
                                 <Eye size={17} strokeWidth={1.8} />
                               </button>
                               {ui.status === "Resolved" ? (
-                                <span style={{ fontSize: "12px", fontWeight: 600, padding: "4px 12px", borderRadius: "999px", backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>
-                                  Resolved
-                                </span>
+                                <span style={{ fontSize: "12px", fontWeight: 600, padding: "4px 12px", borderRadius: "999px", backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>Resolved</span>
                               ) : (
                                 <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ fontSize: "13px", fontWeight: 500, padding: "4px 12px", borderRadius: "8px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
                                   Resolve
@@ -242,7 +258,6 @@ export default function DisputesPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
               <div className="disp-cards">
                 {paginated.length === 0 ? (
                   <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No disputes found.</p>
@@ -263,9 +278,7 @@ export default function DisputesPage() {
                       </div>
                       <div style={{ display: "flex", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--color-border)" }}>
                         {ui.status === "Resolved" ? (
-                          <span style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>
-                            Resolved
-                          </span>
+                          <span style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>Resolved</span>
                         ) : (
                           <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ flex: 1, padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
                             Resolve
@@ -282,7 +295,6 @@ export default function DisputesPage() {
             </>
           )}
 
-          {/* Pagination */}
           {listStatus === "succeeded" && (
             <div className="disp-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
               <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
@@ -305,7 +317,7 @@ export default function DisputesPage() {
         </div>
       </div>
 
-      {/* ── Create Dispute Modal ── */}
+      {/* Create Dispute Modal */}
       {(() => {
         const inp: React.CSSProperties = { width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", fontSize: "13px", color: "var(--color-text-main)", outline: "none", boxSizing: "border-box" };
         const lbl: React.CSSProperties = { display: "block", fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", marginBottom: "6px" };
@@ -318,8 +330,7 @@ export default function DisputesPage() {
                   {creating ? <><Loader2 size={14} className="animate-spin" /> Creating...</> : "Create Dispute"}
                 </button>
               </div>
-            }
-          >
+            }>
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div><label style={lbl}>Job ID *</label><input style={inp} placeholder="job_id" value={form.jobId} onChange={(e) => setForm((f) => ({ ...f, jobId: e.target.value }))} /></div>
@@ -330,21 +341,15 @@ export default function DisputesPage() {
                 <div><label style={lbl}>Time</label><input style={inp} type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} /></div>
                 <div>
                   <label style={lbl}>Priority</label>
-                  <select style={inp} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "HIGH" | "MEDIUM" | "LOW" }))}>
-                    <option value="HIGH">High</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="LOW">Low</option>
+                  <select style={inp} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "HIGH"|"MEDIUM"|"LOW" }))}>
+                    <option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option>
                   </select>
                 </div>
               </div>
               <div><label style={lbl}>Amount in Escrow (₦)</label><input style={inp} type="number" placeholder="0" value={form.amountInEscrows} onChange={(e) => setForm((f) => ({ ...f, amountInEscrows: Number(e.target.value) }))} /></div>
-
-              {/* Client */}
               <p style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "-6px" }}>Client</p>
               <div><label style={lbl}>Client ID *</label><input style={inp} placeholder="client_user_id" value={form.client.id} onChange={(e) => setForm((f) => ({ ...f, client: { ...f.client, id: e.target.value } }))} /></div>
               <div><label style={lbl}>Client Statement</label><textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Client's statement..." value={form.client.statement} onChange={(e) => setForm((f) => ({ ...f, client: { ...f.client, statement: e.target.value } }))} /></div>
-
-              {/* Expert */}
               <p style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "-6px" }}>Expert</p>
               <div><label style={lbl}>Expert ID *</label><input style={inp} placeholder="expert_user_id" value={form.expert.id} onChange={(e) => setForm((f) => ({ ...f, expert: { ...f.expert, id: e.target.value } }))} /></div>
               <div><label style={lbl}>Expert Statement</label><textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Expert's statement..." value={form.expert.statement} onChange={(e) => setForm((f) => ({ ...f, expert: { ...f.expert, statement: e.target.value } }))} /></div>
