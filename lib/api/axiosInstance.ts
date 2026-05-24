@@ -48,10 +48,25 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      clearAuth();
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
+      const message: string = (error.response?.data?.message ?? "").toLowerCase();
+
+      // Only redirect to login when the token itself is invalid/expired.
+      // 401s from bad resource IDs or data errors should NOT trigger logout.
+      const isAuthFailure =
+        !message ||
+        message.includes("token") ||
+        message.includes("jwt") ||
+        message.includes("expired") ||
+        message.includes("unauthorized") ||
+        message.includes("unauthenticated");
+
+      if (isAuthFailure) {
+        clearAuth();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
       }
+      // Non-auth 401s fall through to the caller's .catch() / rejectWithValue
     }
     return Promise.reject(error);
   }

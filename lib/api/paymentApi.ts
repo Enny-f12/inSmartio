@@ -3,21 +3,34 @@ import axiosInstance from "@/lib/api/axiosInstance";
 
 // ── Types ─────────────────────────────────────────────────
 
-export type TransactionStatus = "pending" | "success" | "failed" | "refunded";
-export type TransactionType   = "payment" | "refund" | "escrow" | "withdrawal" | "payout";
+export type TransactionStatus = "pending" | "success" | "failed" | "refunded" | "paid";
+export type EscrowStatus      = "holding" | "released" | "refunded" | "disputed";
 
 export interface ApiTransaction {
-  id:           string;
-  reference?:   string;
-  amount:       number;
-  type:         TransactionType;
-  status:       TransactionStatus;
-  description?: string;
-  userId?:      string;
-  jobId?:       string;
-  createdAt:    string;
-  updatedAt?:   string;
-  [key: string]: unknown;
+  id:               string;
+  userId:           string;
+  provider:         string;           // "korapay" | "paystack"
+  reference?:       string;
+  transactionId?:   string;
+  amount:           number;
+  currency?:        string;
+  status:           TransactionStatus;
+  escrowStatus?:    EscrowStatus;
+  purpose?:         string;
+  resourceType?:    string;
+  expertId?:        string;
+  resourceId?:      string;
+  metadata?:        unknown;
+  providerResponse?: unknown;
+  releasedAt?:      string | null;
+  createdAt:        string;
+  updatedAt?:       string;
+  [key: string]:    unknown;
+}
+
+export interface TransactionMeta {
+  total:      number;
+  totalPages: number;
 }
 
 export interface ApiBalances {
@@ -32,20 +45,8 @@ export interface RefundPayload {
   reason?: string;
 }
 
-// ── Escrow types ──────────────────────────────────────────
-export interface ApiEscrow {
-  id:           string;
-  jobId:        string;
-  expertId:     string;
-  expertName:   string;
-  clientName:   string;
-  amount:       number;
-  status:       "released" | "pending" | "disputed";
-  releasedAt?:  string;
-  createdAt:    string;
-  meta?:        { total: number; page: number; limit: number };
-  [key: string]: unknown;
-}
+// ── Escrow types (same shape as transaction) ──────────────
+export type ApiEscrow = ApiTransaction;
 
 export interface ReleaseEscrowPayload {
   reason?: string;
@@ -77,6 +78,7 @@ interface TransactionListResponse {
   status:  boolean;
   message: string;
   data:    ApiTransaction[];
+  meta:    TransactionMeta;
 }
 
 interface TransactionOneResponse {
@@ -89,19 +91,6 @@ interface BalancesResponse {
   status:  boolean;
   message: string;
   data:    ApiBalances;
-}
-
-interface EscrowListResponse {
-  status:  boolean;
-  message: string;
-  data:    ApiEscrow[];
-  meta?:   PayoutListMeta;
-}
-
-interface EscrowOneResponse {
-  status:  boolean;
-  message: string;
-  data:    ApiEscrow;
 }
 
 interface PayoutListResponse {
@@ -119,59 +108,56 @@ interface PayoutOneResponse {
 
 // ── Transaction API ───────────────────────────────────────
 
-// GET /api/admin/transaction-history
-export const getTransactionHistory = async (): Promise<ApiTransaction[]> => {
+// GET /admin/escrows — Transactions tab
+export const getTransactionHistory = async (): Promise<{ data: ApiTransaction[]; meta: TransactionMeta }> => {
   const { data } = await axiosInstance.get<TransactionListResponse>("/admin/escrows");
-  return data.data ?? [];
+  return { data: data.data ?? [], meta: data.meta ?? { total: 0, totalPages: 1 } };
 };
 
-// GET /api/admin/transaction/{id}
+// GET /admin/escrows — Escrow Releases tab (same endpoint)
+export const getEscrows = async (): Promise<{ data: ApiEscrow[]; meta: TransactionMeta }> => {
+  const { data } = await axiosInstance.get<TransactionListResponse>("/admin/escrows");
+  return { data: data.data ?? [], meta: data.meta ?? { total: 0, totalPages: 1 } };
+};
+
+// GET /admin/escrows/:escrowId/release — single escrow release detail
+export const getEscrowById = async (escrowId: string): Promise<ApiEscrow> => {
+  const { data } = await axiosInstance.get<TransactionOneResponse>(
+    `/admin/escrows/${escrowId}/release`
+  );
+  return data.data;
+};
+
+// GET /admin/transaction/:id
 export const getTransactionById = async (id: string): Promise<ApiTransaction> => {
   const { data } = await axiosInstance.get<TransactionOneResponse>(`/admin/transaction/${id}`);
   return data.data;
 };
 
-// POST /api/admin/transaction/{id}/refund
+// POST /admin/escrows/:id/refund
 export const refundTransaction = async (id: string, payload?: RefundPayload): Promise<ApiTransaction> => {
   const { data } = await axiosInstance.post<TransactionOneResponse>(
-    `admin/escrows/${id}/refund`,
+    `/admin/escrows/${id}/refund`,
     payload ?? {}
   );
   return data.data;
 };
 
-// GET /api/admin/balances
+// GET /admin/balances
 export const getBalances = async (): Promise<ApiBalances> => {
   const { data } = await axiosInstance.get<BalancesResponse>("/admin/balances");
   return data.data;
 };
 
-// ── Escrow API ────────────────────────────────────────────
-
-// GET /api/admin/escrows
-export const getEscrows = async (): Promise<ApiEscrow[]> => {
-  const { data } = await axiosInstance.get<EscrowListResponse>("/admin/escrows");
-  return data.data ?? [];
-};
-
-// POST /api/admin/escrows/{escrowId}/release
-export const releaseEscrow = async (escrowId: string, payload?: ReleaseEscrowPayload): Promise<ApiEscrow> => {
-  const { data } = await axiosInstance.post<EscrowOneResponse>(
-    `/admin/escrows/${escrowId}/release`,
-    payload ?? {}
-  );
-  return data.data;
-};
-
 // ── Payout API ────────────────────────────────────────────
 
-// GET /api/admin/payouts
+// GET /admin/payouts
 export const getPayouts = async (): Promise<ApiPayout[]> => {
   const { data } = await axiosInstance.get<PayoutListResponse>("/admin/payouts");
   return data.data ?? [];
 };
 
-// POST /api/admin/payouts/{payoutId}/retry
+// POST /admin/payouts/:payoutId/retry
 export const retryPayout = async (payoutId: string): Promise<ApiPayout> => {
   const { data } = await axiosInstance.post<PayoutOneResponse>(
     `/admin/payouts/${payoutId}/retry`,
