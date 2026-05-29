@@ -14,7 +14,7 @@ import {
 import type { RegisterAdminPayload, UpdateAdminPayload } from "@/lib/api/adminApi";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, type AdminRole } from "@/lib/adminPermissions";
 
-// ── Styles ────────────────────────────────────────────────
+// ── Styles ─
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "10px 14px", borderRadius: "10px",
   border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)",

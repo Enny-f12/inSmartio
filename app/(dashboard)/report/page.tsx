@@ -2,11 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Plus, Trash2, Edit2, Upload, Download, Mail } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import ReportControls from "@/components/report/ReportControls";
-import ReportCard from "@/components/report/ReportCard";
+import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
+import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
   fetchUserGrowthThunk,
@@ -28,15 +29,57 @@ import type {
   DownloadReportType,
 } from "@/lib/api/reportApi";
 
+// ── All 8 report types ────────────────────────────────────
+export const ALL_REPORT_TYPES: ReportType[] = [
+  "User Growth Report",
+  "Revenue Report",
+  "Top Service Category",
+  "Top Cities",
+  "Job Completion Report",
+  "TAS Performance Report",
+  "Dispute Analysis Report",
+  "Verification Report",
+];
+
+// Types with live backend endpoints
+const LIVE_REPORT_TYPES: ReportType[] = [
+  "User Growth Report",
+  "Revenue Report",
+  "Top Service Category",
+  "Top Cities",
+];
+
+// Types that render a donut chart (no line chart)
+const DONUT_TYPES: ReportType[] = ["Top Service Category"];
+
+const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
+  "User Growth Report":       "userGrowth",
+  "Revenue Report":           "revenueTrend",
+  "Top Service Category":     "serviceCategory",
+  "Top Cities":               "cities",
+  "Job Completion Report":    "jobs",
+  "TAS Performance Report":   "users",
+  "Dispute Analysis Report":  "dispute",
+  "Verification Report":      "users",
+};
+
+const reportTypeToSlug: Record<ReportType, string> = {
+  "User Growth Report":       "user-growth",
+  "Revenue Report":           "revenue-trend",
+  "Top Service Category":     "service-category",
+  "Top Cities":               "top-cities",
+  "Job Completion Report":    "job-completion",
+  "TAS Performance Report":   "tas-performance",
+  "Dispute Analysis Report":  "dispute-analysis",
+  "Verification Report":      "verification",
+};
+
 // ── Helpers ───────────────────────────────────────────────
 const toCsv = (rows: unknown[]): string => {
   if (!rows.length) return "";
-  const asRecords = rows as Record<string, unknown>[];
-  const headers   = Object.keys(asRecords[0]);
-  return [
-    headers.join(","),
-    ...asRecords.map((r) => headers.map((h) => JSON.stringify(r[h] ?? "")).join(",")),
-  ].join("\n");
+  const r = rows as Record<string, unknown>[];
+  const h = Object.keys(r[0]);
+  return [h.join(","), ...r.map((row) => h.map((k) => JSON.stringify(row[k] ?? "")).join(","))].join("\n");
 };
 
 const triggerCsvDownload = (content: string, filename: string) => {
@@ -47,33 +90,20 @@ const triggerCsvDownload = (content: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-// UI label → backend reportType for download endpoint
-const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
-  "User Growth Report":   "userGrowth",
-  "Revenue Trend Report": "revenueTrend",
-  "Top Service Category": "serviceCategory",
-  "Top Cities":           "cities",
-};
-
-const reportTypeToSlug: Record<ReportType, string> = {
-  "User Growth Report":   "user-growth",
-  "Revenue Trend Report": "revenue-trend",
-  "Top Service Category": "service-category",
-  "Top Cities":           "top-cities",
-};
-
 const fmtDisplay = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
 
-// ── Build live ReportConfig from API data ─────────────────
+// ── Build config from API data ────────────────────────────
+const COLORS = ["#2563eb","#F9A826","#2E7D32","#7B3F9E","#db2777","#0891b2"];
+
 const buildConfig = (
   reportType:    ReportType,
   userGrowth:    MonthlyUserGrowthItem[],
   revenueTrend:  RevenueTrendItem[],
-  topCitiesData: TopCitiesData | null,
   topCategories: { categories: { category: string; percentage: number }[] } | null,
+  topCitiesData: TopCitiesData | null,
   dateFrom:      string,
   dateTo:        string,
 ): ReportConfig => {
@@ -81,6 +111,7 @@ const buildConfig = (
   const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
 
   switch (reportType) {
+
     case "User Growth Report": {
       if (!userGrowth.length) return mock;
       const total = userGrowth.reduce((s, d) => s + d.count, 0);
@@ -92,23 +123,24 @@ const buildConfig = (
         summary:    [{ label: "Total New Users:", value: total.toLocaleString() }],
       };
     }
-    case "Revenue Trend Report": {
+
+    case "Revenue Report": {
       if (!revenueTrend.length) return mock;
       const total = revenueTrend.reduce((s, d) => s + d.revenue, 0);
       return {
         ...mock,
-        title:      `Revenue Trend · ${range}`,
+        title:      `Revenue Report · ${range}`,
         weeks:      revenueTrend.map((d) => d.revenue),
         weekLabels: revenueTrend.map((d) => d.month.slice(0, 3)),
         summary:    [{ label: "Total Revenue:", value: `₦${total.toLocaleString()}` }],
       };
     }
+
     case "Top Service Category": {
       if (!topCategories?.categories.length) return mock;
-      const COLORS = ["#2563eb","#F9A826","#2E7D32","#7B3F9E","#db2777","#0891b2"];
       return {
         ...mock,
-        title:    "Top Service Category",
+        title:    `Top Service Category · ${range}`,
         segments: topCategories.categories.map((c, i) => ({
           label: c.category,
           value: Math.round(c.percentage),
@@ -120,6 +152,7 @@ const buildConfig = (
         })),
       };
     }
+
     case "Top Cities": {
       const cities  = topCitiesData?.cities ?? [];
       const overall = topCitiesData?.overall;
@@ -143,10 +176,232 @@ const buildConfig = (
         ],
       };
     }
+
+    // TODO-BACKEND: 4 types below need real endpoints
+    default:
+      return mock;
   }
 };
 
-// ── Page ──────────────────────────────────────────────────
+// ── Static types ──────────────────────────────────────────
+interface ScheduledReport {
+  id: string; name: string; schedule: string; recipients: string;
+}
+interface ReportTemplate {
+  id: string; name: string; type: string; lastUsed: string;
+}
+
+// ── Shared styles ─────────────────────────────────────────
+const sectionCard: React.CSSProperties = {
+  backgroundColor: "#fff", border: "1px solid #E5E7EB",
+  borderRadius: "16px", overflow: "hidden",
+};
+const TH: React.CSSProperties = {
+  textAlign: "left", padding: "12px 20px", fontSize: "12px",
+  fontWeight: 600, color: "#9CA3AF", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap",
+};
+const TD: React.CSSProperties = {
+  padding: "14px 20px", fontSize: "13px", color: "#374151",
+  borderBottom: "1px solid #F3F4F6",
+};
+
+// ── Inline Report Card (replaces ReportCard to avoid prop conflicts) ──────────
+interface InlineReportCardProps {
+  config:        ReportConfig;
+  isDonut:       boolean;
+  onDownloadPdf: () => void;
+  onDownloadCsv: () => void;
+  onEmail:       () => void;
+  isDownloading: boolean;
+}
+
+function InlineReportCard({
+  config, isDonut, onDownloadPdf, onDownloadCsv, onEmail, isDownloading,
+}: InlineReportCardProps) {
+  const btnBase: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: "6px",
+    padding: "10px 18px", borderRadius: "10px", fontSize: "13px",
+    fontWeight: 500, cursor: "pointer", border: "1px solid #E5E7EB",
+    backgroundColor: "#fff", color: "#374151",
+  };
+
+  return (
+    <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
+      borderRadius: "16px", overflow: "hidden" }}>
+
+      {/* Chart */}
+      <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
+        {isDonut && config.segments?.length ? (
+          <DonutChart segments={config.segments} title={config.title} size={260} />
+        ) : (
+          <DashboardLineChart
+            title={config.title}
+            yLabel=""
+            xLabel="Months"
+            data={config.weeks ?? []}
+            labels={config.weekLabels ?? []}
+            color="#2563eb"
+          />
+        )}
+      </div>
+
+      {/* Summary */}
+      {config.summary.length > 0 && (
+        <div style={{ padding: "20px 28px", borderBottom: "1px solid #E5E7EB" }}>
+          {config.summary.map((s) => (
+            <div key={s.label} style={{ display: "flex", gap: "12px",
+              fontSize: "13px", marginBottom: "8px" }}>
+              <span style={{ minWidth: "160px", color: "#6B7280", flexShrink: 0 }}>{s.label}</span>
+              <span style={{ fontWeight: 500, color: "#111827" }}>{s.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ padding: "16px 28px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <button onClick={onDownloadPdf} disabled={isDownloading} style={btnBase}>
+          <Download size={13} /> Download PDF
+        </button>
+        <button onClick={onDownloadCsv} style={btnBase}>
+          <Download size={13} /> Download CSV
+        </button>
+        <button onClick={onEmail} style={btnBase}>
+          <Mail size={13} /> Email Report
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Scheduled Reports ─────────────────────────────────────
+function ScheduledReportsSection() {
+  const [rows, setRows] = useState<ScheduledReport[]>([
+    { id: "1", name: "Weekly Summary",  schedule: "Every Mon",  recipients: "admin@helpme.ng"   },
+    { id: "2", name: "Monthly Revenue", schedule: "1st of mon", recipients: "finance@helpme.ng" },
+  ]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form,    setForm]    = useState({ name: "", schedule: "", recipients: "" });
+
+  const handleAdd = () => {
+    if (!form.name || !form.schedule || !form.recipients) { toast.warning("All fields required"); return; }
+    setRows((p) => [...p, { id: Date.now().toString(), ...form }]);
+    setForm({ name: "", schedule: "", recipients: "" });
+    setShowAdd(false);
+    toast.success("Scheduled report added");
+    // TODO-BACKEND: POST /report/scheduled
+  };
+
+  return (
+    <div style={sectionCard}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
+        <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: 0 }}>Scheduled Reports</p>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ backgroundColor: "#F9FAFB" }}>
+            <th style={TH}>Report Name</th>
+            <th style={TH}>Schedule</th>
+            <th style={TH}>Recipients</th>
+            <th style={TH}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td style={TD}>{r.name}</td>
+              <td style={TD}>{r.schedule}</td>
+              <td style={TD}>{r.recipients}</td>
+              <td style={TD}>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button title="Edit" onClick={() => toast.info("Edit coming soon")}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
+                    <Edit2 size={15} />
+                  </button>
+                  <button title="Delete" onClick={() => { setRows((p) => p.filter((x) => x.id !== r.id)); toast.success("Removed"); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: 0 }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {showAdd && (
+        <div style={{ padding: "16px 20px", borderTop: "1px solid #E5E7EB", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+          {[["Report Name","name","e.g. Weekly Summary"],["Schedule","schedule","e.g. Every Monday"],["Recipients","recipients","e.g. admin@helpme.ng"]].map(([label, key, ph]) => (
+            <div key={key} style={{ flex: 1, minWidth: "150px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "#6B7280", display: "block", marginBottom: "4px" }}>{label}</label>
+              <input value={(form as Record<string,string>)[key]} placeholder={ph}
+                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "13px", outline: "none", boxSizing: "border-box" }} />
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={handleAdd} style={{ padding: "9px 18px", borderRadius: "8px", border: "none", backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Save</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: "8px", border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", fontSize: "13px", cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {!showAdd && (
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #E5E7EB" }}>
+          <button onClick={() => setShowAdd(true)} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: "#2563EB", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <Plus size={14} /> Add Scheduled Report
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Report Templates ──────────────────────────────────────
+function ReportTemplatesSection() {
+  const [templates] = useState<ReportTemplate[]>([
+    { id: "1", name: "Monthly Executive", type: "Revenue Report",        lastUsed: "25/03/2026" },
+    { id: "2", name: "TAS Performance",   type: "TAS Performance Report", lastUsed: "20/03/2026" },
+  ]);
+  return (
+    <div style={sectionCard}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
+        <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: 0 }}>Saved Report Templates</p>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ backgroundColor: "#F9FAFB" }}>
+            <th style={TH}>Template Name</th>
+            <th style={TH}>Type</th>
+            <th style={TH}>Last Used</th>
+            <th style={TH}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {templates.map((t) => (
+            <tr key={t.id}>
+              <td style={{ ...TD, fontWeight: 500, color: "#111827" }}>{t.name}</td>
+              <td style={TD}>{t.type}</td>
+              <td style={TD}>{t.lastUsed}</td>
+              <td style={TD}>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button title="Load" onClick={() => toast.info("Loading template…")}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
+                    <Upload size={15} />
+                  </button>
+                  <button title="Edit" onClick={() => toast.info("Edit coming soon")}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
+                    <Edit2 size={15} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────
 export default function ReportsPage() {
   const dispatch = useAppDispatch();
   const report   = useAppSelector((s) => s.report);
@@ -157,7 +412,9 @@ export default function ReportsPage() {
   const [dateTo,     setDateTo]     = useState(new Date().toISOString().split("T")[0]);
   const [generated,  setGenerated]  = useState(false);
 
-  const query = { fromDate: dateFrom, toDate: dateTo };
+  const query   = { fromDate: dateFrom, toDate: dateTo };
+  const isLive  = LIVE_REPORT_TYPES.includes(reportType);
+  const isDonut = DONUT_TYPES.includes(reportType);
 
   const isLoading =
     report.userGrowthStatus    === "loading" ||
@@ -167,9 +424,10 @@ export default function ReportsPage() {
 
   const handleGenerate = () => {
     setGenerated(true);
+    if (!isLive) { toast.info(`${reportType} — backend endpoint coming soon`); return; }
     switch (reportType) {
       case "User Growth Report":   dispatch(fetchUserGrowthThunk(query));    break;
-      case "Revenue Trend Report": dispatch(fetchRevenueTrendThunk(query));  break;
+      case "Revenue Report":       dispatch(fetchRevenueTrendThunk(query));  break;
       case "Top Service Category": dispatch(fetchTopCategoriesThunk(query)); break;
       case "Top Cities":           dispatch(fetchTopCitiesThunk(query));     break;
     }
@@ -177,101 +435,122 @@ export default function ReportsPage() {
 
   const handleDownloadPdf = () => {
     dispatch(downloadReportThunk({
-      payload: {
-        reportType: reportTypeToDownload[reportType],
-        type:       "pdf",
-        fromDate:   dateFrom,
-        toDate:     dateTo,
-      },
+      payload: { reportType: reportTypeToDownload[reportType], type: "pdf", fromDate: dateFrom, toDate: dateTo },
       filename: `${reportTypeToSlug[reportType]}_${dateFrom}_${dateTo}.pdf`,
-    }))
-      .unwrap()
-      .catch(() => toast.error("Failed to download PDF"));
+    })).unwrap().catch(() => toast.error("Failed to download PDF"));
   };
 
   const handleDownloadCsv = () => {
     const rows: unknown[] = (() => {
       switch (reportType) {
         case "User Growth Report":   return report.userGrowth;
-        case "Revenue Trend Report": return report.revenueTrend;
+        case "Revenue Report":       return report.revenueTrend;
         case "Top Service Category": return report.topCategories?.categories ?? [];
         case "Top Cities":           return report.topCitiesData?.cities ?? [];
+        default:                     return [];
       }
     })();
-    if (!rows.length) { toast.warning("No data to export — generate the report first"); return; }
+    if (!rows.length) { toast.warning("No data — generate the report first"); return; }
     triggerCsvDownload(toCsv(rows), `${reportTypeToSlug[reportType]}_${dateFrom}_${dateTo}.csv`);
   };
 
   const handleEmail = () => {
     const subject = encodeURIComponent(`${reportType} — ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)}`);
-    const body    = encodeURIComponent(
-      `Please find the ${reportType} for the period ${fmtDisplay(dateFrom)} to ${fmtDisplay(dateTo)} below.\n\n` +
-      `Report Type: ${reportType}\nDate Range: ${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}\n\n` +
-      `Visit the admin dashboard to view the full data.`
-    );
+    const body    = encodeURIComponent(`${reportType}\n${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}\n\nSee admin dashboard for full data.`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
 
   const handleExport = () => {
     if (!generated) { toast.warning("Generate the report first"); return; }
-    if (format === "PDF") handleDownloadPdf();
-    else handleDownloadCsv();
+    if (format === "PDF") handleDownloadPdf(); else handleDownloadCsv();
   };
 
   const config = buildConfig(
     reportType,
     report.userGrowth,
     report.revenueTrend,
-    report.topCitiesData ?? null,
     report.topCategories,
+    report.topCitiesData ?? null,
     dateFrom,
     dateTo,
   );
+
+  const showComingSoon = generated && !isLive;
+  const showLoading    = generated && isLive && isLoading;
+  const showCard       = generated && isLive && !isLoading;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <Topbar title="Reports" />
 
       <style>{`
-        .report-main { padding: 12px; gap: 12px; }
-        @media (min-width: 640px) { .report-main { padding: 24px 32px; gap: 20px; } }
+        .report-main { padding: 12px; gap: 16px; }
+        @media(min-width:640px){ .report-main { padding: 24px 32px; gap: 20px; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      <main className="report-main"
-        style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "var(--color-background)" }}>
+      <main className="report-main" style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "#F4F5F7" }}>
 
+        {/* Controls */}
         <ReportControls
-          reportType={reportType} format={format} dateFrom={dateFrom} dateTo={dateTo}
-          onReportType={(v) => { setReportType(v); setGenerated(false); }}
+          reportType={reportType}
+          format={format}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          reportTypes={ALL_REPORT_TYPES}
+          onReportType={(v: string) => { setReportType(v as ReportType); setGenerated(false); }}
           onFormat={setFormat}
-          onDateFrom={(v) => { setDateFrom(v); setGenerated(false); }}
-          onDateTo={(v)   => { setDateTo(v);   setGenerated(false); }}
+          onDateFrom={(v: string) => { setDateFrom(v); setGenerated(false); }}
+          onDateTo={(v: string)   => { setDateTo(v);   setGenerated(false); }}
           onGenerate={handleGenerate}
           onExport={handleExport}
         />
 
-        {!generated ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "80px", gap: "12px", color: "#9CA3AF" }}>
+        {/* Empty state */}
+        {!generated && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "12px", color: "#9CA3AF" }}>
             <TrendingUp size={40} strokeWidth={1.2} />
             <p style={{ fontSize: "14px", textAlign: "center" }}>
-              Select a report type and date range, then click{" "}
-              <strong style={{ color: "#111827" }}>Generate</strong>.
+              Select a report type and date range, then click <strong style={{ color: "#111827" }}>Generate</strong>.
             </p>
           </div>
-        ) : isLoading ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "80px", gap: "10px", color: "#9CA3AF", fontSize: "14px" }}>
-            <span className="animate-spin" style={{ display: "inline-block", width: 20, height: 20, border: "2px solid #E5E7EB", borderTopColor: "#2563eb", borderRadius: "50%" }} />
+        )}
+
+        {/* Loading */}
+        {showLoading && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "10px", color: "#9CA3AF", fontSize: "14px" }}>
+            <span style={{ display: "inline-block", width: 20, height: 20, border: "2px solid #E5E7EB", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
             Generating report...
           </div>
-        ) : (
-          <ReportCard
+        )}
+
+        {/* Coming soon */}
+        {showComingSoon && (
+          <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", padding: "48px 24px", textAlign: "center" }}>
+            <TrendingUp size={36} strokeWidth={1.2} color="#9CA3AF" style={{ marginBottom: "12px" }} />
+            <p style={{ fontSize: "15px", fontWeight: 600, color: "#111827", marginBottom: "6px" }}>{reportType}</p>
+            <p style={{ fontSize: "13px", color: "#9CA3AF" }}>Backend endpoint pending — coming soon.</p>
+          </div>
+        )}
+
+        {/* Report output card — inline to avoid ReportCard prop conflicts */}
+        {showCard && (
+          <InlineReportCard
             config={config}
+            isDonut={isDonut}
             onDownloadPdf={handleDownloadPdf}
             onDownloadCsv={handleDownloadCsv}
             onEmail={handleEmail}
             isDownloading={report.downloadStatus === "loading"}
           />
         )}
+
+        {/* Scheduled Reports */}
+        <ScheduledReportsSection />
+
+        {/* Report Templates */}
+        <ReportTemplatesSection />
+
       </main>
     </div>
   );

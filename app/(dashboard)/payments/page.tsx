@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import Topbar            from "@/components/layout/Navbar";
 import TransactionsTab   from "@/components/payments/Transactionstab";
 import EscrowReleasesTab from "@/components/payments/EscrowReleasetab";
+import PayoutsTab        from "@/components/payments/Payouttabs";
 import RefundsTab        from "@/components/payments/Refundstab";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchBalances } from "@/lib/redux/paymentSlice";
@@ -24,14 +25,13 @@ function StatCard({ label, value, sub, loading }: { label: string; value: string
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid var(--color-border)", borderRadius: "14px", padding: "16px 20px", flex: 1, minWidth: "140px" }}>
       <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", marginBottom: "8px" }}>{label}</p>
-      {loading ? (
-        <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", lineHeight: 1.2, letterSpacing: "0.1em" }}>•••</p>
-      ) : (
-        <>
-          <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", lineHeight: 1.2, marginBottom: "4px" }}>{value}</p>
-          {sub && <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>{sub}</p>}
-        </>
-      )}
+      {loading
+        ? <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", letterSpacing: "0.1em" }}>•••</p>
+        : <>
+            <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", lineHeight: 1.2, marginBottom: "4px" }}>{value}</p>
+            {sub && <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>{sub}</p>}
+          </>
+      }
     </div>
   );
 }
@@ -56,16 +56,9 @@ export default function PaymentsPage() {
     setDownloading(true);
     try {
       const today = new Date().toISOString().split("T")[0];
-      const url   = await downloadReport({
-        reportType: "escrows",
-        type:       "pdf",
-        fromDate:   "2026-05-15",
-        toDate:     today,
-      });
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = `payments_report_${today}.pdf`;
-      a.click();
+      const url   = await downloadReport({ reportType: "escrows", type: "pdf", fromDate: "2026-05-15", toDate: today });
+      const a = document.createElement("a");
+      a.href = url; a.download = `payments_report_${today}.pdf`; a.click();
       URL.revokeObjectURL(url);
       toast.success("Payments report downloaded");
     } catch {
@@ -77,7 +70,7 @@ export default function PaymentsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-      <Topbar title="Payments" />
+      <Topbar title="Payments & Payouts" />
 
       <style>{`
         .pay-main { padding: 12px; gap: 20px; }
@@ -96,28 +89,24 @@ export default function PaymentsPage() {
 
       <main className="pay-main" style={{ flex: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--color-background)", overflowY: "auto" }}>
 
-        {/* Overview */}
+        {/* Stat cards */}
         <div>
           <div className="pay-overview-header" style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
             <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-text-main)" }}>Transaction Overview</p>
-            <button
-              onClick={handleExport}
-              disabled={downloading}
-              className="btn-primary"
+            <button onClick={handleExport} disabled={downloading} className="btn-primary"
               style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: downloading ? "not-allowed" : "pointer", opacity: downloading ? 0.7 : 1 }}>
               {downloading ? <><Loader2 size={14} className="animate-spin" /> Exporting...</> : <><Download size={15} /> Export</>}
             </button>
           </div>
-
           <div className="pay-stat-cards">
-            <StatCard label="Paystack Balance"  value={fmt(b?.paystackBalance)}        loading={loading} />
-            <StatCard label="Korapay Balance"   value={fmt(b?.korapayBalance)}         loading={loading} />
-            <StatCard label="Paystack Escrow"   value={fmt(b?.paystackEscrowsBalance)} loading={loading} />
-            <StatCard label="Korapay Escrow"    value={fmt(b?.korapayEscrowsBalance)}  loading={loading} />
+            <StatCard label="Escrow"          value={fmt(b?.paystackEscrowsBalance)} sub="Held"       loading={loading} />
+            <StatCard label="Payouts"          value={fmt(b?.paystackBalance)}        sub="Processed"  loading={loading} />
+            <StatCard label="Revenue"          value={fmt(b?.korapayBalance)}         sub="Platform"   loading={loading} />
+            <StatCard label="Pending"          value={fmt(b?.korapayEscrowsBalance)}  sub="To Release" loading={loading} />
           </div>
         </div>
 
-        {/* Tab switcher */}
+        {/* Tabs */}
         <div className="pay-tabs">
           <div className="pay-tabs-inner">
             {PAY_TABS.map((tab) => (
@@ -132,6 +121,7 @@ export default function PaymentsPage() {
 
         {activeTab === "Transactions"    && <TransactionsTab />}
         {activeTab === "Escrow Releases" && <EscrowReleasesTab />}
+        {activeTab === "Payouts"         && <PayoutsTab />}
         {activeTab === "Refunds"         && <RefundsTab />}
       </main>
     </div>

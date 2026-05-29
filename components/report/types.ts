@@ -1,113 +1,110 @@
-// app/(dashboard)/report/types.ts
+// components/report/types.ts
 
 export type ReportType =
   | "User Growth Report"
-  | "Revenue Trend Report"
+  | "Revenue Report"
   | "Top Service Category"
-  | "Top Cities";
+  | "Top Cities"
+  | "Job Completion Report"
+  | "TAS Performance Report"
+  | "Dispute Analysis Report"
+  | "Verification Report";
 
-export type FormatType = "PDF" | "CSV" | "Excel";
+export type FormatType = "PDF" | "CSV";
 
-export type ChartType = "line" | "donut";
-
-export interface SummaryItem {
+export interface ReportSummaryItem {
   label: string;
   value: string;
 }
 
 export interface DonutSegment {
   label: string;
-  value: number; // percentage
+  value: number;
   color: string;
 }
 
 export interface ReportConfig {
-  title: string;
-  chartType: ChartType;
-  yLabel?: string;
-  // line chart: weekly data points
-  weeks?: number[];
+  title:       string;
+  description: string;
+  weeks?:      number[];
   weekLabels?: string[];
-  // donut chart
-  segments?: DonutSegment[];
-  summary: SummaryItem[];
+  segments?:   DonutSegment[];
+  summary:     ReportSummaryItem[];
 }
 
-export const REPORT_TYPES: ReportType[] = [
-  "User Growth Report",
-  "Revenue Trend Report",
-  "Top Service Category",
-  "Top Cities",
-];
-
-export const FORMATS: FormatType[] = ["PDF", "CSV", "Excel"];
-
-export const DATE_FROM_OPTIONS = [
-  "01/03/2026", "01/02/2026", "01/01/2026",
-  "01/12/2025", "01/11/2025", "01/10/2025",
-];
-
-export const DATE_TO_OPTIONS = [
-  "31/03/2026", "28/02/2026", "31/01/2026",
-  "31/12/2025", "30/11/2025", "31/10/2025",
-];
+const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const FLAT         = [0,0,0,0,0,0,0,0,0,0,0,0];
 
 export const reportConfigs: Record<ReportType, ReportConfig> = {
   "User Growth Report": {
-    title: "User Growth - March 2026",
-    chartType: "line",
-    yLabel: "Total Users",
-    weeks: [3300, 4100, 5200, 6700],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Total New Users:", value: "2,847"       },
-      { label: "Clients:",         value: "1,892 (66%)" },
-      { label: "Experts:",         value: "845 (30%)"   },
-      { label: "TAS:",             value: "110 (4%)"    },
-    ],
+    title:       "User Growth Report",
+    description: "New users by day/week/month",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total New Users:", value: "—" }],
   },
-  "Revenue Trend Report": {
-    title: "Revenue Trend Report - March 2026",
-    chartType: "line",
-    yLabel: "Revenue (₦)",
-    weeks: [120000, 210000, 380000, 420000],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Total Revenue:",     value: "₦420,000" },
-      { label: "Commission:",        value: "₦380,000" },
-      { label: "TAS Bonuses:",       value: "₦40,000"  },
-      { label: "Refunds Processed:", value: "₦18,500"  },
-    ],
+  "Revenue Report": {
+    title:       "Revenue Report",
+    description: "Platform revenue breakdown",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total Revenue:", value: "—" }],
   },
-  
- 
- 
   "Top Service Category": {
-    title: "Top Service Category",
-    chartType: "donut",
-    segments: [
-      { label: "Auto Repair",          value: 32, color: "#2563eb" },
-      { label: "Creativity",           value: 27, color: "#F9A826" },
-      { label: "Repair & Construction",value: 23, color: "#2E7D32" },
-      { label: "Housekeeping",         value: 18, color: "#7B3F9E" },
+    title:       "Top Service Category",
+    description: "Jobs by service category",
+    segments:    [
+      { label: "Auto Repair",           value: 32, color: "#2563eb" },
+      { label: "Creativity",            value: 27, color: "#F9A826" },
+      { label: "Repair & Construction", value: 23, color: "#2E7D32" },
+      { label: "Housekeeping",          value: 18, color: "#7B3F9E" },
     ],
     summary: [
-      { label: "Auto Repair:",          value: "32%" },
-      { label: "Creativity:",           value: "27%" },
-      { label: "Repair & Construction:",value: "23%" },
-      { label: "Housekeeping:",         value: "18%" },
+      { label: "Auto Repair:",           value: "32%" },
+      { label: "Creativity:",            value: "27%" },
+      { label: "Repair & Construction:", value: "23%" },
+      { label: "Housekeeping:",          value: "18%" },
     ],
   },
   "Top Cities": {
-    title: "Top Cities - March 2026",
-    chartType: "line",
-    yLabel: "Jobs",
-    weeks: [420, 680, 890, 1100],
-    weekLabels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    summary: [
-      { label: "Lagos:",   value: "1,100 (42%)" },
-      { label: "Abuja:",   value: "680 (26%)"   },
-      { label: "PH:",      value: "890 (34%)"   },
+    title:       "Top Cities",
+    description: "User distribution by city",
+    weeks:       [42, 28, 16, 9, 5],
+    weekLabels:  ["Lagos","Abuja","PH","Ibadan","Kano"],
+    summary:     [
+      { label: "Lagos:",  value: "42%" },
+      { label: "Abuja:",  value: "28%" },
+      { label: "PH:",     value: "16%" },
+      { label: "Ibadan:", value: "9%"  },
+      { label: "Kano:",   value: "5%"  },
     ],
+  },
+  "Job Completion Report": {
+    title:       "Job Completion Report",
+    description: "Jobs by category, status, location",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total Jobs:", value: "—" }],
+  },
+  "TAS Performance Report": {
+    title:       "TAS Performance Report",
+    description: "Top TAS agents, earnings, recruitment",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total TAS:", value: "—" }],
+  },
+  "Dispute Analysis Report": {
+    title:       "Dispute Analysis Report",
+    description: "Disputes by type, resolution rate",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total Disputes:", value: "—" }],
+  },
+  "Verification Report": {
+    title:       "Verification Report",
+    description: "Verification queue, approval rates",
+    weeks:       FLAT,
+    weekLabels:  MONTH_LABELS,
+    summary:     [{ label: "Total Verifications:", value: "—" }],
   },
 };
