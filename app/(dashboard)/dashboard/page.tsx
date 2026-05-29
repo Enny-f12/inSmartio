@@ -1,3 +1,4 @@
+// app/(dashboard)/dashboard/page.tsx
 "use client";
 
 import { useEffect } from "react";
@@ -11,6 +12,7 @@ import {
   fetchUserGrowthThunk,
   fetchRevenueTrendThunk,
   fetchTopCategoriesThunk,
+  fetchTopCitiesThunk,          // ← was missing from dispatch
 } from "@/lib/redux/reportSlice";
 
 const CHART_COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
@@ -22,11 +24,19 @@ const FALLBACK_SEGMENTS = [
   { label: "Housekeeping",          value: 18, color: "#7B3F9E" },
 ];
 
+const FALLBACK_CITIES = [
+  { city: "Lagos",  pct: 42 },
+  { city: "Abuja",  pct: 28 },
+  { city: "PH",     pct: 16 },
+  { city: "Ibadan", pct: 9  },
+  { city: "Kano",   pct: 5  },
+];
+
 const today      = new Date().toISOString().split("T")[0];
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const query      = { fromDate: oneYearAgo, toDate: today };
 
-// ── Static UI-only data ────────────────────────────────────────────────────────
+// ── Static UI-only data (TODO-BACKEND: replace with real endpoints) ────────────
 
 const RECENT_ACTIVITY = [
   { dot: "#16a34a", time: "10:30 AM", text: "New expert registered: Adebayo S." },
@@ -44,25 +54,19 @@ const PENDING_ALERTS = [
   { label: "Pending payouts",       value: "3",   sub: "₦125,000 total",                    color: "#16a34a", bg: "#F0FDF4" },
 ];
 
-// ── Bar chart for Top Cities (UI only) ────────────────────────────────────────
-const TOP_CITIES = [
-  { city: "Lagos",   pct: 42 },
-  { city: "Abuja",   pct: 28 },
-  { city: "PH",      pct: 16 },
-  { city: "Ibadan",  pct: 9  },
-  { city: "Kano",    pct: 5  },
-];
-
-function TopCitiesBar() {
+// ── Top Cities bar (uses live data, falls back to static) ──────────────────────
+function TopCitiesBar({ cities }: { cities: { city: string; pct: number }[] }) {
   return (
     <div style={{ padding: "4px 0" }}>
-      {TOP_CITIES.map((c) => (
+      {cities.map((c) => (
         <div key={c.city} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-          <span style={{ fontSize: "12px", color: "#6B7280", width: "48px", flexShrink: 0 }}>{c.city}</span>
+          <span style={{ fontSize: "12px", color: "#6B7280", width: "56px", flexShrink: 0 }}>{c.city}</span>
           <div style={{ flex: 1, height: "8px", backgroundColor: "#F3F4F6", borderRadius: "4px", overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${c.pct}%`, backgroundColor: "#2563eb", borderRadius: "4px" }} />
           </div>
-          <span style={{ fontSize: "12px", color: "#374151", fontWeight: 600, width: "32px", textAlign: "right" }}>{c.pct}%</span>
+          <span style={{ fontSize: "12px", color: "#374151", fontWeight: 600, width: "36px", textAlign: "right" }}>
+            {c.pct}%
+          </span>
         </div>
       ))}
     </div>
@@ -74,19 +78,21 @@ export default function DashboardPage() {
   const dispatch = useAppDispatch();
   const { adminStats, statsStatus } = useAppSelector((s) => s.users);
   const {
-    userGrowth, userGrowthStatus,
-    revenueTrend, revenueTrendStatus,
-    topCategories, topCategoriesStatus,
+    userGrowth,     userGrowthStatus,
+    revenueTrend,   revenueTrendStatus,
+    topCategories,  topCategoriesStatus,
+    topCitiesData,  topCitiesStatus,        // ← now consumed
   } = useAppSelector((s) => s.report);
 
   useEffect(() => {
-    if (statsStatus         === "idle") dispatch(fetchAdminStats());
-    if (userGrowthStatus    === "idle") dispatch(fetchUserGrowthThunk(query));
-    if (revenueTrendStatus  === "idle") dispatch(fetchRevenueTrendThunk(query));
-    if (topCategoriesStatus === "idle") dispatch(fetchTopCategoriesThunk(query));
-  }, [dispatch, statsStatus, userGrowthStatus, revenueTrendStatus, topCategoriesStatus]);
+    if (statsStatus          === "idle") dispatch(fetchAdminStats());
+    if (userGrowthStatus     === "idle") dispatch(fetchUserGrowthThunk(query));
+    if (revenueTrendStatus   === "idle") dispatch(fetchRevenueTrendThunk(query));
+    if (topCategoriesStatus  === "idle") dispatch(fetchTopCategoriesThunk(query));
+    if (topCitiesStatus      === "idle") dispatch(fetchTopCitiesThunk(query));   // ← was missing
+  }, [dispatch, statsStatus, userGrowthStatus, revenueTrendStatus, topCategoriesStatus, topCitiesStatus]);
 
-  // Stat cards
+  // ── Stat cards ────────────────────────────────────────────────────────────
   const isStatsLoading = statsStatus === "loading" || statsStatus === "idle";
   const s = adminStats as {
     totalUsers?: number; verifiedExperts?: number;
@@ -100,25 +106,23 @@ export default function DashboardPage() {
     { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
-  // User growth chart
+  // ── User growth chart ─────────────────────────────────────────────────────
   const isGrowthLoading = userGrowthStatus === "loading" || userGrowthStatus === "idle";
-  const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const FLAT_DATA    = [0,0,0,0,0,0,0,0,0,0,0,0];
+  const MONTH_LABELS    = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const FLAT_DATA       = [0,0,0,0,0,0,0,0,0,0,0,0];
   const hasGrowthData   = userGrowth.length > 0 && userGrowth.some((d) => d.count > 0);
   const userGrowthChart = hasGrowthData
-    ? { data: userGrowth.map((d) => d.count), labels: userGrowth.map((d) => d.month.slice(0, 3)) }
+    ? { data: userGrowth.map((d) => d.count),   labels: userGrowth.map((d) => d.month.slice(0, 3)) }
     : { data: FLAT_DATA, labels: MONTH_LABELS };
-  const totalUsersValue = s?.totalUsers ?? 0;
 
-  // Revenue trend chart
+  // ── Revenue trend chart ───────────────────────────────────────────────────
   const isRevenueLoading  = revenueTrendStatus === "loading" || revenueTrendStatus === "idle";
   const hasRevenueData    = revenueTrend.length > 0 && revenueTrend.some((d) => d.revenue > 0);
   const revenueTrendChart = hasRevenueData
     ? { data: revenueTrend.map((d) => d.revenue), labels: revenueTrend.map((d) => d.month.slice(0, 3)) }
     : { data: FLAT_DATA, labels: MONTH_LABELS };
-  const totalRevenueValue = s?.revenue ?? 0;
 
-  // Donut
+  // ── Donut — Top Service Categories ───────────────────────────────────────
   const isDonutLoading = topCategoriesStatus === "loading" || topCategoriesStatus === "idle";
   const donutSegments  = topCategories?.categories?.length
     ? topCategories.categories.map((c, i) => ({
@@ -128,6 +132,16 @@ export default function DashboardPage() {
       }))
     : FALLBACK_SEGMENTS;
 
+  // ── Top Cities bar — live data from /report/top-cities ───────────────────
+  const isCitiesLoading = topCitiesStatus === "loading" || topCitiesStatus === "idle";
+  const cityBars = topCitiesData?.cities?.length
+    ? topCitiesData.cities.map((c) => ({
+        city: c.city,
+        pct:  Math.round(c.totalUsersInCityPercentageOfOverall),
+      }))
+    : FALLBACK_CITIES;
+
+  // ── Shared card style ─────────────────────────────────────────────────────
   const card: React.CSSProperties = {
     backgroundColor: "#ffffff",
     border: "1px solid #E5E7EB",
@@ -183,7 +197,7 @@ export default function DashboardPage() {
               <DashboardLineChart
                 title="Monthly User Growth" yLabel="Total Users" color="#7C3AED"
                 data={userGrowthChart.data} labels={userGrowthChart.labels}
-                xLabel="Month" statValue={`${Number(totalUsersValue).toLocaleString()} users`}
+                xLabel="Month" statValue={`${Number(s?.totalUsers ?? 0).toLocaleString()} users`}
               />
             )}
           </div>
@@ -194,7 +208,7 @@ export default function DashboardPage() {
               <DashboardLineChart
                 title="Revenue Trend" yLabel="Revenue (₦)" color="#2563eb"
                 data={revenueTrendChart.data} labels={revenueTrendChart.labels}
-                xLabel="Month" statValue={`₦${Number(totalRevenueValue).toLocaleString()}`}
+                xLabel="Month" statValue={`₦${Number(s?.revenue ?? 0).toLocaleString()}`}
               />
             )}
           </div>
@@ -202,7 +216,7 @@ export default function DashboardPage() {
 
         {/* ── Donut + Top Cities ── */}
         <div className="db-2col">
-          {/* Top Service Categories */}
+          {/* Top Service Categories — /report/top-service-category */}
           <div style={card}>
             {isDonutLoading ? (
               <div className="db-skeleton" style={{ height: 280 }}><div className="db-spin" /> Loading top categories…</div>
@@ -211,16 +225,21 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Top Cities bar chart */}
+          {/* Top Cities — /report/top-cities */}
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
               <p className="section-title" style={{ margin: 0 }}>Top Cities</p>
             </div>
-            <TopCitiesBar />
+            {isCitiesLoading ? (
+              <div className="db-skeleton" style={{ height: 160 }}><div className="db-spin" /> Loading cities…</div>
+            ) : (
+              <TopCitiesBar cities={cityBars} />
+            )}
           </div>
         </div>
 
         {/* ── Recent Activity + Pending Alerts ── */}
+        {/* TODO-BACKEND: both sections are static — see backend request */}
         <div className="db-2col">
 
           {/* Recent Activity */}
@@ -234,12 +253,11 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
               {RECENT_ACTIVITY.map((item, i) => (
-                <div
-                  key={i}
-                  className="activity-row"
-                  style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "9px 8px", borderRadius: "8px", transition: "background 0.15s" }}
-                >
-                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: item.dot, flexShrink: 0, marginTop: "3px" }} />
+                <div key={i} className="activity-row"
+                  style={{ display: "flex", alignItems: "flex-start", gap: "10px",
+                    padding: "9px 8px", borderRadius: "8px", transition: "background 0.15s" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%",
+                    backgroundColor: item.dot, flexShrink: 0, marginTop: "3px" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.5 }}>{item.text}</p>
                   </div>
@@ -260,7 +278,9 @@ export default function DashboardPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {PENDING_ALERTS.map((alert) => (
                 <div key={alert.label} className="alert-pill" style={{ backgroundColor: alert.bg }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", backgroundColor: alert.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "10px",
+                    backgroundColor: alert.color, display: "flex", alignItems: "center",
+                    justifyContent: "center", flexShrink: 0 }}>
                     <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{alert.value}</span>
                   </div>
                   <div>
