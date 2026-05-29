@@ -1,21 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react";
+import { Eye, Loader2, ArrowLeft, Download, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
-import { DataTable, ColumnDef } from "@/components/ui/Table";
-import { StatusBadge } from "@/components/ui/Badge";
-import Modal from "@/components/ui/Modal";
 import { PageLoader } from "@/components/ui/Loader";
 import UserDetail, { type User } from "@/components/users/UserDetail";
+import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
   fetchUsers, fetchUserById, removeUser, clearSelected,
-  addUser, suspendUserThunk, activateUserThunk,
+  suspendUserThunk, activateUserThunk,
 } from "@/lib/redux/usersSlice";
 import { downloadReport } from "@/lib/api/reportApi";
-import type { ApiUser, RegisterUserPayload } from "@/lib/api/usersApi";
+import type { ApiUser } from "@/lib/api/usersApi";
 
 // ── Helpers ───────────────────────────────────────────────
 const normalizeStatus = (raw: string): User["status"] => {
@@ -41,284 +39,71 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB") : "—",
   verify: u.verify, gender: u.gender, bio: u.bio,
   verification: u.verification, category: u.category, skill: u.skill,
-  services: u.services,
-  bankDetails: u.bankDetails,
-  document: u.document,
-  paymentModel: u.paymentModel,
-  location: u.location,
+  services: u.services, bankDetails: u.bankDetails, document: u.document,
+  paymentModel: u.paymentModel, location: u.location,
   dob: (u as unknown as Record<string, unknown>).dateOfBirth as string ?? u.dob,
   referral: u.referral,
   account: u.account ?? (u.bankDetails ? {
-    bankName:      (u.bankDetails as Record<string,string>).bankName,
-    accountNumber: (u.bankDetails as Record<string,string>).accountNo,
+    bankName:      (u.bankDetails as Record<string, string>).bankName,
+    accountNumber: (u.bankDetails as Record<string, string>).accountNo,
   } : undefined),
 });
 
-const statusVariant: Record<string, "green" | "purple" | "yellow" | "red" | "gray"> = {
-  Active: "green", "Tier 1": "purple", "Tier 2": "purple",
-  "Tier 3": "purple", Pending: "yellow", Suspended: "red",
-};
-
-const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
-const AVATARS = ["#2563eb","#16a34a","#d97706","#7c3aed","#db2777","#0891b2","#dc2626","#65a30d"];
 const seedMap = new Map<string, number>();
 
-type Role = "client" | "expert" | "tas";
+const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
+type FilterOption = typeof FILTER_OPTIONS[number];
 
-const inp: React.CSSProperties = {
-  width: "100%", padding: "10px 14px", borderRadius: "10px",
-  border: "1px solid #D1D5DB", backgroundColor: "var(--color-background)",
-  fontSize: "13px", color: "var(--color-text-main)", outline: "none", boxSizing: "border-box",
-};
-const lbl: React.CSSProperties = {
-  display: "block", fontSize: "12px", fontWeight: 500,
-  color: "var(--color-text-muted)", marginBottom: "5px",
-};
-const row: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "4px" };
+const PAGE_SIZE = 10;
 
-function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
+// ── Status pill — matches screenshot exactly ──────────────
+function StatusPill({ status }: { status: string }) {
+  const s = status ?? "";
+  let color = "#6B7280", bg = "#F9FAFB", border = "1px solid #E5E7EB";
+  if (s === "Active")                                  { color = "#15803d"; bg = "#f0fdf4"; border = "1px solid #bbf7d0"; }
+  else if (["Tier 1","Tier 2","Tier 3"].includes(s))   { color = "#7c3aed"; bg = "#f5f3ff"; border = "1px solid #ddd6fe"; }
+  else if (s === "Pending")                            { color = "#d97706"; bg = "#fffbeb"; border = "1px solid #fde68a"; }
+  else if (s === "Suspended")                          { color = "#dc2626"; bg = "#fef2f2"; border = "1px solid #fecaca"; }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>Select the type of user to create:</p>
-      {([
-        { value: "client" as Role, label: "Client",  desc: "Can post jobs and hire experts" },
-        { value: "expert" as Role, label: "Expert",  desc: "Provides services on the platform" },
-        { value: "tas"    as Role, label: "TAS",     desc: "Talent Acquisition Specialist" },
-      ]).map((r) => (
-        <button key={r.value} onClick={() => onSelect(r.value)}
-          style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "14px 16px", borderRadius: "12px", border: "1px solid #D1D5DB", backgroundColor: "var(--color-background)", cursor: "pointer", textAlign: "left" }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#D1D5DB")}>
-          <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{r.label}</span>
-          <span style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "2px" }}>{r.desc}</span>
-        </button>
-      ))}
-    </div>
+    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 12px", borderRadius: "20px", whiteSpace: "nowrap", color, backgroundColor: bg, border }}>
+      {s}
+    </span>
   );
 }
-
-function ClientForm({ f, set, showPw, setShowPw }: {
-  f: Record<string, string>; set: (k: string, v: string) => void;
-  showPw: boolean; setShowPw: (v: boolean) => void;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <div style={row}><label style={lbl}>Full Name *</label><input style={inp} placeholder="John Doe" value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Email *</label><input style={inp} type="email" placeholder="user@email.com" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Username *</label><input style={inp} placeholder="johndoe" value={f.username} onChange={(e) => set("username", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Phone</label>
-        <div style={{ display: "flex" }}>
-          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid #D1D5DB", borderRight: "none", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0, backgroundColor: "var(--color-background)" }}>+234</div>
-          <input style={{ ...inp, borderRadius: "0 10px 10px 0", borderLeft: "none" }} placeholder="801 234 5678" maxLength={10} value={f.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
-        </div>
-      </div>
-      <div style={row}><label style={lbl}>Referral Code</label><input style={inp} placeholder="Optional" value={f.referral} onChange={(e) => set("referral", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Password *</label>
-        <div style={{ position: "relative" }}>
-          <input style={{ ...inp, paddingRight: "40px" }} type={showPw ? "text" : "password"} placeholder="StrongPass123!" value={f.password} onChange={(e) => set("password", e.target.value)} />
-          <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ExpertForm({ f, set, showPw, setShowPw }: {
-  f: Record<string, string>; set: (k: string, v: string) => void;
-  showPw: boolean; setShowPw: (v: boolean) => void;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: 0 }}>Basic Info</p>
-      <div style={row}><label style={lbl}>Full Name *</label><input style={inp} placeholder="John Doe" value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Email *</label><input style={inp} type="email" placeholder="user@email.com" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Phone</label>
-        <div style={{ display: "flex" }}>
-          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid #D1D5DB", borderRight: "none", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0, backgroundColor: "var(--color-background)" }}>+234</div>
-          <input style={{ ...inp, borderRadius: "0 10px 10px 0", borderLeft: "none" }} placeholder="801 234 5678" maxLength={10} value={f.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Gender *</label>
-          <select style={inp} value={f.gender} onChange={(e) => set("gender", e.target.value)}>
-            <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-          </select>
-        </div>
-        <div style={row}><label style={lbl}>Verification Tier</label>
-          <select style={inp} value={f.verification} onChange={(e) => set("verification", e.target.value)}>
-            <option value="tier1">Tier 1</option><option value="tier2">Tier 2</option><option value="tier3">Tier 3</option>
-          </select>
-        </div>
-      </div>
-      <div style={row}><label style={lbl}>Bio *</label>
-        <textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Brief description..." value={f.bio} onChange={(e) => set("bio", e.target.value)} />
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Payment Model</label>
-          <select style={inp} value={f.paymentModel} onChange={(e) => set("paymentModel", e.target.value)}>
-            <option value="protected">Protected</option><option value="unprotected">Unprotected</option>
-          </select>
-        </div>
-        <div style={row}><label style={lbl}>Referral Code</label><input style={inp} placeholder="Optional" value={f.referral} onChange={(e) => set("referral", e.target.value)} /></div>
-      </div>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: "4px 0 0" }}>Location</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Country</label><input style={inp} placeholder="Nigeria" value={f.country} onChange={(e) => set("country", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>State</label><input style={inp} placeholder="Lagos" value={f.state} onChange={(e) => set("state", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>City</label><input style={inp} placeholder="Ikeja" value={f.city} onChange={(e) => set("city", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Area</label><input style={inp} placeholder="Opebi" value={f.area} onChange={(e) => set("area", e.target.value)} /></div>
-      </div>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: "4px 0 0" }}>Skill</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Role / Title</label><input style={inp} placeholder="e.g. Electrician" value={f.skillRole} onChange={(e) => set("skillRole", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Experience (yrs)</label><input style={inp} type="number" min="0" placeholder="5" value={f.skillExp} onChange={(e) => set("skillExp", e.target.value)} /></div>
-      </div>
-      <div style={row}><label style={lbl}>Skill Description</label><input style={inp} placeholder="e.g. Electrical installation and repairs" value={f.skillDesc} onChange={(e) => set("skillDesc", e.target.value)} /></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Service Area</label><input style={inp} placeholder="e.g. Ikeja" value={f.skillArea} onChange={(e) => set("skillArea", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Category Name</label><input style={inp} placeholder="e.g. Home Services" value={f.categoryName} onChange={(e) => set("categoryName", e.target.value)} /></div>
-      </div>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: "4px 0 0" }}>Bank Details</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Bank Name</label><input style={inp} placeholder="Access Bank" value={f.bankName} onChange={(e) => set("bankName", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Account Number</label><input style={inp} placeholder="0123456789" maxLength={10} value={f.accountNumber} onChange={(e) => set("accountNumber", e.target.value.replace(/\D/g, "").slice(0, 10))} /></div>
-        <div style={row}><label style={lbl}>Account Name</label><input style={inp} placeholder="John Doe" value={f.accountName} onChange={(e) => set("accountName", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>BVN</label><input style={inp} placeholder="22334455666" maxLength={11} value={f.bvn} onChange={(e) => set("bvn", e.target.value.replace(/\D/g, "").slice(0, 11))} /></div>
-      </div>
-      <div style={row}><label style={lbl}>Password *</label>
-        <div style={{ position: "relative" }}>
-          <input style={{ ...inp, paddingRight: "40px" }} type={showPw ? "text" : "password"} placeholder="StrongPass123!" value={f.password} onChange={(e) => set("password", e.target.value)} />
-          <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TasForm({ f, set, showPw, setShowPw }: {
-  f: Record<string, string>; set: (k: string, v: string) => void;
-  showPw: boolean; setShowPw: (v: boolean) => void;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: 0 }}>Basic Info</p>
-      <div style={row}><label style={lbl}>Full Name *</label><input style={inp} placeholder="Jane Doe" value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Username *</label><input style={inp} placeholder="tas_user" value={f.username} onChange={(e) => set("username", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Email *</label><input style={inp} type="email" placeholder="user@email.com" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Phone</label>
-        <div style={{ display: "flex" }}>
-          <div style={{ padding: "10px 12px", borderRadius: "10px 0 0 10px", border: "1px solid #D1D5DB", borderRight: "none", fontSize: "13px", color: "var(--color-text-muted)", flexShrink: 0, backgroundColor: "var(--color-background)" }}>+234</div>
-          <input style={{ ...inp, borderRadius: "0 10px 10px 0", borderLeft: "none" }} placeholder="801 234 5678" maxLength={10} value={f.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Gender *</label>
-          <select style={inp} value={f.gender} onChange={(e) => set("gender", e.target.value)}>
-            <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-          </select>
-        </div>
-        <div style={row}><label style={lbl}>Date of Birth *</label>
-          <input style={inp} type="date" value={f.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
-        </div>
-      </div>
-      <div style={row}><label style={lbl}>Application Code</label><input style={inp} placeholder="Optional" value={f.applicationCode} onChange={(e) => set("applicationCode", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Recruitment Expectations</label>
-        <textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Optional..." value={f.recruitExpectations} onChange={(e) => set("recruitExpectations", e.target.value)} />
-      </div>
-      <div style={row}><label style={lbl}>Categories (comma-separated) *</label>
-        <input style={inp} placeholder="e.g. Recruitment, Vetting" value={f.category} onChange={(e) => set("category", e.target.value)} />
-        <span style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "3px" }}>e.g. Recruitment, Vetting</span>
-      </div>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: "4px 0 0" }}>Document URLs</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>ID Card URL *</label><input style={inp} placeholder="https://..." value={f.idCard} onChange={(e) => set("idCard", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Reference Letter URL</label><input style={inp} placeholder="https://..." value={f.referenceLetter} onChange={(e) => set("referenceLetter", e.target.value)} /></div>
-      </div>
-      <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", margin: "4px 0 0" }}>Bank Details</p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={row}><label style={lbl}>Bank Name</label><input style={inp} placeholder="Access Bank" value={f.bankName} onChange={(e) => set("bankName", e.target.value)} /></div>
-        <div style={row}><label style={lbl}>Account No</label><input style={inp} placeholder="1234567890" maxLength={10} value={f.accountNo} onChange={(e) => set("accountNo", e.target.value.replace(/\D/g, "").slice(0, 10))} /></div>
-      </div>
-      <div style={row}><label style={lbl}>Password *</label>
-        <div style={{ position: "relative" }}>
-          <input style={{ ...inp, paddingRight: "40px" }} type={showPw ? "text" : "password"} placeholder="StrongPass123!" value={f.password} onChange={(e) => set("password", e.target.value)} />
-          <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const defaultClient  = () => ({ name:"", email:"", username:"", phone:"", password:"", referral:"" });
-const defaultExpert  = () => ({ name:"", email:"", phone:"", password:"", gender:"male", bio:"", referral:"", verification:"tier1", paymentModel:"protected", country:"", state:"", city:"", area:"", skillRole:"", skillExp:"", skillDesc:"", skillArea:"", categoryName:"", bankName:"", accountNumber:"", accountName:"", bvn:"" });
-const defaultTas     = () => ({ name:"", email:"", username:"", phone:"", password:"", gender:"male", dateOfBirth:"", applicationCode:"", recruitExpectations:"", bankName:"", accountNo:"", category:"", idCard:"", referenceLetter:"" });
 
 export default function UsersPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, selected, selectedStatus } = useAppSelector((s) => s.users);
 
-  const [addOpen,        setAddOpen]        = useState(false);
-  const [addStep,        setAddStep]        = useState<"role"|"form">("role");
-  const [role,           setRole]           = useState<Role>("client");
-  const [clientF,        setClientF]        = useState(defaultClient());
-  const [expertF,        setExpertF]        = useState(defaultExpert());
-  const [tasF,           setTasF]           = useState(defaultTas());
-  const [addLoading,     setAddLoading]     = useState(false);
-  const [showPw,         setShowPw]         = useState(false);
+  const [filter,         setFilter]         = useState<FilterOption>("All Users");
+  const [search,         setSearch]         = useState("");
+  const [page,           setPage]           = useState(1);
+  const [downloading,    setDownloading]    = useState(false);
   const [deleteOpen,     setDeleteOpen]     = useState(false);
   const [deleteLoading,  setDeleteLoading]  = useState(false);
   const [suspendOpen,    setSuspendOpen]    = useState(false);
   const [suspendLoading, setSuspendLoading] = useState(false);
-  const [downloading,    setDownloading]    = useState(false);
 
   useEffect(() => { if (listStatus === "idle") dispatch(fetchUsers()); }, [dispatch, listStatus]);
   useEffect(() => { list.forEach((u, i) => { if (!seedMap.has(u.id)) seedMap.set(u.id, i); }); }, [list]);
 
-  const showDetail = selectedStatus === "succeeded" && !!selected;
-
-  const closeAdd = () => {
-    setAddOpen(false); setAddStep("role");
-    setClientF(defaultClient()); setExpertF(defaultExpert()); setTasF(defaultTas());
-    setShowPw(false);
-  };
-
-  const handleRoleSelect = (r: Role) => { setRole(r); setAddStep("form"); };
-  const handleBack = () => { dispatch(clearSelected()); };
-
+  const handleBack     = () => dispatch(clearSelected());
   const handleViewUser = (userId: string) => {
     const found = list.find((u) => u.id === userId);
-    const type  = found?.role?.toLowerCase() ?? "client";
-    dispatch(fetchUserById({ id: userId, type }));
+    dispatch(fetchUserById({ id: userId, type: found?.role?.toLowerCase() ?? "client" }));
   };
 
-  // ── Export ────────────────────────────────────────────
   const handleExport = async () => {
     setDownloading(true);
     try {
       const today = new Date().toISOString().split("T")[0];
-      const url   = await downloadReport({
-        reportType: "users",
-        type:       "pdf",
-        fromDate:   "2026-05-15",
-        toDate:     today,
-      });
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = `users_report_${today}.pdf`;
-      a.click();
+      const url   = await downloadReport({ reportType: "users", type: "pdf", fromDate: "2026-05-15", toDate: today });
+      const a = document.createElement("a");
+      a.href = url; a.download = `users_report_${today}.pdf`; a.click();
       URL.revokeObjectURL(url);
       toast.success("Users report downloaded");
-    } catch {
-      toast.error("Failed to download users report");
-    } finally {
-      setDownloading(false);
-    }
+    } catch { toast.error("Failed to download users report"); }
+    finally { setDownloading(false); }
   };
 
   const handleDelete = () => {
@@ -342,60 +127,13 @@ export default function UsersPage() {
       .finally(() => setSuspendLoading(false));
   };
 
-  const handleAddUser = () => {
-    let payload: RegisterUserPayload;
-    if (role === "client") {
-      const f = clientF;
-      if (!f.name || !f.email || !f.password || !f.username) { toast.warning("Name, email, username and password are required"); return; }
-      payload = { role: "client", name: f.name, email: f.email, username: f.username, phone: f.phone ? `+234${f.phone}` : "", password: f.password, referral: f.referral || undefined };
-    } else if (role === "expert") {
-      const f = expertF;
-      if (!f.name || !f.email || !f.password || !f.bio) { toast.warning("Name, email, bio and password are required"); return; }
-      payload = {
-        role: "expert", name: f.name, email: f.email, password: f.password, phone: f.phone ? `+234${f.phone}` : "",
-        gender: f.gender as "male"|"female"|"other", bio: f.bio,
-        referral: f.referral || undefined,
-        verification: (f.verification as "tier1"|"tier2"|"tier3") || "tier1",
-        paymentModel: (f.paymentModel as "protected"|"unprotected") || "protected",
-        avatar: undefined,
-        location: { country: f.country, state: f.state, city: f.city, area: f.area },
-        skill: { role: f.skillRole ? [f.skillRole] : [], experience: f.skillExp ? Number(f.skillExp) : 0, description: f.skillDesc, area: f.skillArea },
-        category: { name: f.categoryName, sub: [] },
-        bankDetails: f.bankName ? { bankName: f.bankName, accountNumber: f.accountNumber, accountName: f.accountName, bvn: f.bvn } : undefined,
-      };
-    } else {
-      const f = tasF;
-      if (!f.name || !f.email || !f.password || !f.username || !f.dateOfBirth) { toast.warning("Name, email, username, date of birth and password are required"); return; }
-      if (!f.category.trim()) { toast.warning("At least one category is required"); return; }
-      if (!f.idCard.trim()) { toast.warning("ID Card URL is required"); return; }
-      payload = {
-        role: "tas", name: f.name, email: f.email, username: f.username, password: f.password,
-        phone: f.phone ? `+234${f.phone}` : "",
-        gender: f.gender as "male"|"female"|"other",
-        dateOfBirth: f.dateOfBirth,
-        category: f.category.split(",").map((c) => c.trim()).filter(Boolean),
-        document: { idCard: f.idCard, referenceLetter: f.referenceLetter || undefined },
-        applicationCode: f.applicationCode || undefined,
-        recruitExpectations: f.recruitExpectations || undefined,
-        bankDetails: f.bankName ? { bankName: f.bankName, accountNo: f.accountNo } : undefined,
-        location: {},
-      };
-    }
-    setAddLoading(true);
-    dispatch(addUser(payload as RegisterUserPayload))
-      .unwrap()
-      .then(() => { toast.success("User added successfully"); closeAdd(); dispatch(fetchUsers()); })
-      .catch((err: string) => toast.error("Failed to add user", { description: err }))
-      .finally(() => setAddLoading(false));
-  };
-
-  const users = list.map((u) => toUser(u, seedMap.get(u.id) ?? 0));
-
+  // ── Detail view states ────────────────────────────────
   if (selectedStatus === "loading") return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <Topbar title="User Management" /><PageLoader text="Loading user..." />
     </div>
   );
+
   if (selectedStatus === "failed") return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
       <Topbar title="User Management" />
@@ -408,7 +146,7 @@ export default function UsersPage() {
     </div>
   );
 
-  if (showDetail && selected) {
+  if (selectedStatus === "succeeded" && selected) {
     const detailUser  = toUser(selected, seedMap.get(selected.id) ?? 0);
     const isSuspended = detailUser.status === "Suspended";
     return (
@@ -423,7 +161,8 @@ export default function UsersPage() {
             </button>
           </div>}>
           <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
-            {isSuspended ? <>Reinstate <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? They will regain full access.</>
+            {isSuspended
+              ? <>Reinstate <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? They will regain full access.</>
               : <>Suspend <strong style={{ color: "var(--color-text-main)" }}>{detailUser.name}</strong>? They will lose access until reinstated.</>}
           </p>
         </Modal>
@@ -442,96 +181,226 @@ export default function UsersPage() {
     );
   }
 
-  const columns: ColumnDef<User>[] = [
-    {
-      key: "name", header: "Name",
-      render: (u) => (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, backgroundColor: AVATARS[u.avatarSeed % 8], display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "11px", fontWeight: 700 }}>
-            {u.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-          </div>
-          <div>
-            <p style={{ fontWeight: 600, color: "var(--color-text-main)", fontSize: "13px", margin: 0 }}>{u.name}</p>
-            <p style={{ fontSize: "11px", color: "var(--color-text-muted)", margin: 0 }}>{u.email}</p>
-          </div>
-        </div>
-      ),
-    },
-    { key: "type",   header: "Type",   render: (u) => <span style={{ color: "var(--color-text-muted)" }}>{u.type}</span> },
-    { key: "status", header: "Status", render: (u) => <StatusBadge label={u.status} variant={statusVariant[u.status] ?? "gray"} /> },
-    { key: "joined", header: "Joined", render: (u) => <span style={{ color: "var(--color-text-muted)" }}>{u.joined}</span> },
-    { key: "actions" as keyof User, header: "Actions",
-      render: (u) => (
-        <button onClick={() => handleViewUser(u.id)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-          <Eye size={17} strokeWidth={1.8} />
-        </button>
-      ),
-    },
-  ];
+  // ── List view ─────────────────────────────────────────
+  const users = list.map((u) => toUser(u, seedMap.get(u.id) ?? 0));
+
+  const filtered = users.filter((u) => {
+    if (filter !== "All Users" && u.type !== filter) return false;
+    if (search && !u.name.toLowerCase().includes(search.toLowerCase()) &&
+                  !u.email.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to         = Math.min(page * PAGE_SIZE, filtered.length);
+
+  const TH: React.CSSProperties = {
+    textAlign: "left", padding: "14px 24px",
+    fontSize: "12px", fontWeight: 600, color: "#9CA3AF",
+    borderBottom: "1px solid #F3F4F6", whiteSpace: "nowrap",
+    backgroundColor: "#fff",
+  };
+  const TD: React.CSSProperties = {
+    padding: "16px 24px", fontSize: "13px",
+    color: "#374151", borderBottom: "1px solid #F3F4F6",
+    whiteSpace: "nowrap",
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F9FAFB" }}>
       <Topbar title="User Management" />
+
       <style>{`
-        .users-subheader { padding: 16px !important; }
-        .users-main { padding: 0 16px 24px !important; }
-        @media (min-width: 640px) {
-          .users-subheader { padding: 20px 32px !important; }
-          .users-main { padding: 0 32px 32px !important; }
+        .users-wrap { padding: 20px 24px; }
+        @media (min-width: 640px) { .users-wrap { padding: 24px 32px; } }
+        .users-table-wrap { display: none; }
+        .users-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .users-pgn { flex-direction: column; gap: 8px; }
+        @media (min-width: 768px) {
+          .users-table-wrap { display: block; }
+          .users-cards { display: none; }
+          .users-pgn { flex-direction: row; align-items: center; }
         }
       `}</style>
 
-      <div className="users-subheader" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
-          {listStatus === "succeeded" ? `${list.length} users total` : "Manage all users"}
-        </p>
-        <button onClick={() => setAddOpen(true)} className="btn-primary"
-          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, cursor: "pointer", border: "none" }}>
-          <Plus size={15} /> Add User
-        </button>
-      </div>
+      <div className="users-wrap" style={{ flex: 1 }}>
 
-      <main className="users-main" style={{ flex: 1 }}>
-        {listStatus === "loading" && <PageLoader text="Loading users..." />}
-        {listStatus === "failed"  && <div style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>Failed to load users.</div>}
-        {listStatus === "succeeded" && (
-          <DataTable
-            data={users}
-            columns={columns}
-            filterOptions={FILTER_OPTIONS}
-            filterKey="type"
-            searchKey="name"
-            searchPlaceholder="Search name..."
-            pageSize={10}
-            onExport={handleExport}
-            exportLoading={downloading}
-          />
-        )}
-      </main>
+        {/* Sub-header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+          <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Manage all users</p>
+          {/* Add User — commented out
+          <button className="btn-primary" style={{ display:"flex", alignItems:"center", gap:"8px", padding:"10px 20px", borderRadius:"12px", fontSize:"13px", fontWeight:600, border:"none", cursor:"pointer" }}>
+            <Plus size={15} /> Add User
+          </button> */}
+        </div>
 
-      {/* Add User Modal */}
-      <Modal
-        open={addOpen} onClose={closeAdd}
-        title={addStep === "role" ? "Select User Type" : `Add ${role.charAt(0).toUpperCase() + role.slice(1)}`}
-        size="md"
-        footer={addStep === "role" ? undefined : (
-          <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-            <button onClick={() => setAddStep("role")} style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid #D1D5DB", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>← Back</button>
-            <button onClick={handleAddUser} disabled={addLoading} className="btn-primary"
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: addLoading ? 0.7 : 1 }}>
-              {addLoading ? <><Loader2 size={14} className="animate-spin" />Adding...</> : "Add User"}
-            </button>
+        {/* Main card */}
+        <div style={{ backgroundColor: "#fff", borderRadius: "16px", border: "1px solid #E5E7EB", overflow: "hidden" }}>
+
+          {/* Filter bar */}
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #F3F4F6" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "14px" }}>
+              <SlidersHorizontal size={14} color="#6B7280" />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>Filter</span>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+              {/* Search */}
+              <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+                <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input
+                  type="text"
+                  placeholder="Search name..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  style={{ width: "100%", paddingLeft: "38px", paddingRight: "14px", paddingTop: "9px", paddingBottom: "9px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {/* Filter dropdown */}
+              <div style={{ position: "relative" }}>
+                <select
+                  value={filter}
+                  onChange={(e) => { setFilter(e.target.value as FilterOption); setPage(1); }}
+                  style={{ padding: "9px 36px 9px 14px", borderRadius: "10px", fontSize: "13px", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#374151", outline: "none", appearance: "none", cursor: "pointer", minWidth: "130px" }}>
+                  {FILTER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#6B7280", pointerEvents: "none" }} />
+              </div>
+
+              {/* Export */}
+              <button
+                onClick={handleExport}
+                disabled={downloading}
+                style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#374151", cursor: "pointer", opacity: downloading ? 0.7 : 1, whiteSpace: "nowrap" }}>
+                {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                Export
+              </button>
+            </div>
           </div>
-        )}>
-        {addStep === "role"
-          ? <RoleSelector onSelect={handleRoleSelect} />
-          : role === "client"
-            ? <ClientForm f={clientF} set={(k,v) => setClientF((p) => ({ ...p, [k]: v }))} showPw={showPw} setShowPw={setShowPw} />
-            : role === "expert"
-              ? <ExpertForm f={expertF} set={(k,v) => setExpertF((p) => ({ ...p, [k]: v }))} showPw={showPw} setShowPw={setShowPw} />
-              : <TasForm   f={tasF}    set={(k,v) => setTasF((p)    => ({ ...p, [k]: v }))} showPw={showPw} setShowPw={setShowPw} />
-        }
-      </Modal>
+
+          {/* Loading / error */}
+          {listStatus === "loading" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "64px", gap: "10px", color: "#9CA3AF" }}>
+              <Loader2 size={18} className="animate-spin" />
+              <span style={{ fontSize: "13px" }}>Loading users...</span>
+            </div>
+          )}
+          {listStatus === "failed" && (
+            <p style={{ textAlign: "center", padding: "64px", fontSize: "13px", color: "#ef4444" }}>Failed to load users.</p>
+          )}
+
+          {listStatus === "succeeded" && (
+            <>
+              {/* Desktop table */}
+              <div className="users-table-wrap" style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={TH}>Name</th>
+                      <th style={TH}>Type</th>
+                      <th style={TH}>Status</th>
+                      <th style={TH}>Joined</th>
+                      <th style={TH}>Jobs</th>
+                      <th style={TH}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "64px", fontSize: "14px", color: "#9CA3AF" }}>
+                          No users found.
+                        </td>
+                      </tr>
+                    ) : paginated.map((u) => (
+                      <tr key={u.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                        {/* Name */}
+                        <td style={TD}>
+                          <p style={{ fontWeight: 600, color: "#111827", fontSize: "13px", margin: 0 }}>{u.name}</p>
+                        </td>
+                        {/* Type */}
+                        <td style={{ ...TD, color: "#6B7280" }}>{u.type}</td>
+                        {/* Status */}
+                        <td style={TD}><StatusPill status={u.status} /></td>
+                        {/* Joined */}
+                        <td style={{ ...TD, color: "#6B7280" }}>{u.joined}</td>
+                        {/* Jobs */}
+                        <td style={{ ...TD, color: "#6B7280" }}>
+                          {u.type === "TAS"
+                            ? "N/A"
+                            : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
+                        </td>
+                        {/* Actions */}
+                        <td style={TD}>
+                          <button
+                            onClick={() => handleViewUser(u.id)}
+                            title="View user"
+                            style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#6B7280", display: "flex", alignItems: "center" }}>
+                            <Eye size={18} strokeWidth={1.6} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="users-cards" style={{ backgroundColor: "#F9FAFB" }}>
+                {paginated.length === 0 ? (
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF" }}>No users found.</p>
+                ) : paginated.map((u) => (
+                  <div key={u.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                      <div>
+                        <p style={{ fontWeight: 600, fontSize: "13px", color: "#111827", margin: "0 0 2px" }}>{u.name}</p>
+                        <p style={{ fontSize: "12px", color: "#6B7280", margin: 0 }}>{u.type} · {u.joined}</p>
+                      </div>
+                      <StatusPill status={u.status} />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "10px", borderTop: "1px solid #F3F4F6" }}>
+                      <span style={{ fontSize: "12px", color: "#6B7280" }}>
+                        Jobs: {u.type === "TAS" ? "N/A" : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
+                      </span>
+                      <button onClick={() => handleViewUser(u.id)}
+                        style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#6B7280" }}>
+                        <Eye size={17} strokeWidth={1.6} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <div className="users-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "14px 24px", borderTop: "1px solid #F3F4F6" }}>
+                <p style={{ fontSize: "12px", color: "#6B7280", margin: 0 }}>
+                  {filtered.length === 0
+                    ? "No results"
+                    : `Showing ${from} to ${to} of ${filtered.length} results`}
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+                    Previous
+                  </button>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
+                    <button key={p} onClick={() => setPage(p)}
+                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: p === page ? 600 : 400, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#2563eb" : "#fff", color: p === page ? "#fff" : "#6B7280", cursor: "pointer" }}>
+                      {p}
+                    </button>
+                  ))}
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,20 @@
-// components/layout/Navbar.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, PanelLeftOpen, Menu, X, Trash2, CheckCheck } from "lucide-react";
+import {
+  Bell,
+  PanelLeftOpen,
+  Menu,
+  X,
+  Trash2,
+  CheckCheck,
+  User,
+  Lock,
+  LogOut,
+  ChevronDown,
+} from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
@@ -12,6 +23,7 @@ import {
   markAllReadThunk,
   deleteNotificationThunk,
 } from "@/lib/redux/notificationSlice";
+import { logout } from "@/lib/redux/authSlice"; // adjust to your actual logout action
 import type { ApiNotification } from "@/lib/api/notificationApi";
 
 interface TopbarProps {
@@ -54,14 +66,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <p
-            style={{
-              fontSize: "14px",
-              fontWeight: 700,
-              color: "#111827",
-              margin: 0,
-            }}
-          >
+          <p style={{ fontSize: "14px", fontWeight: 700, color: "#111827", margin: 0 }}>
             Notifications
           </p>
           {unreadCount > 0 && (
@@ -80,7 +85,6 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
             </span>
           )}
         </div>
-
         <div style={{ display: "flex", gap: "4px" }}>
           {unreadCount > 0 && (
             <button
@@ -121,40 +125,21 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       {/* List */}
       <div style={{ maxHeight: "380px", overflowY: "auto" }}>
         {listStatus === "loading" && (
-          <p
-            style={{
-              textAlign: "center",
-              padding: "32px",
-              fontSize: "13px",
-              color: "#9CA3AF",
-            }}
-          >
+          <p style={{ textAlign: "center", padding: "32px", fontSize: "13px", color: "#9CA3AF" }}>
             Loading…
           </p>
         )}
-
         {listStatus === "failed" && (
-          <p
-            style={{
-              textAlign: "center",
-              padding: "32px",
-              fontSize: "13px",
-              color: "#EF4444",
-            }}
-          >
+          <p style={{ textAlign: "center", padding: "32px", fontSize: "13px", color: "#EF4444" }}>
             Failed to load notifications.
           </p>
         )}
-
         {listStatus === "succeeded" && list.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 16px" }}>
             <Bell size={28} style={{ color: "#E5E7EB", margin: "0 auto 8px" }} />
-            <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>
-              No notifications yet
-            </p>
+            <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No notifications yet</p>
           </div>
         )}
-
         {list.map((n) => {
           const read = isRead(n);
           return (
@@ -166,10 +151,8 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                 padding: "12px 16px",
                 borderBottom: "1px solid #F9FAFB",
                 backgroundColor: read ? "#ffffff" : "#FFFBEB",
-                transition: "background 0.15s",
               }}
             >
-              {/* Unread dot */}
               <div style={{ flexShrink: 0, marginTop: "4px" }}>
                 <div
                   style={{
@@ -180,39 +163,16 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                   }}
                 />
               </div>
-
-              {/* Content */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 {n.title && (
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      color: "#111827",
-                      margin: "0 0 2px",
-                      lineHeight: 1.4,
-                    }}
-                  >
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", margin: "0 0 2px", lineHeight: 1.4 }}>
                     {n.title}
                   </p>
                 )}
-                <p
-                  style={{
-                    fontSize: "12px",
-                    color: "#6B7280",
-                    margin: 0,
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p style={{ fontSize: "12px", color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
                   {n.message ?? n.body ?? "—"}
                 </p>
-                <p
-                  style={{
-                    fontSize: "11px",
-                    color: "#9CA3AF",
-                    margin: "4px 0 0",
-                  }}
-                >
+                <p style={{ fontSize: "11px", color: "#9CA3AF", margin: "4px 0 0" }}>
                   {new Date(n.createdAt).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "short",
@@ -221,28 +181,12 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                   })}
                 </p>
               </div>
-
-              {/* Actions */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px",
-                  flexShrink: 0,
-                }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
                 {!read && (
                   <button
                     onClick={() => dispatch(markReadThunk(n.id))}
                     title="Mark read"
-                    style={{
-                      padding: "4px",
-                      borderRadius: "6px",
-                      border: "none",
-                      background: "none",
-                      cursor: "pointer",
-                      color: "#9CA3AF",
-                    }}
+                    style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF" }}
                   >
                     <CheckCheck size={13} />
                   </button>
@@ -250,14 +194,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => dispatch(deleteNotificationThunk(n.id))}
                   title="Delete"
-                  style={{
-                    padding: "4px",
-                    borderRadius: "6px",
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                    color: "#EF4444",
-                  }}
+                  style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#EF4444" }}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -265,6 +202,150 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Profile dropdown ──────────────────────────────────────── */
+function ProfileDropdown({
+  adminName,
+  adminEmail,
+  initials,
+  onClose,
+}: {
+  adminName: string;
+  adminEmail: string;
+  initials: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const dispatch = useAppDispatch();
+
+  const items = [
+    { label: "My Profile", icon: <User size={15} />, href: "/dashboard/profile" },
+    { label: "Notification Settings", icon: <Bell size={15} />, href: "/dashboard/notification-settings" },
+    { label: "Change Password", icon: <Lock size={15} />, href: "/dashboard/change-password" },
+  ];
+
+  const handleNavigate = (href: string) => {
+    onClose();
+    router.push(href);
+  };
+
+  const handleLogout = () => {
+    onClose();
+    dispatch(logout());
+    router.push("/login");
+  };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "calc(100% + 8px)",
+        right: 0,
+        width: "220px",
+        borderRadius: "16px",
+        border: "1px solid #E5E7EB",
+        backgroundColor: "#ffffff",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+        zIndex: 50,
+        overflow: "hidden",
+      }}
+    >
+      {/* Admin info header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "14px 16px",
+          borderBottom: "1px solid #F3F4F6",
+        }}
+      >
+        <div
+          style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "13px",
+            fontWeight: 700,
+            color: "#fff",
+            backgroundColor: "#16a34a",
+            flexShrink: 0,
+          }}
+        >
+          {initials}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {adminName}
+          </p>
+          <p style={{ fontSize: "11px", color: "#6B7280", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {adminEmail}
+          </p>
+        </div>
+      </div>
+
+      {/* Menu items */}
+      <div style={{ padding: "6px" }}>
+        {items.map((item) => (
+          <button
+            key={item.href}
+            onClick={() => handleNavigate(item.href)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "9px 10px",
+              borderRadius: "10px",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#374151",
+              textAlign: "left",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <span style={{ color: "#6B7280" }}>{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Divider + Logout */}
+      <div style={{ borderTop: "1px solid #F3F4F6", padding: "6px" }}>
+        <button
+          onClick={handleLogout}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "9px 10px",
+            borderRadius: "10px",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            fontSize: "13px",
+            color: "#EF4444",
+            textAlign: "left",
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FEF2F2")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+        >
+          <LogOut size={15} />
+          Logout
+        </button>
       </div>
     </div>
   );
@@ -279,30 +360,26 @@ export default function Topbar({ title }: TopbarProps) {
   const { listStatus, unreadCount } = useAppSelector((s) => s.notifications);
 
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
-  // Fetch notifications once on mount (re-fetches if reset to "idle")
   useEffect(() => {
-    if (listStatus === "idle") {
-      dispatch(fetchNotifications());
-    }
+    if (listStatus === "idle") dispatch(fetchNotifications());
   }, [dispatch, listStatus]);
 
-  // Close panel on outside click
+  // Close panels on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (
-        notifRef.current &&
-        !notifRef.current.contains(e.target as Node)
-      ) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node))
         setShowNotifs(false);
-      }
+      if (profileRef.current && !profileRef.current.contains(e.target as Node))
+        setShowProfile(false);
     };
-    if (showNotifs) document.addEventListener("mousedown", handler);
+    document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showNotifs]);
+  }, []);
 
-  // Admin display
   const adminName = admin?.name ?? "Admin";
   const adminEmail = admin?.email ?? "";
   const initials = adminName
@@ -335,34 +412,19 @@ export default function Topbar({ title }: TopbarProps) {
         .nav-logo         { display: none; }
         .nav-admin-detail { display: none; }
         .nav-title        { font-size: 15px; font-weight: 700; color: var(--color-text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .profile-btn:hover { background: #F9FAFB !important; }
         @media (min-width: 400px)  { .nav-logo { display: flex; } }
         @media (min-width: 640px)  { .nav-title { font-size: 17px; } .nav-admin-detail { display: block; } }
         @media (min-width: 768px)  { .nav-mobile-only { display: none !important; } .nav-desktop-only { display: flex; } .nav-title { font-size: 19px; } }
       `}</style>
 
       {/* Left */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          flex: 1,
-          minWidth: 0,
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
           className="nav-mobile-only"
-          style={{
-            padding: "6px",
-            borderRadius: "8px",
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            flexShrink: 0,
-          }}
+          style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}
         >
           <Menu size={20} strokeWidth={1.8} />
         </button>
@@ -372,15 +434,7 @@ export default function Topbar({ title }: TopbarProps) {
             onClick={toggle}
             aria-label="Expand sidebar"
             className="nav-desktop-only"
-            style={{
-              padding: "6px",
-              borderRadius: "8px",
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              flexShrink: 0,
-            }}
+            style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}
           >
             <PanelLeftOpen size={19} strokeWidth={1.8} />
           </button>
@@ -399,18 +453,12 @@ export default function Topbar({ title }: TopbarProps) {
       </div>
 
       {/* Right */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          flexShrink: 0,
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+
         {/* Bell */}
         <div ref={notifRef} style={{ position: "relative" }}>
           <button
-            onClick={() => setShowNotifs((v) => !v)}
+            onClick={() => { setShowNotifs((v) => !v); setShowProfile(false); }}
             aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
             style={{
               position: "relative",
@@ -438,59 +486,71 @@ export default function Topbar({ title }: TopbarProps) {
               />
             )}
           </button>
-
-          {showNotifs && (
-            <NotificationPanel onClose={() => setShowNotifs(false)} />
-          )}
+          {showNotifs && <NotificationPanel onClose={() => setShowNotifs(false)} />}
         </div>
 
-        {/* Admin info */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "6px 8px",
-            borderRadius: "10px",
-          }}
-        >
-          {/* Avatar — initials */}
-          <div
+        {/* Profile button */}
+        <div ref={profileRef} style={{ position: "relative" }}>
+          <button
+            onClick={() => { setShowProfile((v) => !v); setShowNotifs(false); }}
+            className="profile-btn"
             style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "50%",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontSize: "12px",
-              fontWeight: 700,
-              color: "#fff",
-              backgroundColor: "#16a34a",
-              flexShrink: 0,
+              gap: "8px",
+              padding: "5px 8px",
+              borderRadius: "10px",
+              border: "none",
+              background: showProfile ? "#F9FAFB" : "none",
+              cursor: "pointer",
             }}
           >
-            {initials}
-          </div>
-          {/* Name + email */}
-          <div className="nav-admin-detail" style={{ textAlign: "left" }}>
-            <p
+            {/* Avatar */}
+            <div
               style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                lineHeight: 1.2,
-                color: "var(--color-text-main)",
-                margin: 0,
+                width: "32px",
+                height: "32px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "#fff",
+                backgroundColor: "#16a34a",
+                flexShrink: 0,
               }}
             >
-              {adminName}
-            </p>
-            <p
-              style={{ fontSize: "11px", color: "var(--color-text-muted)", margin: 0 }}
-            >
-              {adminEmail}
-            </p>
-          </div>
+              {initials}
+            </div>
+            {/* Name + email */}
+            <div className="nav-admin-detail" style={{ textAlign: "left" }}>
+              <p style={{ fontSize: "13px", fontWeight: 600, lineHeight: 1.2, color: "var(--color-text-main)", margin: 0 }}>
+                {adminName}
+              </p>
+              <p style={{ fontSize: "11px", color: "var(--color-text-muted)", margin: 0 }}>
+                {adminEmail}
+              </p>
+            </div>
+            <ChevronDown
+              size={14}
+              className="nav-admin-detail"
+              style={{
+                color: "var(--color-text-muted)",
+                transform: showProfile ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s",
+              }}
+            />
+          </button>
+
+          {showProfile && (
+            <ProfileDropdown
+              adminName={adminName}
+              adminEmail={adminEmail}
+              initials={initials}
+              onClose={() => setShowProfile(false)}
+            />
+          )}
         </div>
       </div>
     </header>

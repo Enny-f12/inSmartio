@@ -1,5 +1,7 @@
 // app/(dashboard)/settings/types.ts
 
+// components/settings/types.ts
+
 export type SettingsView =
   | "main"
   | "categories"
@@ -8,7 +10,9 @@ export type SettingsView =
   | "announcements"
   | "commission"
   | "notifications"
-  | "admins";           // ← new
+  | "admins"
+  | "notificationSettings"
+  | "changePassword";          // ← new
 
 // ── Categories ───────────────────────────────────────────
 export interface SubCategory { name: string; icon: string; }
