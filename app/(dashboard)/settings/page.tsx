@@ -1,7 +1,7 @@
 // app/(dashboard)/settings/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { ChevronRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import Topbar from "@/components/layout/Navbar";
@@ -29,25 +29,26 @@ function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-export default function SettingsPage() {
+// ── Inner component that uses useSearchParams ─────────────
+// Must be wrapped in <Suspense> to satisfy Next.js static generation.
+function SettingsInner() {
   const searchParams = useSearchParams();
   const [view, setView] = useState<ExtendedView>("main");
 
-  // Read ?view= param from URL (used by Navbar dropdown)
   useEffect(() => {
     const param = searchParams.get("view") as ExtendedView | null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (param) setView(param);
   }, [searchParams]);
 
-  if (view === "categories")      return <CategoriesManagement   onBack={() => setView("main")} />;
-  if (view === "faq")             return <FaqManagement          onBack={() => setView("main")} />;
-  if (view === "banners")         return <BannerManagement       onBack={() => setView("main")} />;
-  if (view === "announcements")   return <AnnouncementManagement onBack={() => setView("main")} />;
-  if (view === "commission")      return <CommissionSettings      onBack={() => setView("main")} />;
-  if (view === "notifications")   return <NotificationTemplates  onBack={() => setView("main")} />;
-  if (view === "notif-settings")  return <NotificationSettings   onBack={() => setView("main")} />;
-  if (view === "admins")          return <AdminManagement        onBack={() => setView("main")} />;
+  if (view === "categories")     return <CategoriesManagement   onBack={() => setView("main")} />;
+  if (view === "faq")            return <FaqManagement          onBack={() => setView("main")} />;
+  if (view === "banners")        return <BannerManagement       onBack={() => setView("main")} />;
+  if (view === "announcements")  return <AnnouncementManagement onBack={() => setView("main")} />;
+  if (view === "commission")     return <CommissionSettings      onBack={() => setView("main")} />;
+  if (view === "notifications")  return <NotificationTemplates  onBack={() => setView("main")} />;
+  if (view === "notif-settings") return <NotificationSettings   onBack={() => setView("main")} />;
+  if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />;
 
   return (
     <div className="flex flex-col flex-1">
@@ -92,5 +93,14 @@ export default function SettingsPage() {
 
       </main>
     </div>
+  );
+}
+
+// ── Page export wraps inner component in Suspense ─────────
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsInner />
+    </Suspense>
   );
 }

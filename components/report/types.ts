@@ -12,6 +12,8 @@ export type ReportType =
 
 export type FormatType = "PDF" | "CSV";
 
+export type ChartType = "line" | "donut";
+
 export interface ReportSummaryItem {
   label: string;
   value: string;
@@ -26,6 +28,8 @@ export interface DonutSegment {
 export interface ReportConfig {
   title:       string;
   description: string;
+  chartType:   ChartType;
+  yLabel?:     string;
   weeks?:      number[];
   weekLabels?: string[];
   segments?:   DonutSegment[];
@@ -37,23 +41,21 @@ const FLAT         = [0,0,0,0,0,0,0,0,0,0,0,0];
 
 export const reportConfigs: Record<ReportType, ReportConfig> = {
   "User Growth Report": {
-    title:       "User Growth Report",
-    description: "New users by day/week/month",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total New Users:", value: "—" }],
+    title: "User Growth Report", description: "New users by day/week/month",
+    chartType: "line", yLabel: "Total Users",
+    weeks: FLAT, weekLabels: MONTH_LABELS,
+    summary: [{ label: "Total New Users:", value: "—" }],
   },
   "Revenue Report": {
-    title:       "Revenue Report",
-    description: "Platform revenue breakdown",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total Revenue:", value: "—" }],
+    title: "Revenue Report", description: "Platform revenue breakdown",
+    chartType: "line", yLabel: "Revenue (₦)",
+    weeks: FLAT, weekLabels: MONTH_LABELS,
+    summary: [{ label: "Total Revenue:", value: "—" }],
   },
   "Top Service Category": {
-    title:       "Top Service Category",
-    description: "Jobs by service category",
-    segments:    [
+    title: "Top Service Category", description: "Jobs by service category",
+    chartType: "donut",
+    segments: [
       { label: "Auto Repair",           value: 32, color: "#2563eb" },
       { label: "Creativity",            value: 27, color: "#F9A826" },
       { label: "Repair & Construction", value: 23, color: "#2E7D32" },
@@ -67,11 +69,10 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
     ],
   },
   "Top Cities": {
-    title:       "Top Cities",
-    description: "User distribution by city",
-    weeks:       [42, 28, 16, 9, 5],
-    weekLabels:  ["Lagos","Abuja","PH","Ibadan","Kano"],
-    summary:     [
+    title: "Top Cities", description: "User distribution by city",
+    chartType: "line", yLabel: "Users",
+    weeks: [42, 28, 16, 9, 5], weekLabels: ["Lagos","Abuja","PH","Ibadan","Kano"],
+    summary: [
       { label: "Lagos:",  value: "42%" },
       { label: "Abuja:",  value: "28%" },
       { label: "PH:",     value: "16%" },
@@ -80,31 +81,35 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
     ],
   },
   "Job Completion Report": {
-    title:       "Job Completion Report",
-    description: "Jobs by category, status, location",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total Jobs:", value: "—" }],
+    title: "Job Completion Report", description: "Jobs by category, status, location",
+    chartType: "line", yLabel: "Jobs",
+    weeks: FLAT, weekLabels: MONTH_LABELS,
+    summary: [{ label: "Total Jobs:", value: "—" }],
   },
   "TAS Performance Report": {
-    title:       "TAS Performance Report",
-    description: "Top TAS agents, earnings, recruitment",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total TAS:", value: "—" }],
+    title: "TAS Performance Report", description: "Top TAS agents, earnings, recruitment",
+    chartType: "line", yLabel: "Recruits",
+    weeks: FLAT, weekLabels: MONTH_LABELS,
+    summary: [{ label: "Total TAS:", value: "—" }],
   },
   "Dispute Analysis Report": {
-    title:       "Dispute Analysis Report",
-    description: "Disputes by type, resolution rate",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total Disputes:", value: "—" }],
+    title: "Dispute Analysis Report", description: "Disputes by type, resolution rate",
+    chartType: "donut",
+    segments: [
+      { label: "Service Quality", value: 38, color: "#2563eb" },
+      { label: "Payment Issue",   value: 29, color: "#F9A826" },
+      { label: "No-Show",        value: 20, color: "#2E7D32" },
+      { label: "Other",           value: 13, color: "#7B3F9E" },
+    ],
+    summary: [
+      { label: "Total Disputes:", value: "—" },
+      { label: "Resolved:",       value: "—" },
+    ],
   },
   "Verification Report": {
-    title:       "Verification Report",
-    description: "Verification queue, approval rates",
-    weeks:       FLAT,
-    weekLabels:  MONTH_LABELS,
-    summary:     [{ label: "Total Verifications:", value: "—" }],
+    title: "Verification Report", description: "Verification queue, approval rates",
+    chartType: "line", yLabel: "Verifications",
+    weeks: FLAT, weekLabels: MONTH_LABELS,
+    summary: [{ label: "Total Verifications:", value: "—" }],
   },
 };
