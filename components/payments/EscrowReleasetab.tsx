@@ -35,7 +35,7 @@ export default function EscrowReleasesTab() {
           userId:       m.id,
           expertId:     m.expert,
           amount:       Number(m.amount.replace(/[₦,]/g, "")),
-          escrowStatus: m.status.toLowerCase(),
+          escrowStatus: m.status.toLowerCase() as import("@/lib/api/paymentApi").EscrowStatus,
           provider:     "mock",
           status:       "pending" as const,
           createdAt:    m.date,
