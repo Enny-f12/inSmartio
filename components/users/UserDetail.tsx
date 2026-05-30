@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 // components/users/UserDetail.tsx
 "use client";
 
@@ -62,8 +61,8 @@ const AVATAR_COLORS = [
   "#db2777", "#0891b2", "#dc2626", "#65a30d",
 ];
 const getInitials = (name: string) =>
-  name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-const getColor = (seed: number) => AVATAR_COLORS[seed % AVATAR_COLORS.length];
+  (name ?? "?").split(" ").map((n) => n?.[0] ?? "").join("").toUpperCase().slice(0, 2) || "?";
+const getColor = (seed: number) => AVATAR_COLORS[(seed ?? 0) % AVATAR_COLORS.length];
 const fmtMoney = (n: number) => `₦${n.toLocaleString()}`;
 
 // ─────────────────────────────────────────────────────────
@@ -73,7 +72,9 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: "flex", gap: "8px", marginBottom: "6px", fontSize: "13px", flexWrap: "wrap" }}>
       <span style={{ minWidth: "120px", flexShrink: 0, color: "#6B7280" }}>{label}</span>
-      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>
+        {value ?? "—"}
+      </span>
     </div>
   );
 }
@@ -373,7 +374,7 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
             style={{ display: "inline-flex", alignItems: "center", gap: "8px",
               fontSize: "15px", fontWeight: 600, color: "#111827",
               background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            <ArrowLeft size={16} /> {user.name}
+            <ArrowLeft size={16} /> {user.name ?? "User"}
           </button>
 
           {/* Top-right Suspend shortcut (visible in Image 1) */}
@@ -394,6 +395,7 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
 
           {/* Avatar — photo if available, else initials */}
           {user.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={user.avatarUrl} alt={user.name}
               style={{ width: "90px", height: "90px", borderRadius: "50%",
                 objectFit: "cover", flexShrink: 0, border: "2px solid #E5E7EB" }} />
@@ -414,9 +416,8 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
           </div>
         </div>
 
-        {user.type === "Expert" && (
-  <JobsTable jobs={user.jobs} userType={user.type} />
-)}
+        {/* ── Jobs table (Expert + Client only) ── */}
+        <JobsTable jobs={user.jobs} userType={user.type} />
 
         {/* ── Action buttons (bottom) ── */}
         <ActionBar user={user} onDelete={onDelete} onSuspend={onSuspend} />

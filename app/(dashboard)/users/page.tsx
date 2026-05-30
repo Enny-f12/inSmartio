@@ -17,22 +17,24 @@ import type { ApiUser } from "@/lib/api/usersApi";
 
 // ── Helpers ───────────────────────────────────────────────
 const normalizeStatus = (raw: string): User["status"] => {
+  if (!raw || typeof raw !== "string") return "Active";
   const map: Record<string, User["status"]> = {
     active: "Active", tier1: "Tier 1", tier2: "Tier 2", tier3: "Tier 3",
     "tier 1": "Tier 1", "tier 2": "Tier 2", "tier 3": "Tier 3",
     pending: "Pending", suspended: "Suspended",
   };
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-  return map[raw?.toLowerCase()] ?? (cap(raw) as User["status"]);
+  return map[raw.toLowerCase()] ?? (cap(raw) as User["status"]);
 };
 
 const normalizeType = (role: string): User["type"] => {
+  if (!role || typeof role !== "string") return "Client";
   const map: Record<string, User["type"]> = { client: "Client", expert: "Expert", tas: "TAS" };
-  return map[role?.toLowerCase()] ?? "Client";
+  return map[role.toLowerCase()] ?? "Client";
 };
 
 const toUser = (u: ApiUser, avatarSeed: number): User => ({
-  id: u.id, avatarSeed, name: u.name, email: u.email,
+  id: u.id, avatarSeed, name: u.name ?? "Unknown User", email: u.email ?? "",
   username: u.username, phone: u.phone,
   type: normalizeType(u.role ?? u.mode ?? "client"),
   status: normalizeStatus(u.status),
@@ -49,14 +51,15 @@ const toUser = (u: ApiUser, avatarSeed: number): User => ({
   } : undefined),
 });
 
-const seedMap = new Map<string, number>();
+const seedMap    = new Map<string, number>();
+const jobCountMap = new Map<string, number>(); // cached from detail fetches
 
 const FILTER_OPTIONS = ["All Users", "Client", "Expert", "TAS"] as const;
 type FilterOption = typeof FILTER_OPTIONS[number];
 
 const PAGE_SIZE = 10;
 
-// ── Status pill — matches screenshot exactly ──────────────
+// ── Status pill ───────────────────────────────────────────
 function StatusPill({ status }: { status: string }) {
   const s = status ?? "";
   let color = "#6B7280", bg = "#F9FAFB", border = "1px solid #E5E7EB";
@@ -108,8 +111,9 @@ export default function UsersPage() {
 
   const handleDelete = () => {
     if (!selected) return;
+    const rawUser = (selected as unknown as Record<string, unknown>).user as ApiUser ?? selected;
     setDeleteLoading(true);
-    dispatch(removeUser({ type: selected.role ?? "client", id: selected.id }))
+    dispatch(removeUser({ type: rawUser.role ?? "client", id: rawUser.id }))
       .unwrap()
       .then(() => { toast.success("User deleted"); setDeleteOpen(false); handleBack(); })
       .catch((err: string) => toast.error("Delete failed", { description: err }))
@@ -118,11 +122,12 @@ export default function UsersPage() {
 
   const handleSuspend = () => {
     if (!selected) return;
-    const isSuspended = selected.status?.toLowerCase() === "suspended";
+    const rawUser = (selected as unknown as Record<string, unknown>).user as ApiUser ?? selected;
+    const isSuspended = rawUser.status?.toLowerCase() === "suspended";
     setSuspendLoading(true);
-    dispatch((isSuspended ? activateUserThunk : suspendUserThunk)({ type: selected.role ?? "client", id: selected.id }))
+    dispatch((isSuspended ? activateUserThunk : suspendUserThunk)({ type: rawUser.role ?? "client", id: rawUser.id }))
       .unwrap()
-      .then(() => { toast.success(isSuspended ? `${selected.name} reinstated` : `${selected.name} suspended`); setSuspendOpen(false); handleBack(); })
+      .then(() => { toast.success(isSuspended ? `${rawUser.name} reinstated` : `${rawUser.name} suspended`); setSuspendOpen(false); handleBack(); })
       .catch((err: string) => toast.error(isSuspended ? "Reinstate failed" : "Suspend failed", { description: err }))
       .finally(() => setSuspendLoading(false));
   };
@@ -147,7 +152,26 @@ export default function UsersPage() {
   );
 
   if (selectedStatus === "succeeded" && selected) {
-    const detailUser  = toUser(selected, seedMap.get(selected.id) ?? 0);
+    // API returns { user: {...}, jobs: [...] } — unwrap correctly
+    const rawUser  = (selected as unknown as Record<string, unknown>).user as ApiUser ?? selected;
+    const rawJobs  = (selected as unknown as Record<string, unknown>).jobs as Record<string, unknown>[] ?? [];
+
+    // Cache job count so it shows in the list table
+    if (rawUser.id) jobCountMap.set(rawUser.id, rawJobs.length);
+
+    const detailUser = {
+      ...toUser(rawUser, seedMap.get(rawUser.id ?? selected.id) ?? 0),
+      // Map jobs from API shape to UserJob shape
+      jobs: rawJobs.map((j) => ({
+        id:      String(j.id ?? ""),
+        info:    `${j.title ?? j.category ?? "—"}${j.location ? ` - ${(j.location as Record<string,string>).city ?? ""}` : ""}`,
+        payment: Number((j.budget as Record<string,unknown>)?.amount ?? 0),
+        notes:   j.closed ? "Completed" : j.verified ? "In-progress" : "Open",
+        review:  Array.isArray(j.reviews) && (j.reviews as unknown[]).length > 0
+          ? String((j.reviews as Record<string,unknown>[])[0]?.comment ?? "")
+          : undefined,
+      })),
+    };
     const isSuspended = detailUser.status === "Suspended";
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -227,16 +251,10 @@ export default function UsersPage() {
 
       <div className="users-wrap" style={{ flex: 1 }}>
 
-        {/* Sub-header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Manage all users</p>
-          {/* Add User — commented out
-          <button className="btn-primary" style={{ display:"flex", alignItems:"center", gap:"8px", padding:"10px 20px", borderRadius:"12px", fontSize:"13px", fontWeight:600, border:"none", cursor:"pointer" }}>
-            <Plus size={15} /> Add User
-          </button> */}
         </div>
 
-        {/* Main card */}
         <div style={{ backgroundColor: "#fff", borderRadius: "16px", border: "1px solid #E5E7EB", overflow: "hidden" }}>
 
           {/* Filter bar */}
@@ -245,35 +263,21 @@ export default function UsersPage() {
               <SlidersHorizontal size={14} color="#6B7280" />
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>Filter</span>
             </div>
-
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-              {/* Search */}
               <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
                 <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input
-                  type="text"
-                  placeholder="Search name..."
-                  value={search}
+                <input type="text" placeholder="Search name..." value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  style={{ width: "100%", paddingLeft: "38px", paddingRight: "14px", paddingTop: "9px", paddingBottom: "9px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
-                />
+                  style={{ width: "100%", paddingLeft: "38px", paddingRight: "14px", paddingTop: "9px", paddingBottom: "9px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
               </div>
-
-              {/* Filter dropdown */}
               <div style={{ position: "relative" }}>
-                <select
-                  value={filter}
-                  onChange={(e) => { setFilter(e.target.value as FilterOption); setPage(1); }}
+                <select value={filter} onChange={(e) => { setFilter(e.target.value as FilterOption); setPage(1); }}
                   style={{ padding: "9px 36px 9px 14px", borderRadius: "10px", fontSize: "13px", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#374151", outline: "none", appearance: "none", cursor: "pointer", minWidth: "130px" }}>
                   {FILTER_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
                 <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#6B7280", pointerEvents: "none" }} />
               </div>
-
-              {/* Export */}
-              <button
-                onClick={handleExport}
-                disabled={downloading}
+              <button onClick={handleExport} disabled={downloading}
                 style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#374151", cursor: "pointer", opacity: downloading ? 0.7 : 1, whiteSpace: "nowrap" }}>
                 {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                 Export
@@ -281,7 +285,6 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {/* Loading / error */}
           {listStatus === "loading" && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "64px", gap: "10px", color: "#9CA3AF" }}>
               <Loader2 size={18} className="animate-spin" />
@@ -294,7 +297,6 @@ export default function UsersPage() {
 
           {listStatus === "succeeded" && (
             <>
-              {/* Desktop table */}
               <div className="users-table-wrap" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -309,34 +311,22 @@ export default function UsersPage() {
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: "center", padding: "64px", fontSize: "14px", color: "#9CA3AF" }}>
-                          No users found.
-                        </td>
-                      </tr>
+                      <tr><td colSpan={6} style={{ textAlign: "center", padding: "64px", fontSize: "14px", color: "#9CA3AF" }}>No users found.</td></tr>
                     ) : paginated.map((u) => (
                       <tr key={u.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                        {/* Name */}
-                        <td style={TD}>
-                          <p style={{ fontWeight: 600, color: "#111827", fontSize: "13px", margin: 0 }}>{u.name}</p>
-                        </td>
-                        {/* Type */}
+                        <td style={TD}><p style={{ fontWeight: 600, color: "#111827", fontSize: "13px", margin: 0 }}>{u.name}</p></td>
                         <td style={{ ...TD, color: "#6B7280" }}>{u.type}</td>
-                        {/* Status */}
                         <td style={TD}><StatusPill status={u.status} /></td>
-                        {/* Joined */}
                         <td style={{ ...TD, color: "#6B7280" }}>{u.joined}</td>
-                        {/* Jobs */}
                         <td style={{ ...TD, color: "#6B7280" }}>
                           {u.type === "TAS"
                             ? "N/A"
-                            : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
+                            : jobCountMap.has(u.id)
+                              ? String(jobCountMap.get(u.id))
+                              : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
                         </td>
-                        {/* Actions */}
                         <td style={TD}>
-                          <button
-                            onClick={() => handleViewUser(u.id)}
-                            title="View user"
+                          <button onClick={() => handleViewUser(u.id)} title="View user"
                             style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#6B7280", display: "flex", alignItems: "center" }}>
                             <Eye size={18} strokeWidth={1.6} />
                           </button>
@@ -347,7 +337,6 @@ export default function UsersPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
               <div className="users-cards" style={{ backgroundColor: "#F9FAFB" }}>
                 {paginated.length === 0 ? (
                   <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF" }}>No users found.</p>
@@ -362,7 +351,11 @@ export default function UsersPage() {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "10px", borderTop: "1px solid #F3F4F6" }}>
                       <span style={{ fontSize: "12px", color: "#6B7280" }}>
-                        Jobs: {u.type === "TAS" ? "N/A" : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
+                        Jobs: {u.type === "TAS"
+                          ? "N/A"
+                          : jobCountMap.has(u.id)
+                            ? String(jobCountMap.get(u.id))
+                            : String((u as unknown as Record<string, unknown>).jobCount ?? "—")}
                       </span>
                       <button onClick={() => handleViewUser(u.id)}
                         style={{ padding: "4px", borderRadius: "6px", border: "none", background: "none", cursor: "pointer", color: "#6B7280" }}>
@@ -373,12 +366,9 @@ export default function UsersPage() {
                 ))}
               </div>
 
-              {/* Pagination */}
               <div className="users-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "14px 24px", borderTop: "1px solid #F3F4F6" }}>
                 <p style={{ fontSize: "12px", color: "#6B7280", margin: 0 }}>
-                  {filtered.length === 0
-                    ? "No results"
-                    : `Showing ${from} to ${to} of ${filtered.length} results`}
+                  {filtered.length === 0 ? "No results" : `Showing ${from} to ${to} of ${filtered.length} results`}
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
