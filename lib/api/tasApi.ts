@@ -32,7 +32,7 @@ export interface ApiTas {
 }
 
 export interface AdjustTierPayload {
-  newTier: number;  // number, not string
+  newTier: number;
 }
 
 interface TasListResponse { status: boolean; message: string; data: ApiTas[]; }
@@ -43,19 +43,25 @@ export const getAllTas = async (): Promise<ApiTas[]> => {
   return data.data ?? [];
 };
 
+// encodeURIComponent handles IDs with slashes e.g. "TAS-021/05/26" → "TAS-021%2F05%2F26"
 export const getTasById = async (id: string): Promise<ApiTas> => {
-  const { data } = await axiosInstance.get<TasOneResponse>(`/admin/tas-managements/${id}`);
+  const { data } = await axiosInstance.get<TasOneResponse>(
+    `/admin/tas-managements/${encodeURIComponent(id)}`
+  );
   return data.data;
 };
 
 export const adjustTasTier = async (id: string, payload: AdjustTierPayload): Promise<void> => {
-  await axiosInstance.put<TasOneResponse>(`/admin/tas-managements/${id}/adjust-tier`, payload);
+  await axiosInstance.put<TasOneResponse>(
+    `/admin/tas-managements/${encodeURIComponent(id)}/adjust-tier`,
+    payload
+  );
 };
 
 export const suspendTas = async (id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/suspend/tas/${id}`);
+  await axiosInstance.put(`/admin/users/suspend/tas/${encodeURIComponent(id)}`);
 };
 
 export const activateTas = async (id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/activate/tas/${id}`);
+  await axiosInstance.put(`/admin/users/activate/tas/${encodeURIComponent(id)}`);
 };

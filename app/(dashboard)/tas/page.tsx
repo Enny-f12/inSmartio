@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Eye, Download, CheckCircle2, X, SlidersHorizontal, Loader2 } from "lucide-react";
+import { Search, Eye, Download, CheckCircle2, X, SlidersHorizontal, Loader2, ArrowLeft } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
@@ -397,14 +397,15 @@ function AgentDetail({ agentId, fallback, onBack }: {
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0,
+      backgroundColor: "#F4F5F7" }}>
 
       {/* Back */}
-      <div style={{ padding: "16px 32px" }}>
+      <div style={{ padding: "20px 32px 0" }}>
         <button onClick={onBack}
-          style={{ display: "flex", alignItems: "center", gap: 6, border: "none",
-            background: "none", cursor: "pointer", fontSize: 14, color: "#374151", fontWeight: 500 }}>
-          ← Active TAS Agents
+          style={{ display: "flex", alignItems: "center", gap: 8, border: "none",
+            background: "none", cursor: "pointer", fontSize: 14, color: "#111827", fontWeight: 600 }}>
+          <ArrowLeft size={16} /> Active TAS Agents
         </button>
       </div>
 
@@ -414,11 +415,14 @@ function AgentDetail({ agentId, fallback, onBack }: {
           <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Loading agent…
         </div>
       ) : (
-        <div style={{ padding: "0 32px 100px", display: "flex", flexDirection: "column", gap: 0,
+        <div style={{ padding: "20px 32px 100px", display: "flex", flexDirection: "column", gap: 0,
           flex: 1, overflowY: "auto" }}>
+          <div style={{ backgroundColor: "#fff", borderRadius: "16px",
+            border: "1px solid #E5E7EB", overflow: "hidden",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
 
           {/* ── Job Information ── */}
-          <div style={{ padding: "24px 0", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
             <p style={sectionLabel}>Job Information</p>
             <InfoRow label="Name:"   value={agent.name} />
             <InfoRow label="TAS ID:" value={tasId} />
@@ -434,7 +438,7 @@ function AgentDetail({ agentId, fallback, onBack }: {
           </div>
 
           {/* ── Performance Metrics ── */}
-          <div style={{ padding: "24px 0", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
             <p style={sectionLabel}>Performance Metrics</p>
             <InfoRow label="Total Experts Recruited:"      value={expertsObj?.total != null ? String(expertsObj.total) : "—"} />
             <InfoRow label="Active Experts (3-month avg):" value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
@@ -493,6 +497,7 @@ function AgentDetail({ agentId, fallback, onBack }: {
               </div>
             )}
           </div>
+          </div>{/* end white card */}
         </div>
       )}
 
@@ -699,7 +704,12 @@ function ActiveAgentsTab() {
   const selectedAgent = list.find((a) => a.id === selectedId) ?? null;
 
   if (selectedId && selectedAgent) {
-    return <AgentDetail agentId={selectedId} fallback={selectedAgent} onBack={() => setSelectedId(null)} />;
+    return (
+      <div style={{ flex: 1, overflowY: "auto", backgroundColor: "#F4F5F7",
+        padding: "24px 32px" }}>
+        <AgentDetail agentId={selectedId} fallback={selectedAgent} onBack={() => setSelectedId(null)} />
+      </div>
+    );
   }
 
   const filtered = list.filter((a) => {
@@ -833,7 +843,9 @@ export default function TASPage() {
   // Count for tab badges
   const { list } = useAppSelector((s) => s.tas);
   const appCount    = MOCK_APPLICATIONS.length; // TODO-BACKEND: replace with real API count
-  const activeCount = list.length;
+  const activeCount = list.filter((t) =>
+    (t.status ?? "").toLowerCase() === "active"
+  ).length;
 
   const tabs = [
     { key: "applications" as MainTab, label: "Applications",     count: appCount    },
