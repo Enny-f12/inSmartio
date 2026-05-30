@@ -1,32 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { X, Loader2, Search } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { refundTransactionThunk } from "@/lib/redux/paymentSlice";
 
 // ── Mock recent refunds for display ───────────────────────
-const MOCK_REFUNDS = [
-  { id: "TXN-001", originalAmount: 50000, refundAmount: 50000, reason: "Service not rendered",   status: "Completed", date: "20/03/2026" },
-  { id: "TXN-002", originalAmount: 18500, refundAmount: 18500, reason: "Expert cancelled job",   status: "Completed", date: "18/03/2026" },
-  { id: "TXN-003", originalAmount: 32000, refundAmount: 15000, reason: "Partial dispute resolution", status: "Pending", date: "22/03/2026" },
-];
 
-function StatusPill({ status }: { status: string }) {
-  const s = status.toLowerCase();
-  const styles: Record<string, { bg: string; color: string; border: string }> = {
-    completed: { bg: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0" },
-    pending:   { bg: "#fffbeb", color: "#d97706", border: "1px solid #fde68a" },
-    failed:    { bg: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" },
-  };
-  const c = styles[s] ?? { bg: "#F9FAFB", color: "#6B7280", border: "1px solid #E5E7EB" };
-  return (
-    <span style={{ ...c, fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap" }}>
-      {status}
-    </span>
-  );
-}
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 14px", borderRadius: "10px",
@@ -45,7 +26,7 @@ export default function RefundsTab() {
   const [txnId,         setTxnId]         = useState("");
   const [refundAmount,  setRefundAmount]   = useState("");
   const [reason,        setReason]         = useState("");
-  const [search,        setSearch]         = useState("");
+  const []         = useState("");
   const [originalAmount, setOriginalAmount] = useState<number | null>(null);
 
   const isLoading = mutateStatus === "loading";
@@ -77,10 +58,6 @@ export default function RefundsTab() {
     setTxnId(""); setRefundAmount(""); setReason(""); setOriginalAmount(null);
   };
 
-  const filteredRefunds = MOCK_REFUNDS.filter((r) =>
-    r.id.toLowerCase().includes(search.toLowerCase()) ||
-    r.reason.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -147,42 +124,7 @@ export default function RefundsTab() {
         </div>
       </div>
 
-      {/* ── Recent Refunds table ── */}
-      <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#fff", overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>Recent Refunds</p>
-          <div style={{ position: "relative", minWidth: 180 }}>
-            <Search size={13} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
-            <input type="text" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)}
-              style={{ paddingLeft: 32, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 9, border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", width: "100%", boxSizing: "border-box" }} />
-          </div>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                {["Transaction ID", "Original Amount", "Refund Amount", "Reason", "Status", "Date"].map((h) => (
-                  <th key={h} style={{ textAlign: "left", padding: "11px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRefunds.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: 48, fontSize: 13, color: "var(--color-text-muted)" }}>No refunds found.</td></tr>
-              ) : filteredRefunds.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <td style={{ padding: "14px 20px", fontSize: 13, fontFamily: "monospace", color: "var(--color-text-main)", fontWeight: 600 }}>{r.id}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "var(--color-text-muted)" }}>₦{r.originalAmount.toLocaleString()}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, fontWeight: 600, color: "var(--color-text-main)" }}>₦{r.refundAmount.toLocaleString()}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "var(--color-text-muted)", maxWidth: 200 }}>{r.reason}</td>
-                  <td style={{ padding: "14px 20px" }}><StatusPill status={r.status} /></td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>{r.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      
     </div>
   );
 }

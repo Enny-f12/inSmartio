@@ -9,7 +9,7 @@ export type EscrowStatus      = "holding" | "released" | "refunded" | "disputed"
 export interface ApiTransaction {
   id:               string;
   userId:           string;
-  provider:         string;           // "korapay" | "paystack"
+  provider:         string;
   reference?:       string;
   transactionId?:   string;
   amount:           number;
@@ -45,11 +45,10 @@ export interface RefundPayload {
   reason?: string;
 }
 
-// ── Escrow types (same shape as transaction) ──────────────
 export type ApiEscrow = ApiTransaction;
 
 export interface ReleaseEscrowPayload {
-  reason?: string;
+  note?: string;
 }
 
 // ── Payout types ──────────────────────────────────────────
@@ -108,22 +107,40 @@ interface PayoutOneResponse {
 
 // ── Transaction API ───────────────────────────────────────
 
-// GET /admin/escrows — Transactions tab
+// GET /admin/escrows — Transactions + Escrow Releases list
 export const getTransactionHistory = async (): Promise<{ data: ApiTransaction[]; meta: TransactionMeta }> => {
   const { data } = await axiosInstance.get<TransactionListResponse>("/admin/escrows");
   return { data: data.data ?? [], meta: data.meta ?? { total: 0, totalPages: 1 } };
 };
 
-// GET /admin/escrows — Escrow Releases tab (same endpoint)
+// GET /admin/escrows — Escrow Releases tab (same endpoint as transactions)
 export const getEscrows = async (): Promise<{ data: ApiEscrow[]; meta: TransactionMeta }> => {
   const { data } = await axiosInstance.get<TransactionListResponse>("/admin/escrows");
   return { data: data.data ?? [], meta: data.meta ?? { total: 0, totalPages: 1 } };
 };
 
-// GET /admin/escrows/:escrowId/release — single escrow release detail
+// GET /api/finance/escrows/{escrowId} — single escrow by ID
 export const getEscrowById = async (escrowId: string): Promise<ApiEscrow> => {
   const { data } = await axiosInstance.get<TransactionOneResponse>(
-    `/admin/escrows/${escrowId}/release`
+    `/finance/escrows/${encodeURIComponent(escrowId)}`
+  );
+  return data.data;
+};
+
+// GET /api/finance/escrows/by-job/{jobId} — escrows for a specific job
+export const getEscrowsByJobId = async (jobId: string): Promise<ApiEscrow[]> => {
+  const { data } = await axiosInstance.get<TransactionListResponse>(
+    `/finance/escrows/by-job/${encodeURIComponent(jobId)}`
+  );
+  return data.data ?? [];
+};
+
+// POST /api/finance/escrows/{escrowId}/release — Release escrow funds
+// Body: { note: string }
+export const releaseEscrow = async (escrowId: string, note?: string): Promise<ApiEscrow> => {
+  const { data } = await axiosInstance.post<TransactionOneResponse>(
+    `/finance/escrows/${encodeURIComponent(escrowId)}/release`,
+    { note: note ?? "" }
   );
   return data.data;
 };

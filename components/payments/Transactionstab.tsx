@@ -11,7 +11,13 @@ const fmt = (iso: string) => {
   try { return new Date(iso).toLocaleDateString("en-GB"); } catch { return iso; }
 };
 
-// ── Mock data matching design columns: Date, Type, User, Amount, Status, Ref ──
+// Truncate ref to first 3 underscore-segments e.g. "ref_escrow_2_1779..." → "ref_escrow_2"
+const truncateRef = (ref: string) => {
+  if (!ref || ref === "—") return ref;
+  const parts = ref.split("_");
+  return parts.slice(0, 3).join("_");
+};
+
 const MOCK_TRANSACTIONS = [
   { id: "m1", createdAt: "2026-03-15T00:00:00Z", resourceType: "Escrow In",  userId: "Funke A.",   amount: 18500,  status: "Held",     reference: "INV" },
   { id: "m2", createdAt: "2026-03-18T00:00:00Z", resourceType: "Escrow Out", userId: "Adebayo S.", amount: 16650,  status: "Released", reference: "PAY" },
@@ -53,17 +59,16 @@ export default function TransactionsTab() {
   }, [dispatch, listStatus]);
 
   const isLoading = listStatus === "idle" || listStatus === "loading";
-
-  // Use real data if available, else mock
   const data = listStatus === "succeeded" && list.length > 0 ? list : MOCK_TRANSACTIONS;
 
   const filtered = data.filter((t) => {
     if (search) {
-      const q = search.toLowerCase();
-      const user = (t as Record<string, unknown>).userId as string ?? "";
-      const ref  = (t as Record<string, unknown>).reference as string ?? "";
-      const type = (t as Record<string, unknown>).resourceType as string ?? "";
-      if (!user.toLowerCase().includes(q) && !ref.toLowerCase().includes(q) && !type.toLowerCase().includes(q) && !t.id?.toLowerCase().includes(q)) return false;
+      const q    = search.toLowerCase();
+      const rec  = t as Record<string, unknown>;
+      const user = String(rec.userId ?? "").toLowerCase();
+      const ref  = String(rec.reference ?? "").toLowerCase();
+      const type = String(rec.resourceType ?? "").toLowerCase();
+      if (!user.includes(q) && !ref.includes(q) && !type.includes(q) && !t.id?.toLowerCase().includes(q)) return false;
     }
     if (amountMin && Number(t.amount) < Number(amountMin)) return false;
     if (amountMax && Number(t.amount) > Number(amountMax)) return false;
@@ -106,7 +111,7 @@ export default function TransactionsTab() {
             )}
           </div>
 
-          {/* Search row */}
+          {/* Search */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: 1, minWidth: "180px" }}>
               <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
@@ -117,28 +122,24 @@ export default function TransactionsTab() {
             </div>
           </div>
 
-          {/* Amount + Date row */}
+          {/* Amount + Date */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
             <span style={{ fontSize: "12px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Amount:</span>
             <input type="number" placeholder="Min" value={amountMin}
               onChange={(e) => { setAmountMin(e.target.value); setPage(1); }}
-              style={{ width: "90px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }}
-            />
+              style={{ width: "90px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }} />
             <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>to</span>
             <input type="number" placeholder="Max" value={amountMax}
               onChange={(e) => { setAmountMax(e.target.value); setPage(1); }}
-              style={{ width: "90px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }}
-            />
+              style={{ width: "90px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }} />
             <span style={{ fontSize: "12px", color: "var(--color-text-muted)", marginLeft: "6px", whiteSpace: "nowrap" }}>Date:</span>
             <input type="date" value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-              style={{ padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }}
-            />
+              style={{ padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }} />
             <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>to</span>
             <input type="date" value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-              style={{ padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }}
-            />
+              style={{ padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "#fff", color: "var(--color-text-main)" }} />
           </div>
         </div>
 
@@ -155,7 +156,7 @@ export default function TransactionsTab() {
 
         {!isLoading && (
           <>
-            {/* Desktop table — columns match design: Date, Type, User, Amount, Status, Ref */}
+            {/* Desktop table */}
             <div className="txn-table-wrap" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -177,7 +178,9 @@ export default function TransactionsTab() {
                         <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", fontWeight: 500 }}>{String(rec.userId ?? "—")}</td>
                         <td style={{ padding: "15px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>₦{Number(t.amount).toLocaleString()}</td>
                         <td style={{ padding: "15px 20px" }}><StatusPill status={String(rec.status ?? "—")} /></td>
-                        <td style={{ padding: "15px 20px", fontSize: "12px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>{String(rec.reference ?? "—")}</td>
+                        <td style={{ padding: "15px 20px", fontSize: "12px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
+                          {truncateRef(String(rec.reference ?? "—"))}
+                        </td>
                       </tr>
                     );
                   })}
@@ -205,7 +208,9 @@ export default function TransactionsTab() {
                     </div>
                     <div style={{ display: "flex", gap: "12px", paddingTop: "8px", borderTop: "1px solid var(--color-border)" }}>
                       <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>{fmt(t.createdAt)}</span>
-                      <span style={{ fontSize: "11px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>Ref: {String(rec.reference ?? "—")}</span>
+                      <span style={{ fontSize: "11px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
+                        Ref: {truncateRef(String(rec.reference ?? "—"))}
+                      </span>
                     </div>
                   </div>
                 );
