@@ -223,7 +223,10 @@ const paymentSlice = createSlice({
     // fetchPayouts
     builder
       .addCase(fetchPayouts.pending,   (state) => { state.payoutsStatus = "loading"; state.payoutsError = null; })
-      .addCase(fetchPayouts.fulfilled, (state, action) => { state.payoutsStatus = "succeeded"; state.payouts = action.payload; })
+      .addCase(fetchPayouts.fulfilled, (state, action) => { 
+        state.payoutsStatus = "succeeded"; 
+        state.payouts       = action.payload.data; // Fixed type mismatch error here
+      })
       .addCase(fetchPayouts.rejected,  (state, action) => { state.payoutsStatus = "failed"; state.payoutsError = action.payload as string; });
 
     // retryPayout

@@ -24,6 +24,8 @@ export interface DonutSegment {
 }
 
 export interface ReportConfig {
+  yLabel: string;
+  chartType: string;
   title:       string;
   description: string;
   weeks?:      number[];
@@ -39,6 +41,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "User Growth Report": {
     title:       "User Growth Report",
     description: "New users by day/week/month",
+    yLabel:      "Users",
+    chartType:   "line",
     weeks:       FLAT,
     weekLabels:  MONTH_LABELS,
     summary:     [{ label: "Total New Users:", value: "—" }],
@@ -46,6 +50,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Revenue Report": {
     title:       "Revenue Report",
     description: "Platform revenue breakdown",
+    yLabel:      "Revenue ($)",
+    chartType:   "bar",
     weeks:       FLAT,
     weekLabels:  MONTH_LABELS,
     summary:     [{ label: "Total Revenue:", value: "—" }],
@@ -53,6 +59,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Top Service Category": {
     title:       "Top Service Category",
     description: "Jobs by service category",
+    yLabel:      "Percentage",
+    chartType:   "donut",
     segments:    [
       { label: "Auto Repair",           value: 32, color: "#2563eb" },
       { label: "Creativity",            value: 27, color: "#F9A826" },
@@ -69,6 +77,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Top Cities": {
     title:       "Top Cities",
     description: "User distribution by city",
+    yLabel:      "Percentage",
+    chartType:   "bar",
     weeks:       [42, 28, 16, 9, 5],
     weekLabels:  ["Lagos","Abuja","PH","Ibadan","Kano"],
     summary:     [
@@ -82,6 +92,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Job Completion Report": {
     title:       "Job Completion Report",
     description: "Jobs by category, status, location",
+    yLabel:      "Jobs",
+    chartType:   "bar",
     weeks:       [0],
     weekLabels:  ["No data"],
     summary:     [{ label: "Total Jobs:", value: "0" }],
@@ -89,6 +101,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "TAS Performance Report": {
     title:       "TAS Performance Report",
     description: "Top TAS agents, earnings, recruitment",
+    yLabel:      "Performance",
+    chartType:   "line",
     weeks:       [0],
     weekLabels:  ["No data"],
     summary:     [{ label: "Total TAS:", value: "0" }],
@@ -96,6 +110,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Dispute Analysis Report": {
     title:       "Dispute Analysis Report",
     description: "Disputes by type, resolution rate",
+    yLabel:      "Disputes",
+    chartType:   "pie",
     weeks:       [0],
     weekLabels:  ["No data"],
     summary:     [{ label: "Total Disputes:", value: "0" }],
@@ -103,6 +119,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
   "Verification Report": {
     title:       "Verification Report",
     description: "Verification queue, approval rates",
+    yLabel:      "Verifications",
+    chartType:   "bar",
     weeks:       [0],
     weekLabels:  ["No data"],
     summary:     [{ label: "Total Verifications:", value: "0" }],

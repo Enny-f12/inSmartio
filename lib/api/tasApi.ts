@@ -35,6 +35,13 @@ export interface AdjustTierPayload {
   newTier: number;
 }
 
+export interface VerifyTasPayload {
+  verify:  boolean;
+  reject?: boolean;
+  reason?: string;
+  adminId?: string;
+}
+
 interface TasListResponse { status: boolean; message: string; data: ApiTas[]; }
 interface TasOneResponse  { status: boolean; message: string; data: ApiTas;   }
 
@@ -43,25 +50,36 @@ export const getAllTas = async (): Promise<ApiTas[]> => {
   return data.data ?? [];
 };
 
-// encodeURIComponent handles IDs with slashes e.g. "TAS-021/05/26" → "TAS-021%2F05%2F26"
+// encode handles IDs with slashes e.g. "TAS-021/05/26" → "TAS-021%2F05%2F26"
+const encodeId = (id: string) => id.split("/").map(encodeURIComponent).join("%2F");
+
 export const getTasById = async (id: string): Promise<ApiTas> => {
   const { data } = await axiosInstance.get<TasOneResponse>(
-    `/admin/tas-managements/${encodeURIComponent(id)}`
+    `/admin/tas-managements/${encodeId(id)}`
   );
   return data.data;
 };
 
 export const adjustTasTier = async (id: string, payload: AdjustTierPayload): Promise<void> => {
   await axiosInstance.put<TasOneResponse>(
-    `/admin/tas-managements/${encodeURIComponent(id)}/adjust-tier`,
+    `/admin/tas-managements/${encodeId(id)}/adjust-tier`,
     payload
   );
 };
 
+// PUT /admin/experts/verification/:id?type=tas — approve or reject a TAS application
+export const verifyTas = async (id: string, payload: VerifyTasPayload): Promise<void> => {
+  await axiosInstance.put(
+    `/admin/experts/verification/${encodeId(id)}`,
+    payload,
+    { params: { type: "tas" } }
+  );
+};
+
 export const suspendTas = async (id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/suspend/tas/${encodeURIComponent(id)}`);
+  await axiosInstance.put(`/admin/users/suspend/tas/${encodeId(id)}`);
 };
 
 export const activateTas = async (id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/activate/tas/${encodeURIComponent(id)}`);
+  await axiosInstance.put(`/admin/users/activate/tas/${encodeId(id)}`);
 };
