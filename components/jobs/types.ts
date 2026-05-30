@@ -31,4 +31,12 @@ export interface Job {
   expertPayout: string;
   paymentStatus: string;
   timeline: TimelineEvent[];
+  reviews?: {
+  reviewerName?: string;
+  reviewer?:     string;
+  rating?:       number;
+  comment?:      string;
+  createdAt?:    string;
+}[];
 }
+

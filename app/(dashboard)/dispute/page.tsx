@@ -7,13 +7,13 @@ import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import { PriorityLabel } from "@/components/disputes/DisputeBadges";
 import DisputeDetail from "@/components/disputes/Disputedetail";
-import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchDisputes, fetchDisputeById, clearSelectedDispute, addDispute } from "@/lib/redux/disputeSlice";
+import { fetchDisputes, fetchDisputeById, clearSelectedDispute } from "@/lib/redux/disputeSlice";
 import { downloadReport } from "@/lib/api/reportApi";
-import type { ApiDispute, CreateDisputePayload } from "@/lib/api/disputeApi";
+import type { ApiDispute } from "@/lib/api/disputeApi";
 import type { Dispute } from "@/components/disputes/types";
 
+// ── Normalizers ───────────────────────────────────────────
 const normalizeStatus = (s?: string): "Open" | "In Progress" | "Resolved" => {
   const upper = s?.toUpperCase() ?? "";
   if (upper === "IN_PROGRESS") return "In Progress";
@@ -24,11 +24,18 @@ const normalizeStatus = (s?: string): "Open" | "In Progress" | "Resolved" => {
 const toDispute = (d: ApiDispute): Dispute => ({
   id:              d.id,
   jobId:           d.jobId ?? "—",
-  parties:         `${d.client?.id ?? "Client"} vs ${d.expert?.id ?? "Expert"}`,
-  issue:           d.client?.statement?.slice(0, 60) ?? "No statement provided",
+  /* TODO-BACKEND: parties should be client name vs expert name.
+     Currently only IDs are returned — needs client.name and expert.name */
+  parties:         `${d.client?.name ?? d.client?.id ?? "Client"} vs ${d.expert?.name ?? d.expert?.id ?? "Expert"}`,
+  /* TODO-BACKEND: issue/category field missing — e.g. "Quality", "No-show", "Payment", "Scope" */
+  issue:           (d as unknown as Record<string, unknown>).issue as string ?? d.client?.statement?.slice(0, 30) ?? "—",
   priority:        d.priority ?? "MEDIUM",
   status:          normalizeStatus(d.status),
-  opened:          d.date ? new Date(d.date).toLocaleDateString("en-GB") : d.createdAt ? new Date(d.createdAt).toLocaleDateString("en-GB") : "—",
+  opened:          d.date
+    ? new Date(d.date).toLocaleDateString("en-GB")
+    : d.createdAt
+    ? new Date(d.createdAt).toLocaleDateString("en-GB")
+    : "—",
   escrowAmount:    d.amountInEscrows ? `₦${Number(d.amountInEscrows).toLocaleString()}` : "—",
   clientStatement: d.client?.statement ?? "No statement provided.",
   expertStatement: d.expert?.statement ?? "No statement provided.",
@@ -42,83 +49,62 @@ const PAGE_SIZE = 10;
 
 export default function DisputesPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.disputes);
+  const { list, listStatus, listError, selected, selectedStatus } =
+    useAppSelector((s) => s.disputes);
 
   const [search,      setSearch]      = useState("");
   const [page,        setPage]        = useState(1);
-  const [createOpen,  setCreateOpen]  = useState(false);
-  const [creating,    setCreating]    = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [form, setForm] = useState<CreateDisputePayload>({
-    jobId: "", date: "", time: "", priority: "MEDIUM", amountInEscrows: 0,
-    client: { id: "", statement: "", evidence: [] },
-    expert: { id: "", statement: "", evidence: [] },
-    chatId: "",
-  });
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchDisputes());
   }, [dispatch, listStatus]);
 
-  const handleCreate = () => {
-    if (!form.jobId || !form.date || !form.client.id || !form.expert.id) {
-      toast.warning("Missing fields", { description: "Job ID, date, client ID and expert ID are required." });
-      return;
-    }
-    setCreating(true);
-    dispatch(addDispute(form))
-      .unwrap()
-      .then(() => { toast.success("Dispute created"); setCreateOpen(false); })
-      .catch((err: string) => toast.error("Failed to create dispute", { description: err }))
-      .finally(() => setCreating(false));
-  };
-
   const handleExport = async () => {
     setDownloading(true);
     try {
       const today = new Date().toISOString().split("T")[0];
-      const url   = await downloadReport({
-        reportType: "dispute",
-        type:       "pdf",
-        fromDate:   "2026-05-15",
-        toDate:     today,
-      });
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = `disputes_report_${today}.pdf`;
-      a.click();
+      const url   = await downloadReport({ reportType: "dispute", type: "pdf", fromDate: "2026-05-15", toDate: today });
+      const a = document.createElement("a");
+      a.href = url; a.download = `disputes_report_${today}.pdf`; a.click();
       URL.revokeObjectURL(url);
       toast.success("Disputes report downloaded");
-    } catch {
-      toast.error("Failed to download disputes report");
-    } finally {
-      setDownloading(false);
-    }
+    } catch { toast.error("Failed to download disputes report"); }
+    finally { setDownloading(false); }
   };
 
+  // ── Stats ────────────────────────────────────────────────
   const stats = {
     open:       list.filter((d) => !d.status || d.status === "OPEN").length,
     inProgress: list.filter((d) => d.status === "IN_PROGRESS").length,
     resolved:   list.filter((d) => d.status === "RESOLVED" || d.status === "CLOSE").length,
   };
 
-  const filtered = list.filter((d) =>
-    d.id.toLowerCase().includes(search.toLowerCase()) ||
-    (d.jobId ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (d.client?.id ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (d.expert?.id ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  // ── Filtered + paginated ──────────────────────────────────
+  const filtered = list.filter((d) => {
+    const q = search.toLowerCase();
+    return (
+      d.id.toLowerCase().includes(q) ||
+      (d.jobId ?? "").toLowerCase().includes(q) ||
+      (d.client?.id ?? "").toLowerCase().includes(q) ||
+      (d.expert?.id ?? "").toLowerCase().includes(q) ||
+      (d.client?.name ?? "").toLowerCase().includes(q) ||
+      (d.expert?.name ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
+  // ── Detail view ───────────────────────────────────────────
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
         <Topbar title="Disputes Resolution" />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: "10px", color: "var(--color-text-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+          flex: 1, gap: "10px", color: "#9CA3AF" }}>
           <Loader2 size={18} className="animate-spin" />
           <span style={{ fontSize: "13px" }}>Loading dispute...</span>
         </div>
@@ -130,122 +116,169 @@ export default function DisputesPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <Topbar title="Disputes Resolution" />
-        <DisputeDetail dispute={toDispute(selected)} disputeId={selected.id} onBack={() => dispatch(clearSelectedDispute())} />
+        <DisputeDetail
+          dispute={toDispute(selected)}
+          disputeId={selected.id}
+          onBack={() => dispatch(clearSelectedDispute())}
+        />
       </div>
     );
   }
 
+  // ── List view ─────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0,
+      backgroundColor: "#F4F5F7" }}>
       <Topbar title="Disputes Resolution" />
 
       <style>{`
-        .disp-outer      { padding: 12px; gap: 12px; }
-        .disp-stat-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        .disp-stat-card  { border-radius: 12px; padding: 14px 12px; text-align: center; background: #fff; border: 1px solid var(--color-border); }
-        .disp-stat-value { font-size: 24px; }
-        .disp-toolbar    { flex-direction: column; gap: 8px; }
-        .disp-table-wrap { display: none; }
-        .disp-cards      { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-        .disp-pagination { flex-direction: column; gap: 8px; align-items: flex-start; }
-        @media (min-width: 480px) { .disp-toolbar { flex-direction: row; align-items: center; } }
-        @media (min-width: 640px) {
-          .disp-outer      { padding: 20px 32px; gap: 20px; }
-          .disp-stat-card  { padding: 20px 32px; border-radius: 16px; }
-          .disp-stat-value { font-size: 28px; }
-          .disp-table-wrap { display: block; }
-          .disp-cards      { display: none; }
-          .disp-pagination { flex-direction: row; align-items: center; }
+        .dp-wrap      { padding: 16px; gap: 16px; }
+        .dp-stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; }
+        .dp-stat-cell { padding: 20px 24px; text-align: center; background:#fff; border-right: 1px solid #E5E7EB; }
+        .dp-stat-cell:last-child { border-right: none; }
+        .dp-stat-lbl  { font-size: 13px; color: #6B7280; margin-bottom: 6px; }
+        .dp-stat-val  { font-size: 28px; font-weight: 700; color: #111827; line-height: 1; }
+        .dp-tbl-wrap  { display: none; }
+        .dp-cards     { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+        .dp-pgn       { flex-direction: column; gap: 8px; align-items: flex-start !important; }
+        @media(min-width: 640px) {
+          .dp-wrap      { padding: 24px 32px; gap: 20px; }
+          .dp-tbl-wrap  { display: block; }
+          .dp-cards     { display: none; }
+          .dp-pgn       { flex-direction: row !important; align-items: center !important; }
         }
       `}</style>
 
-      <div className="disp-outer" style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-background)", display: "flex", flexDirection: "column" }}>
+      <div className="dp-wrap" style={{ flex: 1, overflowY: "auto",
+        display: "flex", flexDirection: "column" }}>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <p style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
-            {listStatus === "succeeded" ? `${list.length} disputes total` : "Disputes"}
-          </p>
+        {/* ── Stats row (Image 2 style — label top, value below) ── */}
+        <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
+          borderRadius: "16px", overflow: "hidden" }}>
+          <div className="dp-stat-grid">
+            {[
+              { label: "Open",        value: stats.open       },
+              { label: "In Progress", value: stats.inProgress },
+              { label: "Resolved",    value: stats.resolved   },
+            ].map((s) => (
+              <div key={s.label} className="dp-stat-cell">
+                <p className="dp-stat-lbl">{s.label}</p>
+                <p className="dp-stat-val">{listStatus === "loading" ? "—" : s.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="disp-stat-grid">
-          {[
-            { label: "Open",        value: stats.open       },
-            { label: "In Progress", value: stats.inProgress },
-            { label: "Resolved",    value: stats.resolved   },
-          ].map((s) => (
-            <div key={s.label} className="disp-stat-card">
-              <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginBottom: "4px", fontWeight: 500 }}>{s.label}</p>
-              <p className="disp-stat-value" style={{ fontWeight: 700, color: "var(--color-text-main)" }}>
-                {listStatus === "loading" ? "—" : s.value}
-              </p>
-            </div>
-          ))}
-        </div>
+        {/* ── Table card ── */}
+        <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
+          borderRadius: "16px", overflow: "hidden" }}>
 
-        {/* Table card */}
-        <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
-
-          {/* Toolbar */}
-          <div className="disp-toolbar" style={{ display: "flex", padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
+          {/* Toolbar — search left, export right (Image 2) */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px",
+            padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
             <div style={{ position: "relative", flex: 1 }}>
-              <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
-              <input type="text" placeholder="Search ID, client, job..."
+              <Search size={14} style={{ position: "absolute", left: "14px", top: "50%",
+                transform: "translateY(-50%)", color: "#9CA3AF" }} />
+              <input type="text" placeholder="Search name..."
                 value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
-              />
+                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px",
+                  paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px",
+                  fontSize: "13px", outline: "none", border: "1px solid #E5E7EB",
+                  backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
             </div>
-            <button
-              onClick={handleExport}
-              disabled={downloading}
-              style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: downloading ? "not-allowed" : "pointer", flexShrink: 0, opacity: downloading ? 0.7 : 1 }}>
-              {downloading ? <><Loader2 size={14} className="animate-spin" /> Exporting...</> : <><Download size={14} /> Export</>}
+            <button onClick={handleExport} disabled={downloading}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px",
+                borderRadius: "10px", fontSize: "13px", fontWeight: 500,
+                border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#374151",
+                cursor: downloading ? "not-allowed" : "pointer", flexShrink: 0,
+                opacity: downloading ? 0.7 : 1 }}>
+              {downloading
+                ? <><Loader2 size={13} className="animate-spin" /> Exporting...</>
+                : <><Download size={13} /> Export</>}
             </button>
           </div>
 
+          {/* Loading / error */}
           {listStatus === "loading" && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
-              <Loader2 size={18} className="animate-spin" /><span style={{ fontSize: "13px" }}>Loading disputes...</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "60px", gap: "10px", color: "#9CA3AF" }}>
+              <Loader2 size={18} className="animate-spin" />
+              <span style={{ fontSize: "13px" }}>Loading disputes...</span>
             </div>
           )}
-
           {listStatus === "failed" && (
-            <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
+            <p style={{ textAlign: "center", padding: "60px",
+              fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
 
           {listStatus === "succeeded" && (
             <>
-              <div className="disp-table-wrap" style={{ overflowX: "auto" }}>
+              {/* ── Desktop table — columns match Image 2 ── */}
+              <div className="dp-tbl-wrap" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                      {["Case ID", "Job ID", "Client", "Amount", "Priority", "Status", "Actions"].map((h) => (
-                        <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
+                    <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                      {["Case ID", "Job ID", "Parties", "Issue", "Priority", "Actions"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "12px 20px",
+                          fontSize: "12px", fontWeight: 600, color: "#9CA3AF",
+                          letterSpacing: "0.03em" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No disputes found.</td></tr>
+                      <tr><td colSpan={6} style={{ textAlign: "center", padding: "56px",
+                        fontSize: "14px", color: "#9CA3AF" }}>No disputes found.</td></tr>
                     ) : paginated.map((d) => {
                       const ui = toDispute(d);
                       return (
-                        <tr key={d.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                          <td style={{ padding: "16px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ui.id}</td>
-                          <td style={{ padding: "16px 20px", fontSize: "13px", color: "var(--color-text-muted)" }}>{ui.jobId}</td>
-                          <td style={{ padding: "16px 20px", fontSize: "13px", color: "var(--color-text-muted)" }}>{d.client?.id ?? "—"}</td>
-                          <td style={{ padding: "16px 20px", fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)" }}>{ui.escrowAmount}</td>
-                          <td style={{ padding: "16px 20px" }}><PriorityLabel priority={ui.priority} /></td>
-                          <td style={{ padding: "16px 20px", fontSize: "13px", color: "var(--color-text-muted)" }}>{ui.status}</td>
+                        <tr key={d.id}
+                          style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+
+                          {/* Case ID */}
+                          <td style={{ padding: "16px 20px", fontSize: "13px",
+                            fontWeight: 500, color: "#111827" }}>{ui.id}</td>
+
+                          {/* Job ID */}
+                          <td style={{ padding: "16px 20px", fontSize: "13px",
+                            color: "#6B7280" }}>{ui.jobId}</td>
+
+                          {/* Parties — "Client vs Expert" */}
+                          <td style={{ padding: "16px 20px", fontSize: "13px",
+                            color: "#374151" }}>{ui.parties}</td>
+
+                          {/* Issue — short category */}
+                          <td style={{ padding: "16px 20px", fontSize: "13px",
+                            color: "#374151" }}>{ui.issue}</td>
+
+                          {/* Priority */}
                           <td style={{ padding: "16px 20px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                            <PriorityLabel priority={ui.priority} />
+                          </td>
+
+                          {/* Actions — eye + Resolve */}
+                          <td style={{ padding: "16px 20px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <button
+                                onClick={() => dispatch(fetchDisputeById(d.id))}
+                                style={{ padding: "4px", borderRadius: "6px", border: "none",
+                                  background: "none", cursor: "pointer", color: "#9CA3AF",
+                                  display: "flex", alignItems: "center" }}>
                                 <Eye size={17} strokeWidth={1.8} />
                               </button>
                               {ui.status === "Resolved" ? (
-                                <span style={{ fontSize: "12px", fontWeight: 600, padding: "4px 12px", borderRadius: "999px", backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>Resolved</span>
+                                <span style={{ fontSize: "12px", fontWeight: 600,
+                                  padding: "4px 12px", borderRadius: "999px",
+                                  backgroundColor: "#dcfce7", color: "#15803d",
+                                  border: "1px solid #bbf7d0" }}>Resolved</span>
                               ) : (
-                                <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ fontSize: "13px", fontWeight: 500, padding: "4px 12px", borderRadius: "8px", color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
+                                <button
+                                  onClick={() => dispatch(fetchDisputeById(d.id))}
+                                  style={{ fontSize: "13px", fontWeight: 500, color: "#374151",
+                                    background: "none", border: "none", cursor: "pointer",
+                                    padding: 0 }}>
                                   Resolve
                                 </button>
                               )}
@@ -258,33 +291,46 @@ export default function DisputesPage() {
                 </table>
               </div>
 
-              <div className="disp-cards">
+              {/* ── Mobile cards ── */}
+              <div className="dp-cards">
                 {paginated.length === 0 ? (
-                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No disputes found.</p>
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px",
+                    color: "#9CA3AF" }}>No disputes found.</p>
                 ) : paginated.map((d) => {
                   const ui = toDispute(d);
                   return (
-                    <div key={d.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    <div key={d.id} style={{ padding: "14px 16px", borderRadius: "12px",
+                      border: "1px solid #E5E7EB", backgroundColor: "#fff" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between",
+                        alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
                         <div style={{ minWidth: 0 }}>
-                          <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ui.id}</p>
-                          <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginBottom: "2px" }}>Job: {ui.jobId}</p>
-                          <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{ui.escrowAmount} in escrow</p>
+                          <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827",
+                            marginBottom: "2px" }}>{ui.id}</p>
+                          <p style={{ fontSize: "12px", color: "#6B7280",
+                            marginBottom: "2px" }}>Job: {ui.jobId}</p>
+                          <p style={{ fontSize: "12px", color: "#374151" }}>{ui.parties}</p>
                         </div>
-                        <div style={{ flexShrink: 0, textAlign: "right" }}>
-                          <PriorityLabel priority={ui.priority} />
-                          <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "4px" }}>{ui.status}</p>
-                        </div>
+                        <PriorityLabel priority={ui.priority} />
                       </div>
-                      <div style={{ display: "flex", gap: "8px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--color-border)" }}>
+                      <div style={{ display: "flex", gap: "8px", paddingTop: "10px",
+                        borderTop: "1px solid #F3F4F6" }}>
                         {ui.status === "Resolved" ? (
-                          <span style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>Resolved</span>
+                          <span style={{ flex: 1, textAlign: "center", padding: "8px",
+                            borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+                            backgroundColor: "#dcfce7", color: "#15803d",
+                            border: "1px solid #bbf7d0" }}>Resolved</span>
                         ) : (
-                          <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ flex: 1, padding: "8px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, color: "var(--color-primary)", backgroundColor: "color-mix(in srgb, var(--color-primary) 8%, transparent)", border: "none", cursor: "pointer" }}>
+                          <button onClick={() => dispatch(fetchDisputeById(d.id))}
+                            style={{ flex: 1, padding: "8px", borderRadius: "8px",
+                              fontSize: "13px", fontWeight: 500, color: "#2563EB",
+                              backgroundColor: "#EFF6FF", border: "none", cursor: "pointer" }}>
                             Resolve
                           </button>
                         )}
-                        <button onClick={() => dispatch(fetchDisputeById(d.id))} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                        <button onClick={() => dispatch(fetchDisputeById(d.id))}
+                          style={{ padding: "8px 12px", borderRadius: "8px",
+                            border: "1px solid #E5E7EB", background: "none",
+                            cursor: "pointer", color: "#9CA3AF" }}>
                           <Eye size={16} strokeWidth={1.8} />
                         </button>
                       </div>
@@ -292,71 +338,48 @@ export default function DisputesPage() {
                   );
                 })}
               </div>
-            </>
-          )}
 
-          {listStatus === "succeeded" && (
-            <div className="disp-pagination" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-              <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
-                {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
-              </p>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                  style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Prev</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button key={p} onClick={() => setPage(p)} className={p === page ? "btn-primary" : ""}
-                    style={p !== page ? { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" } : { width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: "none", cursor: "pointer" }}>
-                    {p}
+              {/* ── Pagination ── */}
+              <div className="dp-pgn" style={{ display: "flex", justifyContent: "space-between",
+                padding: "14px 20px", borderTop: "1px solid #E5E7EB",
+                backgroundColor: "#F9FAFB" }}>
+                <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
+                  {filtered.length === 0
+                    ? "No results"
+                    : `Showing ${from} to ${to} of ${filtered.length} results`}
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                      border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280",
+                      cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+                    Previous
                   </button>
-                ))}
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
+                    <button key={p} onClick={() => setPage(p)}
+                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px",
+                        fontWeight: p === page ? 600 : 400,
+                        border:           p === page ? "none"           : "1px solid #E5E7EB",
+                        backgroundColor:  p === page ? "#2563EB"        : "#fff",
+                        color:            p === page ? "#fff"            : "#6B7280",
+                        cursor: "pointer" }}>
+                      {p}
+                    </button>
+                  ))}
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                      border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280",
+                      cursor: page === totalPages ? "not-allowed" : "pointer",
+                      opacity: page === totalPages ? 0.4 : 1 }}>
+                    Next
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
-
-      {/* Create Dispute Modal */}
-      {(() => {
-        const inp: React.CSSProperties = { width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", fontSize: "13px", color: "var(--color-text-main)", outline: "none", boxSizing: "border-box" };
-        const lbl: React.CSSProperties = { display: "block", fontSize: "12px", fontWeight: 500, color: "var(--color-text-muted)", marginBottom: "6px" };
-        return (
-          <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create New Dispute" size="md"
-            footer={
-              <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-                <button onClick={() => setCreateOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>Cancel</button>
-                <button onClick={handleCreate} disabled={creating} className="btn-primary" style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: creating ? 0.7 : 1 }}>
-                  {creating ? <><Loader2 size={14} className="animate-spin" /> Creating...</> : "Create Dispute"}
-                </button>
-              </div>
-            }>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div><label style={lbl}>Job ID *</label><input style={inp} placeholder="job_id" value={form.jobId} onChange={(e) => setForm((f) => ({ ...f, jobId: e.target.value }))} /></div>
-                <div><label style={lbl}>Chat ID</label><input style={inp} placeholder="chat_id" value={form.chatId} onChange={(e) => setForm((f) => ({ ...f, chatId: e.target.value }))} /></div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                <div><label style={lbl}>Date *</label><input style={inp} type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} /></div>
-                <div><label style={lbl}>Time</label><input style={inp} type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} /></div>
-                <div>
-                  <label style={lbl}>Priority</label>
-                  <select style={inp} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "HIGH"|"MEDIUM"|"LOW" }))}>
-                    <option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option>
-                  </select>
-                </div>
-              </div>
-              <div><label style={lbl}>Amount in Escrow (₦)</label><input style={inp} type="number" placeholder="0" value={form.amountInEscrows} onChange={(e) => setForm((f) => ({ ...f, amountInEscrows: Number(e.target.value) }))} /></div>
-              <p style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "-6px" }}>Client</p>
-              <div><label style={lbl}>Client ID *</label><input style={inp} placeholder="client_user_id" value={form.client.id} onChange={(e) => setForm((f) => ({ ...f, client: { ...f.client, id: e.target.value } }))} /></div>
-              <div><label style={lbl}>Client Statement</label><textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Client's statement..." value={form.client.statement} onChange={(e) => setForm((f) => ({ ...f, client: { ...f.client, statement: e.target.value } }))} /></div>
-              <p style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "-6px" }}>Expert</p>
-              <div><label style={lbl}>Expert ID *</label><input style={inp} placeholder="expert_user_id" value={form.expert.id} onChange={(e) => setForm((f) => ({ ...f, expert: { ...f.expert, id: e.target.value } }))} /></div>
-              <div><label style={lbl}>Expert Statement</label><textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={2} placeholder="Expert's statement..." value={form.expert.statement} onChange={(e) => setForm((f) => ({ ...f, expert: { ...f.expert, statement: e.target.value } }))} /></div>
-            </div>
-          </Modal>
-        );
-      })()}
     </div>
   );
 }

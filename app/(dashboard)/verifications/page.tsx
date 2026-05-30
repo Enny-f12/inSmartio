@@ -1,4 +1,3 @@
-// app/(dashboard)/verifications/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -17,6 +16,7 @@ import type { ApiVerificationSummary, VerificationTier, VerificationType } from 
 const PAGE_SIZE = 10;
 const TIERS = ["Tier 1", "Tier 2", "Tier 3"] as const;
 type TierLabel = typeof TIERS[number];
+type StatusTab = "pending" | "approved" | "rejected";
 
 const tierLabelToKey: Record<TierLabel, VerificationTier> = {
   "Tier 1": "tier1",
@@ -24,114 +24,54 @@ const tierLabelToKey: Record<TierLabel, VerificationTier> = {
   "Tier 3": "tier3",
 };
 
-// tier3 = TAS, tier1/tier2 = expert
 const toApiType = (tier?: VerificationTier): VerificationType =>
   tier === "tier3" ? "tas" : "expert";
 
-// ── Mock data ──────────────────────────────────────────────────────────────
-const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
-  {
-    id: "mock-t1-1", name: "Emeka O.", email: "emeka@email.com", phone: "+234 801 234 5678",
-    status: "active", submitted: "2026-03-20T10:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 20/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-    ],
-    ninVerification: { ninNumber: "12345678901", ninStatus: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: "mock-t1-2", name: "Ngozi E.", email: "ngozi@email.com", phone: "+234 802 345 6789",
-    status: "active", submitted: "2026-03-21T09:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 21/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-    ],
-    ninVerification: { ninNumber: "98765432100", ninStatus: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: "mock-t1-3", name: "Peter O.", email: "peter@email.com", phone: "+234 803 456 7891",
-    status: "active", submitted: "2026-03-18T08:00:00.000Z",
-    documents: 1, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1",
-    verificationDocuments: [
-      { name: "NIN Slip",               url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",           status: "pending"  },
-      { name: "Passport Photograph",              status: "pending"  },
-    ],
-  },
-  // ── Tier 2 ──
-  {
-    id: "mock-t2-1", name: "Chidi E.", email: "chidi@email.com", phone: "+234 803 456 7890",
-    status: "active", submitted: "2026-03-19T11:00:00.000Z",
-    documents: 7, totalDocuments: 7, tier: "tier2",
-    appliedTier: "Tier 2", verificationFee: "₦1,500 · Paid on 18/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-      { name: "Proof of Address",      url: "#", status: "verified" },
-      { name: "Guarantor Form",        url: "#", status: "pending"  },
-      { name: "Police Clearance",      url: "#", status: "pending"  },
-    ],
-    guarantor: { name: "Chief Okafor M.", phone: "+234 809 876 5432", occupation: "Civil Servant (Level 14)" },
-    policeClearance: { certificateNo: "PC-2026-12345", issued: "10/03/2026 (within 6 months)", issuingState: "Lagos", status: "Verify Online" },
-  },
-  {
-    id: "mock-t2-2", name: "Mary K.", email: "mary@email.com", phone: "+234 804 567 8901",
-    status: "active", submitted: "2026-03-17T14:00:00.000Z",
-    documents: 5, totalDocuments: 7, tier: "tier2",
-    appliedTier: "Tier 2", verificationFee: "₦1,500 · Paid on 17/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-      { name: "Proof of Address",      url: "#", status: "verified" },
-      { name: "Guarantor Form",                  status: "pending"  },
-      { name: "Police Clearance",                status: "pending"  },
-    ],
-    guarantor: { name: "Alhaji Musa B.", phone: "+234 811 234 5678", occupation: "Business Owner" },
-  },
-  // ── Tier 3 (TAS) ──
-  {
-    id: "mock-t3-1", name: "James A.", email: "james@email.com", phone: "+234 805 678 9012",
-    status: "active", submitted: "2026-03-16T10:00:00.000Z",
-    documents: 2, totalDocuments: 3, tier: "tier3",
-    appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 16/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",        url: "#", status: "verified" },
-      { name: "BVN Consent Form",url: "#", status: "verified" },
-      { name: "CAC Certificate",           status: "pending"  },
-    ],
-  },
-  {
-    id: "mock-t3-2", name: "Fatima B.", email: "fatima@email.com", phone: "+234 806 789 0123",
-    status: "active", submitted: "2026-03-14T08:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier3",
-    appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 14/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",        url: "#", status: "verified" },
-      { name: "BVN Consent Form",url: "#", status: "verified" },
-      { name: "CAC Certificate", url: "#", status: "verified" },
-    ],
-  },
-];
+// Derive status from what the backend actually returns:
+// - verify: true  → approved
+// - status: "rejected" → rejected
+// - everything else → pending
+// Also accepts a local override (set when admin acts in this session)
+const normaliseStatus = (
+  s: string,
+  verify?: boolean,
+  localOverride?: StatusTab,
+): StatusTab => {
+  if (localOverride) return localOverride;
+  const l = (s ?? "").toLowerCase();
+  if (verify === true)  return "approved";
+  if (l === "approved" || l === "verified") return "approved";
+  if (l === "rejected") return "rejected";
+  return "pending";
+};
 
-const getDocLabel = (e: ApiVerificationSummary) => `${e.documents}/${e.totalDocuments}`;
-
-const statusVariant = (s: string): "green" | "yellow" | "red" | "gray" => {
-  if (s === "active")   return "green";
-  if (s === "rejected") return "red";
-  if (s === "pending")  return "yellow";
+const statusVariant = (
+  s: string,
+  verify?: boolean,
+  localOverride?: StatusTab,
+): "green" | "yellow" | "red" | "gray" => {
+  const norm = normaliseStatus(s, verify, localOverride);
+  if (norm === "approved") return "green";
+  if (norm === "rejected") return "red";
+  if (norm === "pending")  return "yellow";
   return "gray";
 };
+
+const getDocLabel = (e: ApiVerificationSummary) => {
+  const docs = e.verificationDocuments;
+  if (docs && docs.length > 0) {
+    const verified = docs.filter((d) => d.status === "verified").length;
+    return `${verified}/${docs.length}`;
+  }
+  if (e.totalDocuments > 0) return `${e.documents}/${e.totalDocuments}`;
+  return "—";
+};
+
+const STATUS_TABS: { key: StatusTab; label: string }[] = [
+  { key: "pending",  label: "Pending"  },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
 
 export default function VerificationsPage() {
   const dispatch = useAppDispatch();
@@ -139,33 +79,49 @@ export default function VerificationsPage() {
     (s) => s.verifications
   );
 
+  const [statusTab,  setStatusTab]  = useState<StatusTab>("pending");
   const [activeTier, setActiveTier] = useState<TierLabel>("Tier 1");
   const [search,     setSearch]     = useState("");
   const [page,       setPage]       = useState(1);
+  // Local status overrides — applied immediately when admin approves/rejects
+  // keyed by expert ID, value is the new status
+  const [localOverrides, setLocalOverrides] = useState<Record<string, StatusTab>>({});
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchVerifications());
   }, [dispatch, listStatus]);
 
-  const mergedData: ApiVerificationSummary[] = (() => {
-    if (listStatus === "succeeded" && list.length > 0) {
-      const withTiers = list.map((item, i): ApiVerificationSummary => ({
+  // Use only real API data — no mock fill
+  const data: ApiVerificationSummary[] = listStatus === "succeeded"
+    ? list.map((item, i): ApiVerificationSummary => ({
         ...item,
         tier: item.tier ?? (i % 3 === 0 ? "tier1" : i % 3 === 1 ? "tier2" : "tier3"),
-      }));
-      const realTiers = new Set(withTiers.map((i) => i.tier));
-      const mockFill  = MOCK_VERIFICATIONS.filter((m) => !realTiers.has(m.tier));
-      return [...withTiers, ...mockFill];
-    }
-    return MOCK_VERIFICATIONS;
-  })();
+      }))
+    : [];
+
+  // Helper: get effective status for an item (local override wins)
+  const getStatus = (e: ApiVerificationSummary): StatusTab =>
+    normaliseStatus(e.status, e.verify, localOverrides[e.id]);
 
   const activeTierKey = tierLabelToKey[activeTier];
 
-  const filtered = mergedData.filter((e) => {
-    const matchTier   = e.tier === activeTierKey;
+  const statusCounts: Record<StatusTab, number> = {
+    pending:  data.filter((e) => getStatus(e) === "pending").length,
+    approved: data.filter((e) => getStatus(e) === "approved").length,
+    rejected: data.filter((e) => getStatus(e) === "rejected").length,
+  };
+
+  const tierCounts: Record<VerificationTier, number> = {
+    tier1: data.filter((e) => getStatus(e) === "pending" && e.tier === "tier1").length,
+    tier2: data.filter((e) => getStatus(e) === "pending" && e.tier === "tier2").length,
+    tier3: data.filter((e) => getStatus(e) === "pending" && e.tier === "tier3").length,
+  };
+
+  const filtered = data.filter((e) => {
+    const matchStatus = getStatus(e) === statusTab;
+    const matchTier   = statusTab !== "pending" || e.tier === activeTierKey;
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase());
-    return matchTier && matchSearch;
+    return matchStatus && matchTier && matchSearch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -173,21 +129,16 @@ export default function VerificationsPage() {
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
-  const tierCounts: Record<VerificationTier, number> = {
-    tier1: mergedData.filter((e) => e.tier === "tier1").length,
-    tier2: mergedData.filter((e) => e.tier === "tier2").length,
-    tier3: mergedData.filter((e) => e.tier === "tier3").length,
-  };
-
   const handleOpenDetail = (expert: ApiVerificationSummary) => {
-    dispatch(fetchVerificationById({
-      id:      expert.id,
-      type:    toApiType(expert.tier),   // "expert" | "tas"
-      summary: expert,
-    }));
+    dispatch(fetchVerificationById({ id: expert.id, type: toApiType(expert.tier), summary: expert }));
   };
 
   const handleCloseModal = () => dispatch(clearSelectedVerification());
+
+  const handleStatusChange = (id: string, newStatus: StatusTab) => {
+    setLocalOverrides((prev) => ({ ...prev, [id]: newStatus }));
+    dispatch(clearSelectedVerification());
+  };
 
   const isModalOpen = selectedStatus === "loading" || selectedStatus === "succeeded";
 
@@ -197,15 +148,13 @@ export default function VerificationsPage() {
 
       <style>{`
         .ver-main { padding: 16px; gap: 16px; }
-        .ver-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-        .ver-tiers { display: flex; gap: 8px; }
+        .ver-tiers { display: flex; gap: 8px; flex-wrap: wrap; }
         .ver-pgn { flex-direction: column; gap: 8px; align-items: flex-start; }
         .ver-row:hover { background: #F9FAFB; }
         .ver-desktop { display: none !important; }
         .ver-mobile  { display: flex !important; flex-direction: column; gap: 10px; padding: 12px; }
         @media (min-width: 640px) {
           .ver-main    { padding: 24px 32px; gap: 20px; }
-          .ver-header  { flex-direction: row; align-items: center; }
           .ver-pgn     { flex-direction: row; align-items: center; }
           .ver-desktop { display: block !important; }
           .ver-mobile  { display: none !important; }
@@ -213,46 +162,43 @@ export default function VerificationsPage() {
       `}</style>
 
       <main className="ver-main" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
 
-        {/* Header */}
-        <div className="ver-header" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A", whiteSpace: "nowrap" }}>
-            {mergedData.length} pending
-          </span>
-
-          <div className="ver-tiers">
-            {TIERS.map((tier) => {
-              const count    = tierCounts[tierLabelToKey[tier]];
-              const isActive = tier === activeTier;
-              return (
-                <button key={tier} onClick={() => { setActiveTier(tier); setPage(1); }}
-                  style={{
-                    padding: "8px 20px", borderRadius: "999px", fontSize: "13px", fontWeight: 600,
-                    cursor: "pointer", border: isActive ? "none" : "1px solid #D1D5DB",
-                    backgroundColor: isActive ? "#16a34a" : "#ffffff",
-                    color: isActive ? "#ffffff" : "#6B7280",
-                    display: "flex", alignItems: "center", gap: "6px",
-                  }}>
-                  {tier}
-                  <span style={{
-                    fontSize: "11px", fontWeight: 700,
-                    backgroundColor: isActive ? "rgba(255,255,255,0.25)" : "#E5E7EB",
-                    color: isActive ? "#fff" : "#6B7280",
-                    padding: "1px 6px", borderRadius: "999px",
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+          {/* Status tabs */}
+          <div style={{ display: "flex", borderBottom: "1px solid #E5E7EB", padding: "0 20px" }}>
+            {STATUS_TABS.map((t) => (
+              <button key={t.key} onClick={() => { setStatusTab(t.key); setPage(1); }}
+                style={{ padding: "14px 18px", fontSize: "13px", fontWeight: 600, border: "none", background: "none", cursor: "pointer", color: statusTab === t.key ? "#111827" : "#6B7280", borderBottom: statusTab === t.key ? "2px solid #16a34a" : "2px solid transparent", display: "flex", alignItems: "center", gap: "6px" }}>
+                {t.label}
+                <span style={{ fontSize: "11px", fontWeight: 700, padding: "1px 7px", borderRadius: "999px", backgroundColor: statusTab === t.key ? "#16a34a" : "#E5E7EB", color: statusTab === t.key ? "#fff" : "#6B7280" }}>
+                  {statusCounts[t.key]}
+                </span>
+              </button>
+            ))}
           </div>
-        </div>
 
-        {/* Card */}
-        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
+          {/* Tier filter — pending only */}
+          {statusTab === "pending" && (
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid #E5E7EB" }}>
+              <div className="ver-tiers">
+                {TIERS.map((tier) => {
+                  const isActive = tier === activeTier;
+                  return (
+                    <button key={tier} onClick={() => { setActiveTier(tier); setPage(1); }}
+                      style={{ padding: "7px 18px", borderRadius: "999px", fontSize: "13px", fontWeight: 600, cursor: "pointer", border: isActive ? "none" : "1px solid #D1D5DB", backgroundColor: isActive ? "#16a34a" : "#fff", color: isActive ? "#fff" : "#6B7280", display: "flex", alignItems: "center", gap: "6px" }}>
+                      {tier}
+                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: isActive ? "rgba(255,255,255,0.25)" : "#E5E7EB", color: isActive ? "#fff" : "#6B7280", padding: "1px 6px", borderRadius: "999px" }}>
+                        {tierCounts[tierLabelToKey[tier]]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Search */}
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
             <div style={{ position: "relative" }}>
               <Search size={15} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
               <input type="text" placeholder="Search name..." value={search}
@@ -273,7 +219,6 @@ export default function VerificationsPage() {
 
           {listStatus !== "loading" && (
             <>
-              {/* Desktop table */}
               <div className="ver-desktop" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -285,16 +230,15 @@ export default function VerificationsPage() {
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>No verifications found.</td></tr>
+                      <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>No {statusTab} verifications found.</td></tr>
                     ) : paginated.map((expert) => (
                       <tr key={expert.id} className="ver-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
                         <td style={{ padding: "16px 24px", fontSize: "14px", fontWeight: 600, color: "#111827" }}>{expert.name}</td>
                         <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"}</td>
-                        <td style={{ padding: "16px 24px" }}><StatusBadge label={expert.status ?? "pending"} variant={statusVariant(expert.status ?? "")} /></td>
+                        <td style={{ padding: "16px 24px" }}><StatusBadge label={getStatus(expert)} variant={statusVariant(expert.status, expert.verify, localOverrides[expert.id])} /></td>
                         <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{getDocLabel(expert)}</td>
                         <td style={{ padding: "16px 24px" }}>
-                          <button onClick={() => handleOpenDetail(expert)}
-                            style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
+                          <button onClick={() => handleOpenDetail(expert)} style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
                             <Eye size={17} strokeWidth={1.8} />
                           </button>
                         </td>
@@ -304,12 +248,11 @@ export default function VerificationsPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
               <div className="ver-mobile">
                 {paginated.length === 0 ? (
-                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No verifications found.</p>
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No {statusTab} verifications found.</p>
                 ) : paginated.map((expert) => (
-                  <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: "0 0 4px" }}>{expert.name}</p>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -318,28 +261,26 @@ export default function VerificationsPage() {
                         <span style={{ fontSize: "12px", color: "#6B7280" }}>Docs: {getDocLabel(expert)}</span>
                       </div>
                     </div>
-                    <button onClick={() => handleOpenDetail(expert)}
-                      style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                    <button onClick={() => handleOpenDetail(expert)} style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
                       <Eye size={16} strokeWidth={1.8} />
                     </button>
                   </div>
                 ))}
               </div>
 
-              {/* Pagination */}
               <div className="ver-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
                 <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
                   {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Previous</button>
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Previous</button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                     <button key={p} onClick={() => setPage(p)}
-                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#16a34a" : "#ffffff", color: p === page ? "#ffffff" : "#6B7280", cursor: "pointer" }}>{p}</button>
+                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#16a34a" : "#fff", color: p === page ? "#fff" : "#6B7280", cursor: "pointer" }}>{p}</button>
                   ))}
                   <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
                 </div>
               </div>
             </>
@@ -347,9 +288,7 @@ export default function VerificationsPage() {
         </div>
       </main>
 
-      {isModalOpen && (
-        <VerificationModal expert={selected} onClose={handleCloseModal} />
-      )}
+      {isModalOpen && <VerificationModal expert={selected} onClose={handleCloseModal} onStatusChange={handleStatusChange} />}
     </div>
   );
 }

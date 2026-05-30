@@ -25,14 +25,16 @@ export interface AdminResponse {
 }
 
 export interface RegisterAdminPayload {
-  name: string;
-  email: string;
-  password: string;
+  name:      string;
+  email:     string;
+  password:  string;
+  role?:     string; // optional until backend supports it
 }
 
 export interface UpdateAdminPayload {
-  name?: string;
+  name?:  string;
   email?: string;
+  role?:  string; // optional until backend supports it
 }
 
 export const getAllAdmins = async (): Promise<Admin[]> => {

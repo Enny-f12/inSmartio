@@ -31,13 +31,13 @@ export interface NinVerification {
   dobMatch:  boolean;
 }
 
-// ── Shape returned by GET /api/admin/experts/verification (list) ──
 export interface ApiVerificationSummary {
   id:             string;
   name:           string;
   email:          string;
   phone?:         string;
   status:         string;
+  verify?:        boolean;   // true = already approved by backend
   submitted:      string;
   documents:      number;
   totalDocuments: number;
@@ -52,8 +52,6 @@ export interface ApiVerificationSummary {
   notes?:              string;
 }
 
-// ── Shape returned by GET /api/admin/experts/verification/{id}?type=expert|tas ──
-// This is a full expert profile, not a verification summary
 export interface ApiVerificationDetail {
   id:                   string;
   name:                 string;
@@ -69,9 +67,9 @@ export interface ApiVerificationDetail {
   category:             string;
   skill:                string[];
   services:             string | null;
-  tier:                 number;           // 1 | 2 | 3 as number
-  verification:         string;           // "tier1" | "tier2" | "tier3"
-  verify:               boolean;          // true = already verified
+  tier:                 number;
+  verification:         string;
+  verify:               boolean;
   commission:           number | null;
   paymentModel:         string;
   subscriptionActive:   boolean;
@@ -86,9 +84,13 @@ export interface ApiVerificationDetail {
     address: string;
   };
   document: {
-    number:   string;
-    kycType:  string;       // "BVN" | "NIN" etc.
-    verified: boolean;
+    number?:   string;
+    kycType?:  string;
+    verified?: boolean;
+    ninSlip?:  string;
+    validId?:  string;
+    passport?: string;
+    [key: string]: unknown;
   };
   bankDetails: {
     bankName:      string;
@@ -98,7 +100,7 @@ export interface ApiVerificationDetail {
 }
 
 export interface VerifyExpertPayload {
-  documentKey?: string;
+  publicId?: string;
   verify?:      boolean;
   reject?:      boolean;
   reason?:      string;
@@ -123,6 +125,9 @@ interface VerifyResponse {
   data:    null;
 }
 
+// Encode ID so slashes (e.g. "EXPERT-032/05/26") become %2F in the URL path
+const encodeId = (id: string) => id.split("/").map(encodeURIComponent).join("%2F");
+
 // GET /api/admin/experts/verification
 export const getAllVerifications = async (): Promise<ApiVerificationSummary[]> => {
   const { data } = await axiosInstance.get<VerificationListResponse>("/admin/experts/verification");
@@ -135,7 +140,7 @@ export const getVerificationById = async (
   type: VerificationType,
 ): Promise<ApiVerificationDetail> => {
   const { data } = await axiosInstance.get<VerificationDetailResponse>(
-    `/admin/experts/verification/${id}`,
+    `/admin/experts/verification/${encodeId(id)}`,
     { params: { type } },
   );
   return data.data;
@@ -148,7 +153,7 @@ export const verifyExpert = async (
   payload: VerifyExpertPayload,
 ): Promise<void> => {
   await axiosInstance.put<VerifyResponse>(
-    `/admin/experts/verification/${id}`,
+    `/admin/experts/verification/${encodeId(id)}`,
     payload,
     { params: { type } },
   );

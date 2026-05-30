@@ -158,7 +158,7 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
       <Topbar title="Jobs Management" />
-      <main style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+      <main style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
         <style>{`@media(min-width:640px){ .jd-main{ padding: 24px 32px !important; } }`}</style>
 
         {/* Back button */}
@@ -248,9 +248,11 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
           </div>
 
           {/* ── Reviews ── */}
-          {reviews.length > 0 && (
-            <div style={{ padding: "24px 32px" }}>
-              <SectionLabel text="Reviews" />
+          <div style={{ padding: "24px 32px" }}>
+            <SectionLabel text="Reviews" />
+            {reviews.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No reviews found.</p>
+            ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {reviews.map((review, i) => (
                   <div key={i} style={{ padding: "14px 16px", borderRadius: "10px",
@@ -265,8 +267,8 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
     </div>
@@ -331,7 +333,25 @@ export default function JobsPage() {
   }
 
   if (selectedStatus === "succeeded" && selected) {
-    return <JobDetailView job={selected} onBack={() => dispatch(clearSelectedJob())} />;
+    // API returns { user: {...}, jobs: [...] } — unwrap correctly
+    const raw      = selected as unknown as Record<string, unknown>;
+    const rawUser  = raw.user  as Record<string, unknown> | undefined;
+    const rawJobs  = raw.jobs  as Record<string, unknown>[] | undefined;
+
+    // The actual job is the first item in jobs[], or fall back to selected itself
+    const rawJob   = (rawJobs && rawJobs.length > 0 ? rawJobs[0] : selected) as ApiJob;
+
+    // Inject client info from the user object into the job
+    const enrichedJob: ApiJob = {
+      ...rawJob,
+      client: rawUser ? {
+        name:  rawUser.name  as string,
+        phone: rawUser.phone as string,
+        email: rawUser.email as string,
+      } : (rawJob as Record<string, unknown>).client,
+    } as ApiJob;
+
+    return <JobDetailView job={enrichedJob} onBack={() => dispatch(clearSelectedJob())} />;
   }
 
   // ── Filtering ─────────────────────────────────────────

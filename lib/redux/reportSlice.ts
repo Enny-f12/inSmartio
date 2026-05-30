@@ -3,42 +3,54 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   fetchUserGrowth, fetchRevenueTrend, fetchTopServiceCategory, fetchTopCities,
+  fetchTasPerformance, fetchExpertPerformance,
   downloadReport,
   type MonthlyUserGrowthItem, type RevenueTrendItem,
   type TopServiceCategoryData, type TopCitiesData,
+  type TasPerformanceItem, type ExpertPerformanceItem,
   type ReportQuery, type DownloadReportPayload,
 } from "@/lib/api/reportApi";
 
 type Status = "idle" | "loading" | "succeeded" | "failed";
 
 interface ReportState {
-  userGrowth:          MonthlyUserGrowthItem[];
-  userGrowthStatus:    Status;
-  revenueTrend:        RevenueTrendItem[];
-  revenueTrendStatus:  Status;
-  topCategories:       TopServiceCategoryData | null;
-  topCategoriesStatus: Status;
-  topCitiesData:       TopCitiesData | null;
-  topCitiesStatus:     Status;
-  downloadStatus:      Status;
-  error:               string | null;
+  userGrowth:              MonthlyUserGrowthItem[];
+  userGrowthStatus:        Status;
+  revenueTrend:            RevenueTrendItem[];
+  revenueTrendStatus:      Status;
+  topCategories:           TopServiceCategoryData | null;
+  topCategoriesStatus:     Status;
+  topCitiesData:           TopCitiesData | null;
+  topCitiesStatus:         Status;
+  tasPerformance:          TasPerformanceItem[];
+  tasPerformanceStatus:    Status;
+  expertPerformance:       ExpertPerformanceItem[];
+  expertPerformanceStatus: Status;
+  downloadStatus:          Status;
+  error:                   string | null;
 }
 
 const initialState: ReportState = {
-  userGrowth:          [],
-  userGrowthStatus:    "idle",
-  revenueTrend:        [],
-  revenueTrendStatus:  "idle",
-  topCategories:       null,
-  topCategoriesStatus: "idle",
-  topCitiesData:       null,
-  topCitiesStatus:     "idle",
-  downloadStatus:      "idle",
-  error:               null,
+  userGrowth:              [],
+  userGrowthStatus:        "idle",
+  revenueTrend:            [],
+  revenueTrendStatus:      "idle",
+  topCategories:           null,
+  topCategoriesStatus:     "idle",
+  topCitiesData:           null,
+  topCitiesStatus:         "idle",
+  tasPerformance:          [],
+  tasPerformanceStatus:    "idle",
+  expertPerformance:       [],
+  expertPerformanceStatus: "idle",
+  downloadStatus:          "idle",
+  error:                   null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
+
+// ── Existing thunks ───────────────────────────────────────
 
 export const fetchUserGrowthThunk = createAsyncThunk(
   "report/userGrowth",
@@ -72,7 +84,25 @@ export const fetchTopCitiesThunk = createAsyncThunk(
   }
 );
 
-// POST /report/download — body: { reportType, type, fromDate, toDate }
+// ── New thunks ────────────────────────────────────────────
+
+export const fetchTasPerformanceThunk = createAsyncThunk(
+  "report/tasPerformance",
+  async ({ limit }: { limit?: number }, { rejectWithValue }) => {
+    try { return await fetchTasPerformance(limit); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch TAS performance")); }
+  }
+);
+
+export const fetchExpertPerformanceThunk = createAsyncThunk(
+  "report/expertPerformance",
+  async ({ limit }: { limit?: number }, { rejectWithValue }) => {
+    try { return await fetchExpertPerformance(limit); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch expert performance")); }
+  }
+);
+
+// POST /report/download
 export const downloadReportThunk = createAsyncThunk(
   "report/download",
   async (
@@ -91,6 +121,8 @@ export const downloadReportThunk = createAsyncThunk(
     }
   }
 );
+
+// ── Slice ─────────────────────────────────────────────────
 
 const reportSlice = createSlice({
   name: "report",
@@ -118,6 +150,16 @@ const reportSlice = createSlice({
       .addCase(fetchTopCitiesThunk.pending,   (s) => { s.topCitiesStatus = "loading"; s.error = null; })
       .addCase(fetchTopCitiesThunk.fulfilled, (s, a) => { s.topCitiesStatus = "succeeded"; s.topCitiesData = a.payload; })
       .addCase(fetchTopCitiesThunk.rejected,  (s, a) => { s.topCitiesStatus = "failed"; s.error = a.payload as string; });
+
+    builder
+      .addCase(fetchTasPerformanceThunk.pending,   (s) => { s.tasPerformanceStatus = "loading"; s.error = null; })
+      .addCase(fetchTasPerformanceThunk.fulfilled, (s, a) => { s.tasPerformanceStatus = "succeeded"; s.tasPerformance = a.payload; })
+      .addCase(fetchTasPerformanceThunk.rejected,  (s, a) => { s.tasPerformanceStatus = "failed"; s.error = a.payload as string; });
+
+    builder
+      .addCase(fetchExpertPerformanceThunk.pending,   (s) => { s.expertPerformanceStatus = "loading"; s.error = null; })
+      .addCase(fetchExpertPerformanceThunk.fulfilled, (s, a) => { s.expertPerformanceStatus = "succeeded"; s.expertPerformance = a.payload; })
+      .addCase(fetchExpertPerformanceThunk.rejected,  (s, a) => { s.expertPerformanceStatus = "failed"; s.error = a.payload as string; });
 
     builder
       .addCase(downloadReportThunk.pending,   (s) => { s.downloadStatus = "loading"; })
