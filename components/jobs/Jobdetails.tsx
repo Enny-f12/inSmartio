@@ -26,7 +26,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex gap-2 text-[13px] mb-2">
       <span className="w-44 shrink-0 font-medium text-text-muted">{label}</span>
-      <span className="text-text-main">{value}</span>
+      <span className="text-text-main">{value ?? "—"}</span>
     </div>
   );
 }
@@ -61,7 +61,6 @@ export default function JobDetail({ job, onBack }: Props) {
           Jobs
         </button>
 
-        {/* Content — no card, sections directly on page with dividers */}
         <div className="bg-surface rounded-2xl border border-border divide-y divide-border">
 
           {/* ── Job Information ── */}
@@ -117,17 +116,63 @@ export default function JobDetail({ job, onBack }: Props) {
           {/* ── Timeline ── */}
           <div className="px-8 py-6">
             <SectionLabel text="Timeline" />
-            <div className="space-y-3">
-              {job.timeline.map((event, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-primary" />
-                  <p className="text-[13px]">
-                    <span className="font-medium text-text-main">{event.datetime} - </span>
-                    <span className="text-text-muted">{event.label}</span>
-                  </p>
-                </div>
-              ))}
-            </div>
+            {!job.timeline || job.timeline.length === 0 ? (
+              <p className="text-[13px] text-text-muted">No timeline events yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {job.timeline.map((event, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-primary" />
+                    <p className="text-[13px]">
+                      <span className="font-medium text-text-main">{event.datetime} - </span>
+                      <span className="text-text-muted">{event.label}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Reviews ── */}
+          <div className="px-8 py-6">
+            <SectionLabel text="Reviews" />
+            {!job.reviews || job.reviews.length === 0 ? (
+              <p className="text-[13px] text-text-muted">No reviews yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {job.reviews.map((review, i) => (
+                  <div key={i} style={{ padding: "14px 16px", borderRadius: "12px",
+                    backgroundColor: "#F9FAFB", border: "1px solid #F3F4F6" }}>
+                    <div style={{ display: "flex", alignItems: "center",
+                      justifyContent: "space-between", marginBottom: "8px" }}>
+                      <p style={{ fontSize: "13px", fontWeight: 600,
+                        color: "#111827", margin: 0 }}>
+                        {review.reviewerName ?? review.reviewer ?? "Anonymous"}
+                      </p>
+                      <span style={{ display: "flex", alignItems: "center",
+                        gap: "4px", fontSize: "13px", color: "#374151" }}>
+                        <Star size={13} fill="#F9A826" color="#F9A826" />
+                        {review.rating ?? "—"}
+                      </span>
+                    </div>
+                    {review.comment && (
+                      <p style={{ fontSize: "13px", color: "#6B7280",
+                        lineHeight: 1.6, margin: 0 }}>
+                        &ldquo;{review.comment}&rdquo;
+                      </p>
+                    )}
+                    {review.createdAt && (
+                      <p style={{ fontSize: "11px", color: "#9CA3AF",
+                        marginTop: "6px", marginBottom: 0 }}>
+                        {new Date(review.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric", month: "short", year: "numeric",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>
