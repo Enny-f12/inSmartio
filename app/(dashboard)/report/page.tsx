@@ -14,6 +14,8 @@ import {
   fetchRevenueTrendThunk,
   fetchTopCategoriesThunk,
   fetchTopCitiesThunk,
+  fetchTasPerformanceThunk,
+  fetchExpertPerformanceThunk,
   downloadReportThunk,
 } from "@/lib/redux/reportSlice";
 import {
@@ -47,6 +49,8 @@ const LIVE_REPORT_TYPES: ReportType[] = [
   "Revenue Report",
   "Top Service Category",
   "Top Cities",
+  "TAS Performance Report",
+  "Verification Report", // uses expert-performance endpoint
 ];
 
 // Types that render a donut chart (no line chart)
@@ -99,13 +103,15 @@ const fmtDisplay = (iso: string) => {
 const COLORS = ["#2563eb","#F9A826","#2E7D32","#7B3F9E","#db2777","#0891b2"];
 
 const buildConfig = (
-  reportType:    ReportType,
-  userGrowth:    MonthlyUserGrowthItem[],
-  revenueTrend:  RevenueTrendItem[],
-  topCategories: { categories: { category: string; percentage: number }[] } | null,
-  topCitiesData: TopCitiesData | null,
-  dateFrom:      string,
-  dateTo:        string,
+  reportType:       ReportType,
+  userGrowth:       MonthlyUserGrowthItem[],
+  revenueTrend:     RevenueTrendItem[],
+  topCategories:    { categories: { category: string; percentage: number }[] } | null,
+  topCitiesData:    TopCitiesData | null,
+  tasPerformance:   Record<string, unknown>[],
+  expertPerformance: Record<string, unknown>[],
+  dateFrom:         string,
+  dateTo:           string,
 ): ReportConfig => {
   const mock  = reportConfigs[reportType];
   const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
@@ -177,7 +183,49 @@ const buildConfig = (
       };
     }
 
-    // TODO-BACKEND: 4 types below need real endpoints
+    case "TAS Performance Report": {
+      if (!tasPerformance.length) return {
+        ...mock,
+        weeks: [0], weekLabels: ["No data"],
+        summary: [{ label: "Total TAS:", value: "0" }],
+      };
+      return {
+        ...mock,
+        title:      `TAS Performance · ${range}`,
+        weeks:      tasPerformance.map((_: Record<string,unknown>, i: number) => i + 1),
+        weekLabels: tasPerformance.map((t: Record<string,unknown>, i: number) =>
+          String(t.name ?? `TAS ${i + 1}`).slice(0, 8)
+        ),
+        summary: tasPerformance.slice(0, 5).map((t: Record<string, unknown>) => ({
+          label: String(t.name ?? "TAS") + ":",
+          value: String(t.earnings ?? t.totalEarnings ?? "—"),
+        })),
+      };
+    }
+
+    case "Verification Report": {
+      if (!expertPerformance.length) return {
+        ...mock,
+        weeks: [0], weekLabels: ["No data"],
+        summary: [{ label: "Total Verifications:", value: "0" }],
+      };
+      return {
+        ...mock,
+        title:      `Verification Report · ${range}`,
+        weeks:      expertPerformance.map((e: Record<string,unknown>) =>
+          Number(e.jobsCompleted ?? e.verificationsCompleted ?? 0)
+        ),
+        weekLabels: expertPerformance.map((e: Record<string,unknown>, i: number) =>
+          String(e.name ?? `Expert ${i + 1}`).slice(0, 8)
+        ),
+        summary: expertPerformance.slice(0, 5).map((e: Record<string, unknown>) => ({
+          label: String(e.name ?? "Expert") + ":",
+          value: `${e.jobsCompleted ?? e.verificationsCompleted ?? 0} verifications`,
+        })),
+      };
+    }
+
+    // TODO-BACKEND: remaining types need real endpoints
     default:
       return mock;
   }
@@ -417,19 +465,23 @@ export default function ReportsPage() {
   const isDonut = DONUT_TYPES.includes(reportType);
 
   const isLoading =
-    report.userGrowthStatus    === "loading" ||
-    report.revenueTrendStatus  === "loading" ||
-    report.topCategoriesStatus === "loading" ||
-    report.topCitiesStatus     === "loading";
+    report.userGrowthStatus       === "loading" ||
+    report.revenueTrendStatus     === "loading" ||
+    report.topCategoriesStatus    === "loading" ||
+    report.topCitiesStatus        === "loading" ||
+    report.tasPerformanceStatus   === "loading" ||
+    report.expertPerformanceStatus === "loading";
 
   const handleGenerate = () => {
     setGenerated(true);
     if (!isLive) { toast.info(`${reportType} — backend endpoint coming soon`); return; }
     switch (reportType) {
-      case "User Growth Report":   dispatch(fetchUserGrowthThunk(query));    break;
-      case "Revenue Report":       dispatch(fetchRevenueTrendThunk(query));  break;
-      case "Top Service Category": dispatch(fetchTopCategoriesThunk(query)); break;
-      case "Top Cities":           dispatch(fetchTopCitiesThunk(query));     break;
+      case "User Growth Report":   dispatch(fetchUserGrowthThunk(query));         break;
+      case "Revenue Report":       dispatch(fetchRevenueTrendThunk(query));        break;
+      case "Top Service Category": dispatch(fetchTopCategoriesThunk(query));       break;
+      case "Top Cities":           dispatch(fetchTopCitiesThunk(query));           break;
+      case "TAS Performance Report":  dispatch(fetchTasPerformanceThunk({}));      break;
+      case "Verification Report":      dispatch(fetchExpertPerformanceThunk({}));   break;
     }
   };
 
@@ -471,6 +523,8 @@ export default function ReportsPage() {
     report.revenueTrend,
     report.topCategories,
     report.topCitiesData ?? null,
+    (report.tasPerformance ?? []) as Record<string, unknown>[],
+    (report.expertPerformance ?? []) as Record<string, unknown>[],
     dateFrom,
     dateTo,
   );
