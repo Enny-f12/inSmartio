@@ -54,8 +54,6 @@ export interface TopCitiesData {
   cities:  TopCityItem[];
 }
 
-// ── New report data types ─────────────────────────────────
-
 export interface ReportsSummaryData {
   [key: string]: unknown;
 }
@@ -68,7 +66,54 @@ export interface TasPerformanceItem {
   [key: string]: unknown;
 }
 
-// All backend reportType values
+// ── Job Completion ────────────────────────────────────────
+
+export interface JobCompletionMonthlyItem {
+  month:     string;
+  completed: number;
+  cancelled: number;
+  disputed:  number;
+}
+
+export interface JobCompletionData {
+  summary: {
+    totalJobs:      number;
+    completedJobs:  number;
+    cancelledJobs:  number;
+    disputedJobs:   number;
+    completionRate: number;
+  };
+  monthly: JobCompletionMonthlyItem[];
+}
+
+// ── Dispute Analysis ──────────────────────────────────────
+
+export interface DisputeMonthlyItem {
+  month:      string;
+  total:      number;
+  resolved:   number;
+  inProgress: number;
+  escalated:  number;
+}
+
+export interface DisputeReasonItem {
+  reason:     string;
+  count:      number;
+  percentage: number;
+}
+
+export interface DisputeAnalysisData {
+  summary: {
+    totalDisputes:  number;
+    resolved:       number;
+    inProgress:     number;
+    escalated:      number;
+    resolutionRate: number;
+  };
+  monthly:    DisputeMonthlyItem[];
+  topReasons: DisputeReasonItem[];
+}
+
 export type DownloadReportType =
   | "users"
   | "jobs"
@@ -77,7 +122,8 @@ export type DownloadReportType =
   | "userGrowth"
   | "revenueTrend"
   | "serviceCategory"
-  | "cities";
+  | "cities"
+  | "jobCompletion";
 
 export type ReportFileType = "pdf" | "csv";
 
@@ -110,16 +156,11 @@ export const fetchTopCities = async (q: ReportQuery): Promise<TopCitiesData> => 
   return data.data;
 };
 
-// ── New report endpoints (from Swagger) ───────────────────
-
-// GET /api/reports/summary — platform-wide summary statistics
 export const fetchReportsSummary = async (): Promise<ReportsSummaryData> => {
   const { data } = await axiosInstance.get("/reports/summary");
   return data.data ?? {};
 };
 
-// GET /api/reports/expert-performance — expert performance report
-// Optional: limit (number)
 export const fetchExpertPerformance = async (limit?: number): Promise<ExpertPerformanceItem[]> => {
   const { data } = await axiosInstance.get("/reports/expert-performance", {
     params: limit ? { limit } : undefined,
@@ -127,8 +168,6 @@ export const fetchExpertPerformance = async (limit?: number): Promise<ExpertPerf
   return data.data ?? [];
 };
 
-// GET /api/reports/tas-performance — TAS performance report
-// Optional: limit (number)
 export const fetchTasPerformance = async (limit?: number): Promise<TasPerformanceItem[]> => {
   const { data } = await axiosInstance.get("/reports/tas-performance", {
     params: limit ? { limit } : undefined,
@@ -136,7 +175,18 @@ export const fetchTasPerformance = async (limit?: number): Promise<TasPerformanc
   return data.data ?? [];
 };
 
-// POST /report/download — body: { reportType, type, fromDate, toDate }
+// ── New endpoints ─────────────────────────────────────────
+
+export const fetchJobCompletion = async (q: ReportQuery): Promise<JobCompletionData> => {
+  const { data } = await axiosInstance.get("/report/job-completion", { params: q });
+  return data.data;
+};
+
+export const fetchDisputeAnalysis = async (q: ReportQuery): Promise<DisputeAnalysisData> => {
+  const { data } = await axiosInstance.get("/report/dispute-analysis", { params: q });
+  return data.data;
+};
+
 export const downloadReport = async (payload: DownloadReportPayload): Promise<string> => {
   const response = await axiosInstance.post("/report/download", payload, {
     responseType: "blob",

@@ -17,7 +17,11 @@ import notificationReducer from "./notificationtemplateSlice";
 import commissionReducer   from "./commissionSlice";
 import notificationsReducer from "./notificationSlice";
 import tastierReducer from "./tastierSlice";
-import verificationsettingsReducer from "./verificationSettingsSlice"
+import verificationsettingsReducer from "./verificationSettingsSlice";
+import dashboardReducer from './dashboardSlice';
+import scheduledReportsReducer from "./schedduleReportSlice";
+import reportTemplatesReducer  from "./reportTemplatesSlice";
+
 export const store = configureStore({
   reducer: {
     counter:               counterReducer,
@@ -39,6 +43,9 @@ export const store = configureStore({
     notifications:         notificationsReducer, // was: notification
     tastier:               tastierReducer,
     verification:          verificationsettingsReducer,
+    dashboard:             dashboardReducer,
+    scheduledReports: scheduledReportsReducer,
+    reportTemplates:  reportTemplatesReducer,
   },
 });
 

@@ -2,13 +2,15 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, Plus, Trash2, Edit2, Upload, Download, Mail } from "lucide-react";
+import { TrendingUp, Download, Mail } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import ReportControls from "@/components/report/ReportControls";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import ScheduledReportsSection from "@/components/report/ScheduledReportSection";
+import ReportTemplatesSection  from "@/components/report/ReportTemplatesSection";
 import {
   fetchUserGrowthThunk,
   fetchRevenueTrendThunk,
@@ -16,6 +18,8 @@ import {
   fetchTopCitiesThunk,
   fetchTasPerformanceThunk,
   fetchExpertPerformanceThunk,
+  fetchJobCompletionThunk,
+  fetchDisputeAnalysisThunk,
   downloadReportThunk,
 } from "@/lib/redux/reportSlice";
 import {
@@ -28,6 +32,8 @@ import type {
   MonthlyUserGrowthItem,
   RevenueTrendItem,
   TopCitiesData,
+  JobCompletionData,
+  DisputeAnalysisData,
   DownloadReportType,
 } from "@/lib/api/reportApi";
 
@@ -43,17 +49,18 @@ export const ALL_REPORT_TYPES: ReportType[] = [
   "Verification Report",
 ];
 
-// Types with live backend endpoints
+// All types now have live endpoints
 const LIVE_REPORT_TYPES: ReportType[] = [
   "User Growth Report",
   "Revenue Report",
   "Top Service Category",
   "Top Cities",
+  "Job Completion Report",
   "TAS Performance Report",
-  "Verification Report", // uses expert-performance endpoint
+  "Dispute Analysis Report",
+  "Verification Report",
 ];
 
-// Types that render a donut chart (no line chart)
 const DONUT_TYPES: ReportType[] = ["Top Service Category"];
 
 const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
@@ -61,7 +68,7 @@ const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
   "Revenue Report":           "revenueTrend",
   "Top Service Category":     "serviceCategory",
   "Top Cities":               "cities",
-  "Job Completion Report":    "jobs",
+  "Job Completion Report":    "jobCompletion",
   "TAS Performance Report":   "users",
   "Dispute Analysis Report":  "dispute",
   "Verification Report":      "users",
@@ -99,19 +106,21 @@ const fmtDisplay = (iso: string) => {
   return `${d}/${m}/${y}`;
 };
 
-// ── Build config from API data ────────────────────────────
 const COLORS = ["#2563eb","#F9A826","#2E7D32","#7B3F9E","#db2777","#0891b2"];
 
+// ── Build config from API data ────────────────────────────
 const buildConfig = (
-  reportType:       ReportType,
-  userGrowth:       MonthlyUserGrowthItem[],
-  revenueTrend:     RevenueTrendItem[],
-  topCategories:    { categories: { category: string; percentage: number }[] } | null,
-  topCitiesData:    TopCitiesData | null,
-  tasPerformance:   Record<string, unknown>[],
+  reportType:        ReportType,
+  userGrowth:        MonthlyUserGrowthItem[],
+  revenueTrend:      RevenueTrendItem[],
+  topCategories:     { categories: { category: string; percentage: number }[] } | null,
+  topCitiesData:     TopCitiesData | null,
+  tasPerformance:    Record<string, unknown>[],
   expertPerformance: Record<string, unknown>[],
-  dateFrom:         string,
-  dateTo:           string,
+  jobCompletion:     JobCompletionData | null,
+  disputeAnalysis:   DisputeAnalysisData | null,
+  dateFrom:          string,
+  dateTo:            string,
 ): ReportConfig => {
   const mock  = reportConfigs[reportType];
   const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
@@ -183,20 +192,52 @@ const buildConfig = (
       };
     }
 
-    case "TAS Performance Report": {
-      if (!tasPerformance.length) return {
+    case "Job Completion Report": {
+      if (!jobCompletion) return mock;
+      const { summary, monthly } = jobCompletion;
+      return {
         ...mock,
-        weeks: [0], weekLabels: ["No data"],
-        summary: [{ label: "Total TAS:", value: "0" }],
+        title:      `Job Completion · ${range}`,
+        weeks:      monthly.map((m) => m.completed),
+        weekLabels: monthly.map((m) => m.month.slice(0, 3)),
+        summary: [
+          { label: "Total Jobs:",       value: summary.totalJobs.toLocaleString() },
+          { label: "Completed:",        value: `${summary.completedJobs.toLocaleString()} (${summary.completionRate.toFixed(1)}%)` },
+          { label: "Cancelled:",        value: summary.cancelledJobs.toLocaleString() },
+          { label: "Disputed:",         value: summary.disputedJobs.toLocaleString() },
+        ],
       };
+    }
+
+    case "Dispute Analysis Report": {
+      if (!disputeAnalysis) return mock;
+      const { summary, monthly, topReasons } = disputeAnalysis;
+      return {
+        ...mock,
+        title:      `Dispute Analysis · ${range}`,
+        weeks:      monthly.map((m) => m.total),
+        weekLabels: monthly.map((m) => m.month.slice(0, 3)),
+        summary: [
+          { label: "Total Disputes:",   value: summary.totalDisputes.toLocaleString() },
+          { label: "Resolved:",         value: `${summary.resolved} (${summary.resolutionRate.toFixed(1)}%)` },
+          { label: "In Progress:",      value: summary.inProgress.toLocaleString() },
+          { label: "Escalated:",        value: summary.escalated.toLocaleString() },
+          ...topReasons.map((r) => ({
+            label: r.reason + ":",
+            value: `${r.count} (${r.percentage.toFixed(1)}%)`,
+          })),
+        ],
+      };
+    }
+
+    case "TAS Performance Report": {
+      if (!tasPerformance.length) return { ...mock, weeks: [0], weekLabels: ["No data"], summary: [{ label: "Total TAS:", value: "0" }] };
       return {
         ...mock,
         title:      `TAS Performance · ${range}`,
-        weeks:      tasPerformance.map((_: Record<string,unknown>, i: number) => i + 1),
-        weekLabels: tasPerformance.map((t: Record<string,unknown>, i: number) =>
-          String(t.name ?? `TAS ${i + 1}`).slice(0, 8)
-        ),
-        summary: tasPerformance.slice(0, 5).map((t: Record<string, unknown>) => ({
+        weeks:      tasPerformance.map((_, i) => i + 1),
+        weekLabels: tasPerformance.map((t, i) => String(t.name ?? `TAS ${i + 1}`).slice(0, 8)),
+        summary:    tasPerformance.slice(0, 5).map((t) => ({
           label: String(t.name ?? "TAS") + ":",
           value: String(t.earnings ?? t.totalEarnings ?? "—"),
         })),
@@ -204,56 +245,28 @@ const buildConfig = (
     }
 
     case "Verification Report": {
-      if (!expertPerformance.length) return {
-        ...mock,
-        weeks: [0], weekLabels: ["No data"],
-        summary: [{ label: "Total Verifications:", value: "0" }],
-      };
+      if (!expertPerformance.length) return { ...mock, weeks: [0], weekLabels: ["No data"], summary: [{ label: "Total Verifications:", value: "0" }] };
       return {
         ...mock,
         title:      `Verification Report · ${range}`,
-        weeks:      expertPerformance.map((e: Record<string,unknown>) =>
-          Number(e.jobsCompleted ?? e.verificationsCompleted ?? 0)
-        ),
-        weekLabels: expertPerformance.map((e: Record<string,unknown>, i: number) =>
-          String(e.name ?? `Expert ${i + 1}`).slice(0, 8)
-        ),
-        summary: expertPerformance.slice(0, 5).map((e: Record<string, unknown>) => ({
+        weeks:      expertPerformance.map((e) => Number(e.jobsCompleted ?? e.verificationsCompleted ?? 0)),
+        weekLabels: expertPerformance.map((e, i) => String(e.name ?? `Expert ${i + 1}`).slice(0, 8)),
+        summary:    expertPerformance.slice(0, 5).map((e) => ({
           label: String(e.name ?? "Expert") + ":",
           value: `${e.jobsCompleted ?? e.verificationsCompleted ?? 0} verifications`,
         })),
       };
     }
 
-    // TODO-BACKEND: remaining types need real endpoints
     default:
       return mock;
   }
 };
 
-// ── Static types ──────────────────────────────────────────
-interface ScheduledReport {
-  id: string; name: string; schedule: string; recipients: string;
-}
-interface ReportTemplate {
-  id: string; name: string; type: string; lastUsed: string;
-}
 
-// ── Shared styles ─────────────────────────────────────────
-const sectionCard: React.CSSProperties = {
-  backgroundColor: "#fff", border: "1px solid #E5E7EB",
-  borderRadius: "16px", overflow: "hidden",
-};
-const TH: React.CSSProperties = {
-  textAlign: "left", padding: "12px 20px", fontSize: "12px",
-  fontWeight: 600, color: "#9CA3AF", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap",
-};
-const TD: React.CSSProperties = {
-  padding: "14px 20px", fontSize: "13px", color: "#374151",
-  borderBottom: "1px solid #F3F4F6",
-};
 
-// ── Inline Report Card (replaces ReportCard to avoid prop conflicts) ──────────
+
+// ── Inline Report Card ────────────────────────────────────
 interface InlineReportCardProps {
   config:        ReportConfig;
   isDonut:       boolean;
@@ -263,191 +276,45 @@ interface InlineReportCardProps {
   isDownloading: boolean;
 }
 
-function InlineReportCard({
-  config, isDonut, onDownloadPdf, onDownloadCsv, onEmail, isDownloading,
-}: InlineReportCardProps) {
+function InlineReportCard({ config, isDonut, onDownloadPdf, onDownloadCsv, onEmail, isDownloading }: InlineReportCardProps) {
   const btnBase: React.CSSProperties = {
     display: "flex", alignItems: "center", gap: "6px",
     padding: "10px 18px", borderRadius: "10px", fontSize: "13px",
     fontWeight: 500, cursor: "pointer", border: "1px solid #E5E7EB",
     backgroundColor: "#fff", color: "#374151",
   };
-
   return (
-    <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
-      borderRadius: "16px", overflow: "hidden" }}>
-
-      {/* Chart */}
+    <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
       <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
         {isDonut && config.segments?.length ? (
           <DonutChart segments={config.segments} title={config.title} size={260} />
         ) : (
           <DashboardLineChart
-            title={config.title}
-            yLabel=""
-            xLabel="Months"
-            data={config.weeks ?? []}
-            labels={config.weekLabels ?? []}
-            color="#2563eb"
+            title={config.title} yLabel="" xLabel="Months"
+            data={config.weeks ?? []} labels={config.weekLabels ?? []} color="#2563eb"
           />
         )}
       </div>
-
-      {/* Summary */}
       {config.summary.length > 0 && (
         <div style={{ padding: "20px 28px", borderBottom: "1px solid #E5E7EB" }}>
           {config.summary.map((s) => (
-            <div key={s.label} style={{ display: "flex", gap: "12px",
-              fontSize: "13px", marginBottom: "8px" }}>
+            <div key={s.label} style={{ display: "flex", gap: "12px", fontSize: "13px", marginBottom: "8px" }}>
               <span style={{ minWidth: "160px", color: "#6B7280", flexShrink: 0 }}>{s.label}</span>
               <span style={{ fontWeight: 500, color: "#111827" }}>{s.value}</span>
             </div>
           ))}
         </div>
       )}
-
-      {/* Actions */}
       <div style={{ padding: "16px 28px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <button onClick={onDownloadPdf} disabled={isDownloading} style={btnBase}>
-          <Download size={13} /> Download PDF
-        </button>
-        <button onClick={onDownloadCsv} style={btnBase}>
-          <Download size={13} /> Download CSV
-        </button>
-        <button onClick={onEmail} style={btnBase}>
-          <Mail size={13} /> Email Report
-        </button>
+        <button onClick={onDownloadPdf} disabled={isDownloading} style={btnBase}><Download size={13} /> Download PDF</button>
+        <button onClick={onDownloadCsv} style={btnBase}><Download size={13} /> Download CSV</button>
+        <button onClick={onEmail} style={btnBase}><Mail size={13} /> Email Report</button>
       </div>
     </div>
   );
 }
 
-// ── Scheduled Reports ─────────────────────────────────────
-function ScheduledReportsSection() {
-  const [rows, setRows] = useState<ScheduledReport[]>([
-    { id: "1", name: "Weekly Summary",  schedule: "Every Mon",  recipients: "admin@helpme.ng"   },
-    { id: "2", name: "Monthly Revenue", schedule: "1st of mon", recipients: "finance@helpme.ng" },
-  ]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form,    setForm]    = useState({ name: "", schedule: "", recipients: "" });
 
-  const handleAdd = () => {
-    if (!form.name || !form.schedule || !form.recipients) { toast.warning("All fields required"); return; }
-    setRows((p) => [...p, { id: Date.now().toString(), ...form }]);
-    setForm({ name: "", schedule: "", recipients: "" });
-    setShowAdd(false);
-    toast.success("Scheduled report added");
-    // TODO-BACKEND: POST /report/scheduled
-  };
-
-  return (
-    <div style={sectionCard}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
-        <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: 0 }}>Scheduled Reports</p>
-      </div>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ backgroundColor: "#F9FAFB" }}>
-            <th style={TH}>Report Name</th>
-            <th style={TH}>Schedule</th>
-            <th style={TH}>Recipients</th>
-            <th style={TH}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td style={TD}>{r.name}</td>
-              <td style={TD}>{r.schedule}</td>
-              <td style={TD}>{r.recipients}</td>
-              <td style={TD}>
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <button title="Edit" onClick={() => toast.info("Edit coming soon")}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
-                    <Edit2 size={15} />
-                  </button>
-                  <button title="Delete" onClick={() => { setRows((p) => p.filter((x) => x.id !== r.id)); toast.success("Removed"); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: 0 }}>
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {showAdd && (
-        <div style={{ padding: "16px 20px", borderTop: "1px solid #E5E7EB", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
-          {[["Report Name","name","e.g. Weekly Summary"],["Schedule","schedule","e.g. Every Monday"],["Recipients","recipients","e.g. admin@helpme.ng"]].map(([label, key, ph]) => (
-            <div key={key} style={{ flex: 1, minWidth: "150px" }}>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "#6B7280", display: "block", marginBottom: "4px" }}>{label}</label>
-              <input value={(form as Record<string,string>)[key]} placeholder={ph}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "13px", outline: "none", boxSizing: "border-box" }} />
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={handleAdd} style={{ padding: "9px 18px", borderRadius: "8px", border: "none", backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Save</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "9px 14px", borderRadius: "8px", border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", fontSize: "13px", cursor: "pointer" }}>Cancel</button>
-          </div>
-        </div>
-      )}
-      {!showAdd && (
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #E5E7EB" }}>
-          <button onClick={() => setShowAdd(true)} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: "#2563EB", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            <Plus size={14} /> Add Scheduled Report
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Report Templates ──────────────────────────────────────
-function ReportTemplatesSection() {
-  const [templates] = useState<ReportTemplate[]>([
-    { id: "1", name: "Monthly Executive", type: "Revenue Report",        lastUsed: "25/03/2026" },
-    { id: "2", name: "TAS Performance",   type: "TAS Performance Report", lastUsed: "20/03/2026" },
-  ]);
-  return (
-    <div style={sectionCard}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
-        <p style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: 0 }}>Saved Report Templates</p>
-      </div>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ backgroundColor: "#F9FAFB" }}>
-            <th style={TH}>Template Name</th>
-            <th style={TH}>Type</th>
-            <th style={TH}>Last Used</th>
-            <th style={TH}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {templates.map((t) => (
-            <tr key={t.id}>
-              <td style={{ ...TD, fontWeight: 500, color: "#111827" }}>{t.name}</td>
-              <td style={TD}>{t.type}</td>
-              <td style={TD}>{t.lastUsed}</td>
-              <td style={TD}>
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <button title="Load" onClick={() => toast.info("Loading template…")}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
-                    <Upload size={15} />
-                  </button>
-                  <button title="Edit" onClick={() => toast.info("Edit coming soon")}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", padding: 0 }}>
-                    <Edit2 size={15} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────
 export default function ReportsPage() {
@@ -465,29 +332,32 @@ export default function ReportsPage() {
   const isDonut = DONUT_TYPES.includes(reportType);
 
   const isLoading =
-    report.userGrowthStatus       === "loading" ||
-    report.revenueTrendStatus     === "loading" ||
-    report.topCategoriesStatus    === "loading" ||
-    report.topCitiesStatus        === "loading" ||
-    report.tasPerformanceStatus   === "loading" ||
-    report.expertPerformanceStatus === "loading";
+    report.userGrowthStatus        === "loading" ||
+    report.revenueTrendStatus      === "loading" ||
+    report.topCategoriesStatus     === "loading" ||
+    report.topCitiesStatus         === "loading" ||
+    report.tasPerformanceStatus    === "loading" ||
+    report.expertPerformanceStatus === "loading" ||
+    report.jobCompletionStatus     === "loading" ||
+    report.disputeAnalysisStatus   === "loading";
 
   const handleGenerate = () => {
     setGenerated(true);
-    if (!isLive) { toast.info(`${reportType} — backend endpoint coming soon`); return; }
     switch (reportType) {
-      case "User Growth Report":   dispatch(fetchUserGrowthThunk(query));         break;
-      case "Revenue Report":       dispatch(fetchRevenueTrendThunk(query));        break;
-      case "Top Service Category": dispatch(fetchTopCategoriesThunk(query));       break;
-      case "Top Cities":           dispatch(fetchTopCitiesThunk(query));           break;
-      case "TAS Performance Report":  dispatch(fetchTasPerformanceThunk({}));      break;
-      case "Verification Report":      dispatch(fetchExpertPerformanceThunk({}));   break;
+      case "User Growth Report":       dispatch(fetchUserGrowthThunk(query));        break;
+      case "Revenue Report":           dispatch(fetchRevenueTrendThunk(query));       break;
+      case "Top Service Category":     dispatch(fetchTopCategoriesThunk(query));      break;
+      case "Top Cities":               dispatch(fetchTopCitiesThunk(query));          break;
+      case "Job Completion Report":    dispatch(fetchJobCompletionThunk(query));      break;
+      case "TAS Performance Report":   dispatch(fetchTasPerformanceThunk({}));        break;
+      case "Dispute Analysis Report":  dispatch(fetchDisputeAnalysisThunk(query));   break;
+      case "Verification Report":      dispatch(fetchExpertPerformanceThunk({}));     break;
     }
   };
 
   const handleDownloadPdf = () => {
     dispatch(downloadReportThunk({
-      payload: { reportType: reportTypeToDownload[reportType], type: "pdf", fromDate: dateFrom, toDate: dateTo },
+      payload:  { reportType: reportTypeToDownload[reportType], type: "pdf", fromDate: dateFrom, toDate: dateTo },
       filename: `${reportTypeToSlug[reportType]}_${dateFrom}_${dateTo}.pdf`,
     })).unwrap().catch(() => toast.error("Failed to download PDF"));
   };
@@ -495,11 +365,13 @@ export default function ReportsPage() {
   const handleDownloadCsv = () => {
     const rows: unknown[] = (() => {
       switch (reportType) {
-        case "User Growth Report":   return report.userGrowth;
-        case "Revenue Report":       return report.revenueTrend;
-        case "Top Service Category": return report.topCategories?.categories ?? [];
-        case "Top Cities":           return report.topCitiesData?.cities ?? [];
-        default:                     return [];
+        case "User Growth Report":      return report.userGrowth;
+        case "Revenue Report":          return report.revenueTrend;
+        case "Top Service Category":    return report.topCategories?.categories ?? [];
+        case "Top Cities":              return report.topCitiesData?.cities ?? [];
+        case "Job Completion Report":   return report.jobCompletion?.monthly ?? [];
+        case "Dispute Analysis Report": return report.disputeAnalysis?.monthly ?? [];
+        default:                        return [];
       }
     })();
     if (!rows.length) { toast.warning("No data — generate the report first"); return; }
@@ -523,15 +395,16 @@ export default function ReportsPage() {
     report.revenueTrend,
     report.topCategories,
     report.topCitiesData ?? null,
-    (report.tasPerformance ?? []) as Record<string, unknown>[],
+    (report.tasPerformance  ?? []) as Record<string, unknown>[],
     (report.expertPerformance ?? []) as Record<string, unknown>[],
+    report.jobCompletion  ?? null,
+    report.disputeAnalysis ?? null,
     dateFrom,
     dateTo,
   );
 
-  const showComingSoon = generated && !isLive;
-  const showLoading    = generated && isLive && isLoading;
-  const showCard       = generated && isLive && !isLoading;
+  const showLoading = generated && isLive && isLoading;
+  const showCard    = generated && isLive && !isLoading;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -545,12 +418,8 @@ export default function ReportsPage() {
 
       <main className="report-main" style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "#F4F5F7" }}>
 
-        {/* Controls */}
         <ReportControls
-          reportType={reportType}
-          format={format}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
+          reportType={reportType} format={format} dateFrom={dateFrom} dateTo={dateTo}
           reportTypes={ALL_REPORT_TYPES}
           onReportType={(v: string) => { setReportType(v as ReportType); setGenerated(false); }}
           onFormat={setFormat}
@@ -560,7 +429,6 @@ export default function ReportsPage() {
           onExport={handleExport}
         />
 
-        {/* Empty state */}
         {!generated && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "12px", color: "#9CA3AF" }}>
             <TrendingUp size={40} strokeWidth={1.2} />
@@ -570,7 +438,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Loading */}
         {showLoading && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "10px", color: "#9CA3AF", fontSize: "14px" }}>
             <span style={{ display: "inline-block", width: 20, height: 20, border: "2px solid #E5E7EB", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -578,20 +445,9 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Coming soon */}
-        {showComingSoon && (
-          <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", padding: "48px 24px", textAlign: "center" }}>
-            <TrendingUp size={36} strokeWidth={1.2} color="#9CA3AF" style={{ marginBottom: "12px" }} />
-            <p style={{ fontSize: "15px", fontWeight: 600, color: "#111827", marginBottom: "6px" }}>{reportType}</p>
-            <p style={{ fontSize: "13px", color: "#9CA3AF" }}>Backend endpoint pending — coming soon.</p>
-          </div>
-        )}
-
-        {/* Report output card — inline to avoid ReportCard prop conflicts */}
         {showCard && (
           <InlineReportCard
-            config={config}
-            isDonut={isDonut}
+            config={config} isDonut={isDonut}
             onDownloadPdf={handleDownloadPdf}
             onDownloadCsv={handleDownloadCsv}
             onEmail={handleEmail}
@@ -599,10 +455,7 @@ export default function ReportsPage() {
           />
         )}
 
-        {/* Scheduled Reports */}
         <ScheduledReportsSection />
-
-        {/* Report Templates */}
         <ReportTemplatesSection />
 
       </main>
