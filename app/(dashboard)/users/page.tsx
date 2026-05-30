@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, Loader2, ArrowLeft, Download, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { Eye, Loader2, ArrowLeft, Download, SlidersHorizontal, ChevronDown, Plus } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import { PageLoader } from "@/components/ui/Loader";
@@ -13,6 +13,7 @@ import {
   suspendUserThunk, activateUserThunk,
 } from "@/lib/redux/usersSlice";
 import { downloadReport } from "@/lib/api/reportApi";
+import { registerUser, type RegisterUserPayload } from "@/lib/api/usersApi";
 import type { ApiUser } from "@/lib/api/usersApi";
 
 // ── Helpers ───────────────────────────────────────────────
@@ -33,23 +34,47 @@ const normalizeType = (role: string): User["type"] => {
   return map[role.toLowerCase()] ?? "Client";
 };
 
-const toUser = (u: ApiUser, avatarSeed: number): User => ({
-  id: u.id, avatarSeed, name: u.name ?? "Unknown User", email: u.email ?? "",
-  username: u.username, phone: u.phone,
-  type: normalizeType(u.role ?? u.mode ?? "client"),
-  status: normalizeStatus(u.status),
-  joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB") : "—",
-  verify: u.verify, gender: u.gender, bio: u.bio,
-  verification: u.verification, category: u.category, skill: u.skill,
-  services: u.services, bankDetails: u.bankDetails, document: u.document,
-  paymentModel: u.paymentModel, location: u.location,
-  dob: (u as unknown as Record<string, unknown>).dateOfBirth as string ?? u.dob,
-  referral: u.referral,
-  account: u.account ?? (u.bankDetails ? {
-    bankName:      (u.bankDetails as Record<string, string>).bankName,
-    accountNumber: (u.bankDetails as Record<string, string>).accountNo,
-  } : undefined),
-});
+const toUser = (u: ApiUser, avatarSeed: number): User => {
+  // avatar can be a string (null) or an object { url, secureUrl } for TAS
+  const avatarObj = u.avatar as unknown as Record<string, string> | null;
+  const avatarUrl = avatarObj && typeof avatarObj === "object"
+    ? (avatarObj.secureUrl ?? avatarObj.url ?? null)
+    : (typeof u.avatar === "string" ? u.avatar : null);
+
+  // category can be string[] (TAS) or object (Expert)
+  const rawCategory = (u as unknown as Record<string, unknown>).category;
+
+  return {
+    id: u.id, avatarSeed, avatarUrl, name: u.name ?? "Unknown User", email: u.email ?? "",
+    username: u.username, phone: u.phone,
+    type: normalizeType(u.role ?? u.mode ?? "client"),
+    status: normalizeStatus(u.status),
+    joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB") : "—",
+    verify: u.verify, gender: u.gender, bio: u.bio,
+    verification: u.verification,
+    category: rawCategory as Record<string, unknown>,
+    skill: u.skill,
+    services: u.services, bankDetails: u.bankDetails,
+    document: u.document as unknown as Record<string, unknown>,
+    paymentModel: u.paymentModel, location: u.location,
+    dob: (u as unknown as Record<string, unknown>).dateOfBirth as string ?? u.dob,
+    referral: u.referral,
+    account: u.account ?? (u.bankDetails ? {
+      bankName:      (u.bankDetails as Record<string, string>).bankName,
+      accountNumber: (u.bankDetails as Record<string, string>).accountNo,
+    } : undefined),
+    // TAS-specific extras (cast via unknown to avoid ApiUser type constraint)
+    ...(() => {
+      const raw = u as unknown as Record<string, unknown>;
+      return {
+        applicationCode:     raw.applicationCode as string | undefined,
+        tier:                raw.tier as number | undefined,
+        parentTasId:         raw.parentTasId as string | null | undefined,
+        recruitExpectations: raw.recruitExpectations as Record<string, unknown> | undefined,
+      };
+    })(),
+  };
+};
 
 const seedMap    = new Map<string, number>();
 const jobCountMap = new Map<string, number>(); // cached from detail fetches
@@ -86,6 +111,12 @@ export default function UsersPage() {
   const [deleteLoading,  setDeleteLoading]  = useState(false);
   const [suspendOpen,    setSuspendOpen]    = useState(false);
   const [suspendLoading, setSuspendLoading] = useState(false);
+  const [addUserOpen,    setAddUserOpen]    = useState(false);
+  const [addUserLoading, setAddUserLoading] = useState(false);
+  const [addUserRole,    setAddUserRole]    = useState<"client" | "expert" | "tas">("client");
+  const [addForm,        setAddForm]        = useState({
+    name: "", email: "", phone: "", password: "", username: "",
+  });
 
   useEffect(() => { if (listStatus === "idle") dispatch(fetchUsers()); }, [dispatch, listStatus]);
   useEffect(() => { list.forEach((u, i) => { if (!seedMap.has(u.id)) seedMap.set(u.id, i); }); }, [list]);
@@ -130,6 +161,62 @@ export default function UsersPage() {
       .then(() => { toast.success(isSuspended ? `${rawUser.name} reinstated` : `${rawUser.name} suspended`); setSuspendOpen(false); handleBack(); })
       .catch((err: string) => toast.error(isSuspended ? "Reinstate failed" : "Suspend failed", { description: err }))
       .finally(() => setSuspendLoading(false));
+  };
+
+  const handleAddUser = async () => {
+    if (!addForm.name || !addForm.email || !addForm.password) {
+      toast.warning("Name, email and password are required"); return;
+    }
+    setAddUserLoading(true);
+    try {
+      let payload: RegisterUserPayload;
+      const f = addForm as Record<string, string | boolean>;
+
+      if (addUserRole === "client") {
+        payload = { role: "client", name: addForm.name, email: addForm.email,
+          phone: addForm.phone, password: addForm.password,
+          username: addForm.username || addForm.email.split("@")[0] };
+
+      } else if (addUserRole === "expert") {
+        payload = {
+          role:     "expert",
+          name:     addForm.name,
+          email:    addForm.email,
+          phone:    addForm.phone,
+          password: addForm.password,
+       //   gender:   (f.gender as string) || "male",
+          bio:      (f.bio    as string) || "",
+          ...(f.appliedTier ? {
+            verification: (f.appliedTier as string)
+              .toLowerCase()
+              .replace(/\s+/g, "") as "tier1" | "tier2" | "tier3"
+          } : {}),
+          ...(f.ninSlip || f.validId || f.passport ? {
+            document: {
+              ninSlip:  f.ninSlip  as string,
+              validId:  f.validId  as string,
+              passport: f.passport as string,
+            },
+          } : {}),
+        };
+
+      } else {
+        payload = { role: "tas", name: addForm.name, email: addForm.email,
+          phone: addForm.phone, password: addForm.password,
+          username: addForm.username || addForm.email.split("@")[0],
+          gender: "male", dateOfBirth: "1990-01-01" };
+      }
+
+      await registerUser(payload);
+      toast.success(`${addUserRole} user created successfully`);
+      setAddUserOpen(false);
+      setAddForm({ name: "", email: "", phone: "", password: "", username: "" });
+      dispatch(fetchUsers());
+    } catch {
+      toast.error("Failed to create user");
+    } finally {
+      setAddUserLoading(false);
+    }
   };
 
   // ── Detail view states ────────────────────────────────
@@ -253,7 +340,226 @@ export default function UsersPage() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Manage all users</p>
+          <button onClick={() => setAddUserOpen(true)}
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px",
+              borderRadius: "10px", border: "none", backgroundColor: "#2563EB", color: "#fff",
+              fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+            <Plus size={14} /> Add User
+          </button>
         </div>
+
+        {/* Add User Modal */}
+        <Modal open={addUserOpen} onClose={() => setAddUserOpen(false)} title="Add New User" size="sm"
+          footer={
+            <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+              <button onClick={() => setAddUserOpen(false)}
+                style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB",
+                  backgroundColor: "#fff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
+                Cancel
+              </button>
+              <button onClick={handleAddUser} disabled={addUserLoading}
+                style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none",
+                  backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600,
+                  cursor: addUserLoading ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  opacity: addUserLoading ? 0.7 : 1 }}>
+                {addUserLoading ? <><Loader2 size={14} className="animate-spin" /> Creating...</> : "Create User"}
+              </button>
+            </div>
+          }>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {/* Role selector */}
+            <div>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "#6B7280", marginBottom: "6px" }}>
+                User Role *
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {(["client", "expert", "tas"] as const).map((r) => (
+                  <button key={r} onClick={() => setAddUserRole(r)}
+                    style={{ flex: 1, padding: "8px", borderRadius: "8px", fontSize: "12px",
+                      fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
+                      border: addUserRole === r ? "none" : "1px solid #E5E7EB",
+                      backgroundColor: addUserRole === r ? "#2563EB" : "#F9FAFB",
+                      color: addUserRole === r ? "#fff" : "#374151" }}>
+                    {r.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Fields */}
+            {[
+              { key: "name",     label: "Full Name *",     type: "text",     ph: "e.g. Emeka Okafor"       },
+              { key: "email",    label: "Email *",         type: "email",    ph: "emeka@email.com"          },
+              { key: "phone",    label: "Phone *",         type: "tel",      ph: "+234 801 234 5678"        },
+              { key: "password", label: "Password *",      type: "password", ph: "Min 8 characters"         },
+              ...(addUserRole !== "expert"
+                ? [{ key: "username", label: "Username", type: "text", ph: "e.g. johndoe" }]
+                : []),
+            ].map(({ key, label, type, ph }) => (
+              <div key={key}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 500,
+                  color: "#6B7280", marginBottom: "6px" }}>{label}</label>
+                <input type={type} placeholder={ph}
+                  value={(addForm as Record<string, string>)[key]}
+                  onChange={(e) => setAddForm((f) => ({ ...f, [key]: e.target.value }))}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+                    border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                    fontSize: "13px", color: "#111827", outline: "none",
+                    boxSizing: "border-box" }} />
+              </div>
+            ))}
+
+            {/* Expert-only extra fields */}
+            {addUserRole === "expert" && (
+              <>
+                <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.07em", color: "#6B7280", margin: "0 0 12px" }}>
+                    Expert Information
+                  </p>
+                  {[
+                    { key: "gender", label: "Gender",   type: "text", ph: "male / female / other" },
+                    { key: "bio",    label: "Bio",       type: "text", ph: "Brief description"     },
+                  ].map(({ key, label, type, ph }) => (
+                    <div key={key} style={{ marginBottom: "12px" }}>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: 500,
+                        color: "#6B7280", marginBottom: "6px" }}>{label}</label>
+                      <input type={type} placeholder={ph}
+                        value={(addForm as Record<string, string>)[key] ?? ""}
+                        onChange={(e) => setAddForm((f) => ({ ...f, [key]: e.target.value }))}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+                          border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                          fontSize: "13px", color: "#111827", outline: "none",
+                          boxSizing: "border-box" }} />
+                    </div>
+                  ))}
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 500,
+                      color: "#6B7280", marginBottom: "6px" }}>Applied Tier</label>
+                    <select
+                      value={(addForm as Record<string, string>).appliedTier ?? ""}
+                      onChange={(e) => setAddForm((f) => ({ ...f, appliedTier: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+                        border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                        fontSize: "13px", color: "#111827", outline: "none",
+                        boxSizing: "border-box", appearance: "none", cursor: "pointer" }}>
+                      <option value="">Select tier (optional)</option>
+                      <option value="tier1">Tier 1</option>
+                      <option value="tier2">Tier 2</option>
+                      <option value="tier3">Tier 3</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.07em", color: "#6B7280", margin: "0 0 12px" }}>
+                    Documents
+                  </p>
+                  {[
+                    { key: "ninSlip",  label: "NIN Slip"              },
+                    { key: "validId",  label: "Valid ID (National ID)" },
+                    { key: "passport", label: "Passport Photograph"    },
+                  ].map(({ key, label }) => {
+                    const val = (addForm as Record<string, string>)[key] ?? "";
+                    return (
+                      <div key={key} style={{ marginBottom: "12px" }}>
+                        <label style={{ display: "block", fontSize: "12px", fontWeight: 500,
+                          color: "#6B7280", marginBottom: "6px" }}>{label}</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: "8px",
+                            padding: "9px 14px", borderRadius: "10px", border: "1px solid #E5E7EB",
+                            backgroundColor: "#F9FAFB", fontSize: "13px", color: "#374151",
+                            cursor: "pointer", flex: 1, minWidth: 0 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" strokeWidth="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                              <polyline points="17 8 12 3 7 8"/>
+                              <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                              whiteSpace: "nowrap", flex: 1 }}>
+                              {val ? "✓ File selected" : "Choose file…"}
+                            </span>
+                            <input type="file" accept="image/*,.pdf"
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setAddForm((f) => ({
+                                    ...f,
+                                    [key]: reader.result as string,
+                                  }));
+                                };
+                                reader.readAsDataURL(file);
+                              }} />
+                          </label>
+                          {val && (
+                            <button onClick={() => setAddForm((f) => ({ ...f, [key]: "" }))}
+                              style={{ padding: "6px 10px", borderRadius: "8px",
+                                border: "1px solid #fecaca", backgroundColor: "#fef2f2",
+                                color: "#ef4444", fontSize: "12px", cursor: "pointer",
+                                flexShrink: 0 }}>
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        {val && val.startsWith("data:image") && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={val} alt={label}
+                            style={{ marginTop: "8px", width: "60px", height: "60px",
+                              borderRadius: "8px", objectFit: "cover",
+                              border: "1px solid #E5E7EB" }} />
+                        )}
+                        {val && val.startsWith("data:application/pdf") && (
+                          <p style={{ fontSize: "11px", color: "#16a34a", marginTop: "4px" }}>
+                            ✓ PDF ready to upload
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.07em", color: "#6B7280", margin: "0 0 12px" }}>
+                    NIN Verification
+                  </p>
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 500,
+                      color: "#6B7280", marginBottom: "6px" }}>NIN Number</label>
+                    <input type="text" placeholder="11-digit NIN e.g. 12345678901"
+                      maxLength={11}
+                      value={(addForm as Record<string, string>).ninNumber ?? ""}
+                      onChange={(e) => setAddForm((f) => ({ ...f, ninNumber: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+                        border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                        fontSize: "13px", color: "#111827", outline: "none",
+                        boxSizing: "border-box", fontFamily: "monospace", letterSpacing: "0.1em" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+                    {[
+                      { key: "nameMatch", label: "Name Match" },
+                      { key: "dobMatch",  label: "DOB Match"  },
+                    ].map(({ key, label }) => (
+                      <label key={key} style={{ display: "flex", alignItems: "center", gap: "8px",
+                        fontSize: "13px", color: "#374151", cursor: "pointer" }}>
+                        <input type="checkbox"
+                          checked={!!(addForm as Record<string, unknown>)[key]}
+                          onChange={(e) => setAddForm((f) => ({ ...f, [key]: e.target.checked }))}
+                          style={{ width: "15px", height: "15px", accentColor: "#16a34a" }} />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
 
         <div style={{ backgroundColor: "#fff", borderRadius: "16px", border: "1px solid #E5E7EB", overflow: "hidden" }}>
 

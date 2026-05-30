@@ -98,7 +98,7 @@ export interface RegisterExpertPayload {
   email:       string;
   phone:       string;
   password:    string;
-  gender:      "male" | "female" | "other";
+ // gender:      "male" | "female" | "other";
   bio:         string;
   referral?:   string;
   avatar?:     string;
