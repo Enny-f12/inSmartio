@@ -352,7 +352,7 @@ function ProfileDropdown({
       {/* Items */}
       <div style={{ padding: "6px" }}>
         {item(<User size={15} />,   "My Profile",            onProfile)}
-        {item(<Bell size={15} />,   "Notification Settings", () => router.push("/settings?view=notif-settings"))}
+        {item(<Bell size={15} />,   "Notification Settings", () => router.push("/settings"))}
         {item(<Lock size={15} />,   "Change Password",       onPassword)}
       </div>
 
