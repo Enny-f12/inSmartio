@@ -5,6 +5,7 @@ export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
 export type DisputeStatus   = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
 export interface DisputeParty {
+  name: string;
   id:        string;
   statement: string;
   evidence:  string[];

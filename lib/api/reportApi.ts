@@ -54,6 +54,20 @@ export interface TopCitiesData {
   cities:  TopCityItem[];
 }
 
+// ── New report data types ─────────────────────────────────
+
+export interface ReportsSummaryData {
+  [key: string]: unknown;
+}
+
+export interface ExpertPerformanceItem {
+  [key: string]: unknown;
+}
+
+export interface TasPerformanceItem {
+  [key: string]: unknown;
+}
+
 // All backend reportType values
 export type DownloadReportType =
   | "users"
@@ -74,6 +88,8 @@ export interface DownloadReportPayload {
   toDate:     string;
 }
 
+// ── Existing endpoints ────────────────────────────────────
+
 export const fetchUserGrowth = async (q: ReportQuery): Promise<MonthlyUserGrowthItem[]> => {
   const { data } = await axiosInstance.get("/report/monthly-user-growth", { params: q });
   return data.data ?? [];
@@ -92,6 +108,32 @@ export const fetchTopServiceCategory = async (q: ReportQuery): Promise<TopServic
 export const fetchTopCities = async (q: ReportQuery): Promise<TopCitiesData> => {
   const { data } = await axiosInstance.get("/report/top-cities", { params: q });
   return data.data;
+};
+
+// ── New report endpoints (from Swagger) ───────────────────
+
+// GET /api/reports/summary — platform-wide summary statistics
+export const fetchReportsSummary = async (): Promise<ReportsSummaryData> => {
+  const { data } = await axiosInstance.get("/reports/summary");
+  return data.data ?? {};
+};
+
+// GET /api/reports/expert-performance — expert performance report
+// Optional: limit (number)
+export const fetchExpertPerformance = async (limit?: number): Promise<ExpertPerformanceItem[]> => {
+  const { data } = await axiosInstance.get("/reports/expert-performance", {
+    params: limit ? { limit } : undefined,
+  });
+  return data.data ?? [];
+};
+
+// GET /api/reports/tas-performance — TAS performance report
+// Optional: limit (number)
+export const fetchTasPerformance = async (limit?: number): Promise<TasPerformanceItem[]> => {
+  const { data } = await axiosInstance.get("/reports/tas-performance", {
+    params: limit ? { limit } : undefined,
+  });
+  return data.data ?? [];
 };
 
 // POST /report/download — body: { reportType, type, fromDate, toDate }

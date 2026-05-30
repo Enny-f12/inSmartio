@@ -1,16 +1,16 @@
 // components/report/ReportControls.tsx
 "use client";
 
-import { FilterDropdown } from "@/components/ui/FilterDropdown";
-import type { ReportType, FormatType } from "@/components/report/types";
-import { REPORT_TYPES, FORMATS } from "@/components/report/types";
+import { Download, ChevronDown } from "lucide-react";
+import type { FormatType } from "./types";
 
 interface Props {
-  reportType: ReportType;
-  format:     FormatType;
-  dateFrom:   string;   // "YYYY-MM-DD"
-  dateTo:     string;   // "YYYY-MM-DD"
-  onReportType: (v: ReportType) => void;
+  reportType:   string;
+  format:       FormatType;
+  dateFrom:     string;
+  dateTo:       string;
+  reportTypes?: string[];
+  onReportType: (v: string) => void;
   onFormat:     (v: FormatType) => void;
   onDateFrom:   (v: string) => void;
   onDateTo:     (v: string) => void;
@@ -18,85 +18,123 @@ interface Props {
   onExport:     () => void;
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: "10px",
-  border: "1px solid #E5E7EB",
-  fontSize: "13px",
-  color: "#111827",
-  backgroundColor: "#F9FAFB",
-  outline: "none",
-  cursor: "pointer",
-};
+const FORMAT_OPTIONS: FormatType[] = ["PDF", "CSV"];
+
+function SelectBox({
+  label, value, options, onChange,
+}: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <span style={{ fontSize: "13px", fontWeight: 500, color: "#374151", whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+      <div style={{ position: "relative" }}>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ padding: "8px 36px 8px 14px", borderRadius: "10px",
+            border: "1px solid #E5E7EB", backgroundColor: "#fff",
+            fontSize: "13px", color: "#374151", outline: "none",
+            appearance: "none", cursor: "pointer", minWidth: "160px" }}>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <ChevronDown size={13} style={{ position: "absolute", right: "10px", top: "50%",
+          transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+      </div>
+    </div>
+  );
+}
+
+function DateBox({
+  value, onChange,
+}: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ padding: "8px 36px 8px 14px", borderRadius: "10px",
+          border: "1px solid #E5E7EB", backgroundColor: "#fff",
+          fontSize: "13px", color: "#374151", outline: "none",
+          cursor: "pointer", minWidth: "140px" }} />
+      <ChevronDown size={13} style={{ position: "absolute", right: "10px", top: "50%",
+        transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+    </div>
+  );
+}
 
 export default function ReportControls({
   reportType, format, dateFrom, dateTo,
-  onReportType, onFormat, onDateFrom, onDateTo,
-  onGenerate,
+  reportTypes, onReportType, onFormat,
+  onDateFrom, onDateTo, onGenerate, onExport,
 }: Props) {
+  const types = reportTypes ?? [
+    "User Growth Report",
+    "Revenue Report",
+    "Top Service Category",
+    "Top Cities",
+    "Job Completion Report",
+    "TAS Performance Report",
+    "Dispute Analysis Report",
+    "Verification Report",
+  ];
+
   return (
-    <>
+    <div style={{ backgroundColor: "#F4F5F7", padding: "0" }}>
       <style>{`
-        .rc-wrap   { display: flex; flex-direction: column; gap: 12px; border-radius: 16px; border: 1px solid #E5E7EB; background: #fff; padding: 16px; }
-        .rc-row    { display: flex; flex-direction: column; gap: 10px; }
-        .rc-field  { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .rc-label  { font-size: 13px; font-weight: 600; color: #374151; white-space: nowrap; min-width: 100px; }
-        .rc-actions { display: flex; gap: 10px; }
-        .rc-generate { flex: 1; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; color: #fff; background: #F9A826; border: none; cursor: pointer; }
-        .rc-export   { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
-        @media (min-width: 640px) {
-          .rc-wrap    { padding: 20px 24px; gap: 16px; }
-          .rc-row     { flex-direction: row; align-items: center; flex-wrap: wrap; }
-          .rc-label   { min-width: auto; }
-          .rc-actions { margin-left: auto; }
-          .rc-generate { flex: none; padding: 10px 32px; }
-          .rc-export   { flex: none; padding: 10px 20px; }
-        }
+        .rc-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+        @media(min-width:640px){ .rc-row { flex-wrap: nowrap; } }
       `}</style>
 
-      <div className="rc-wrap">
-
-        {/* Row 1: Report Type + Format */}
-        <div className="rc-row">
-          <div className="rc-field">
-            <span className="rc-label">Report Type:</span>
-            <FilterDropdown value={reportType} options={REPORT_TYPES} onChange={(v) => onReportType(v as ReportType)} />
-          </div>
-          <div className="rc-field">
-            <span className="rc-label">Format:</span>
-            <FilterDropdown value={format} options={FORMATS} onChange={(v) => onFormat(v as FormatType)} />
-          </div>
+      {/* Row 1: Report Type | Format | Export */}
+      <div className="rc-row" style={{ justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+          <SelectBox
+            label="Report Type:"
+            value={reportType}
+            options={types}
+            onChange={onReportType}
+          />
+          <SelectBox
+            label="Format:"
+            value={format}
+            options={FORMAT_OPTIONS}
+            onChange={(v) => onFormat(v as FormatType)}
+          />
         </div>
 
-        {/* Row 2: Date Range (native date inputs) + actions */}
-        <div className="rc-row">
-          <div className="rc-field">
-            <span className="rc-label">Date Range:</span>
-            <input
-              type="date"
-              value={dateFrom}
-              max={dateTo}
-              onChange={(e) => onDateFrom(e.target.value)}
-              style={inputStyle}
-            />
-            <span style={{ fontSize: "13px", color: "#9CA3AF" }}>to</span>
-            <input
-              type="date"
-              value={dateTo}
-              min={dateFrom}
-              max={new Date().toISOString().split("T")[0]}
-              onChange={(e) => onDateTo(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-
-          <div className="rc-actions">
-            <button onClick={onGenerate} className="rc-generate">Generate</button>
-            
-          </div>
-        </div>
-
+        {/* Export — top right, blue button */}
+        <button onClick={onExport}
+          style={{ display: "flex", alignItems: "center", gap: "8px",
+            padding: "10px 24px", borderRadius: "12px", border: "none",
+            backgroundColor: "#2563EB", color: "#fff",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            flexShrink: 0 }}>
+          <Download size={14} /> Export
+        </button>
       </div>
-    </>
+
+      {/* Row 2: Date Range | Generate */}
+      <div className="rc-row">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "13px", fontWeight: 500, color: "#374151", whiteSpace: "nowrap" }}>
+            Date Range:
+          </span>
+          <DateBox value={dateFrom} onChange={onDateFrom} />
+          <span style={{ fontSize: "13px", color: "#6B7280" }}>to</span>
+          <DateBox value={dateTo} onChange={onDateTo} />
+        </div>
+
+        {/* Generate — orange/amber button */}
+        <button onClick={onGenerate}
+          style={{ padding: "10px 32px", borderRadius: "12px", border: "none",
+            backgroundColor: "#F59E0B", color: "#fff",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            flexShrink: 0 }}>
+          Generate
+        </button>
+      </div>
+    </div>
   );
 }

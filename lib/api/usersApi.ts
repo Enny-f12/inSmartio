@@ -24,7 +24,7 @@ export interface ApiUser {
   paymentModel?: string;
   // tas fields
   dob?:          string;
-  dateOfBirth?:  string;   // TAS API returns this field name
+  dateOfBirth?:  string;
   referral?:    string | null;
   account?:     {
     bvn?:           string;
@@ -73,8 +73,11 @@ export const getAllUsers = async (): Promise<ApiUser[]> => {
 
 // ── Get user by type + id ─────────────────────────────────
 // GET /api/admin/users/{type}/{id}  — type: "client" | "expert" | "tas"
+// encodeURIComponent handles IDs with slashes e.g. "CLIENT-021/05/26" → "CLIENT-021%2F05%2F26"
 export const getUserById = async (id: string, type: string = "client"): Promise<ApiUser> => {
-  const { data } = await axiosInstance.get<UserByIdResponse>(`/admin/users/${type.toLowerCase()}/${id}`);
+  const { data } = await axiosInstance.get<UserByIdResponse>(
+    `/admin/users/${type.toLowerCase()}/${encodeURIComponent(id)}`
+  );
   return data.data;
 };
 
@@ -95,7 +98,7 @@ export interface RegisterExpertPayload {
   email:       string;
   phone:       string;
   password:    string;
-  gender:      "male" | "female" | "other";
+ // gender:      "male" | "female" | "other";
   bio:         string;
   referral?:   string;
   avatar?:     string;
@@ -129,18 +132,18 @@ export interface RegisterExpertPayload {
 
 // POST /tas/register — full schema from Swagger
 export interface RegisterTasPayload {
-  username:            string;
-  name:                string;
-  email:               string;
-  phone:               string;
-  password:            string;
-  gender:              "male" | "female" | "other";
-  dateOfBirth:         string;   // ISO 8601 e.g. "1990-01-01"
-  category?:           string[];
+  username:             string;
+  name:                 string;
+  email:                string;
+  phone:                string;
+  password:             string;
+  gender:               "male" | "female" | "other";
+  dateOfBirth:          string;
+  category?:            string[];
   recruitExpectations?: string;
   bankDetails?: {
-    bankName?:   string;
-    accountNo?:  string;
+    bankName?:  string;
+    accountNo?: string;
   };
   document?: {
     idCard?:          string;
@@ -165,7 +168,6 @@ export interface RegisterUserResponse {
 export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUser> => {
   if (payload.role === "expert") {
     const { role: _, ...expertPayload } = payload as RegisterExpertPayload & { role: "expert" };
-    // Remove referral if empty string
     if (expertPayload.referral === "") delete expertPayload.referral;
     const { data } = await axiosInstance.post<RegisterUserResponse>("/experts/register", expertPayload);
     return data.data;
@@ -188,17 +190,17 @@ export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUse
 
 // DELETE /api/admin/users/{type}/{id}
 export const adminDeleteUser = async (type: string, id: string): Promise<void> => {
-  await axiosInstance.delete(`/admin/users/${type}/${id}`);
+  await axiosInstance.delete(`/admin/users/${type}/${encodeURIComponent(id)}`);
 };
 
 // PUT /api/admin/users/suspend/{type}/{id}
 export const suspendUser = async (type: string, id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/suspend/${type}/${id}`);
+  await axiosInstance.put(`/admin/users/suspend/${type}/${encodeURIComponent(id)}`);
 };
 
 // PUT /api/admin/users/activate/{type}/{id}
 export const activateUser = async (type: string, id: string): Promise<void> => {
-  await axiosInstance.put(`/admin/users/activate/${type}/${id}`);
+  await axiosInstance.put(`/admin/users/activate/${type}/${encodeURIComponent(id)}`);
 };
 
 // ── Admin stats ───────────────────────────────────────────
