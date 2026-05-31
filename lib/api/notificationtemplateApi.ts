@@ -3,7 +3,7 @@ import axiosInstance from "@/lib/api/axiosInstance";
 
 export interface ApiNotificationTemplate {
   id:        string;
-  name:      string;   // template name / key shown in dropdown
+  name:      string;
   subject:   string;
   body:      string;
   fields?:   { label: string; placeholder: string }[];
@@ -36,12 +36,17 @@ export const getAllTemplates = async (): Promise<ApiNotificationTemplate[]> => {
 };
 
 // POST /api/notifications/templates/create
+// Sends exactly: { name, subject, body } — no extra nesting
 export const createTemplate = async (
   payload: CreateTemplatePayload,
 ): Promise<ApiNotificationTemplate> => {
   const { data } = await axiosInstance.post<TemplateSingleResponse>(
     "/notifications/templates/create",
-    payload,
+    {
+      name:    payload.name,
+      subject: payload.subject,
+      body:    payload.body,
+    },
   );
   return data.data;
 };

@@ -15,13 +15,13 @@ import {
 import { logout } from "@/lib/redux/authSlice";
 import Modal from "@/components/ui/Modal";
 import type { ApiNotification } from "@/lib/api/notificationApi";
-import router from "next/router";
 
 interface TopbarProps { title: string; }
 
 // ── Helpers ───────────────────────────────────────────────
 const ROLE_LABELS: Record<string, string> = {
   super_admin:          "Super Admin",
+  admin:                "Admin",
   verification_officer: "Verification Officer",
   finance_admin:        "Finance Admin",
   support_admin:        "Support Admin",
@@ -30,6 +30,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   super_admin:          ["Full system access", "Manage admins", "All settings", "All reports"],
+  admin:                ["Full administrative control", "Manage platform modules", "View reports"],
   verification_officer: ["View verifications", "Approve/reject experts", "View users"],
   finance_admin:        ["View payments", "Process payouts", "Download reports"],
   support_admin:        ["View disputes", "Respond to users", "View jobs"],
@@ -38,6 +39,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
   super_admin:          { bg: "#EDE9FE", color: "#6D28D9" },
+  admin:                { bg: "#EDE9FE", color: "#6D28D9" },
   verification_officer: { bg: "#DBEAFE", color: "#1D4ED8" },
   finance_admin:        { bg: "#D1FAE5", color: "#065F46" },
   support_admin:        { bg: "#FEF3C7", color: "#B45309" },
@@ -57,30 +59,52 @@ const lbl: React.CSSProperties = {
 
 // ── Profile Modal ─────────────────────────────────────────
 function ProfileModal({
-  name, email, role, onClose,
-}: { name: string; email: string; role: string; onClose: () => void }) {
+  name, email, role, status, createdAt, avatarUrl, onClose,
+}: { 
+  name: string; 
+  email: string; 
+  role: string; 
+  status: string; 
+  createdAt: string; 
+  avatarUrl?: string; 
+  onClose: () => void 
+}) {
   const roleLabel = ROLE_LABELS[role] ?? role;
   const roleColor = ROLE_COLORS[role] ?? { bg: "#F3F4F6", color: "#374151" };
   const perms     = ROLE_PERMISSIONS[role] ?? [];
   const initials  = name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
+  const dateJoined = createdAt
+    ? new Date(createdAt).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "—";
+
   return (
     <Modal open onClose={onClose} title="My Profile" size="sm">
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        
         {/* Avatar + identity */}
         <div style={{ display: "flex", alignItems: "center", gap: "16px",
           padding: "16px", backgroundColor: "#F9FAFB", borderRadius: "12px" }}>
-          <div style={{ width: 56, height: 56, borderRadius: "50%",
-            backgroundColor: "#16a34a", display: "flex", alignItems: "center",
-            justifyContent: "center", color: "#fff", fontSize: "18px",
-            fontWeight: 700, flexShrink: 0 }}>
-            {initials}
-          </div>
+          {avatarUrl ? (
+            <div style={{ width: 64, height: 64, borderRadius: "50%", overflow: "hidden", position: "relative", flexShrink: 0 }}>
+              <Image src={avatarUrl} alt={name} fill style={{ objectFit: "cover" }} unoptimized />
+            </div>
+          ) : (
+            <div style={{ width: 64, height: 64, borderRadius: "50%",
+              backgroundColor: "#16a34a", display: "flex", alignItems: "center",
+              justifyContent: "center", color: "#fff", fontSize: "20px",
+              fontWeight: 700, flexShrink: 0 }}>
+              {initials}
+            </div>
+          )}
           <div>
-            <p style={{ fontSize: "15px", fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
+            <p style={{ fontSize: "16px", fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
               {name}
             </p>
-            <p style={{ fontSize: "13px", color: "#6B7280", margin: "0 0 8px" }}>{email}</p>
             <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px",
               borderRadius: "999px", backgroundColor: roleColor.bg, color: roleColor.color }}>
               {roleLabel}
@@ -88,9 +112,29 @@ function ProfileModal({
           </div>
         </div>
 
+        {/* Detailed Info Profile Fields */}
+        <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" }}>Email Address</span>
+            <p style={{ fontSize: "14px", color: "#111827", margin: "2px 0 0", fontWeight: 500 }}>{email}</p>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" }}>Status</span>
+              <p style={{ fontSize: "14px", color: status === "active" ? "#16a34a" : "#ef4444", margin: "2px 0 0", fontWeight: 600, textTransform: "capitalize" }}>
+                ● {status}
+              </p>
+            </div>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" }}>Date Joined</span>
+              <p style={{ fontSize: "14px", color: "#111827", margin: "2px 0 0", fontWeight: 500 }}>{dateJoined}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Permissions */}
         {perms.length > 0 && (
-          <div>
+          <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: "16px" }}>
             <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
               letterSpacing: "0.08em", color: "#6B7280", marginBottom: "12px" }}>
               Role Permissions
@@ -124,7 +168,6 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
     if (form.newPassword !== form.confirm) return;
     setLoading(true);
     try {
-      // TODO-BACKEND: POST /admin/change-password { newPassword }
       await new Promise((r) => setTimeout(r, 800));
       onClose();
     } finally { setLoading(false); }
@@ -301,15 +344,16 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
 // ── Profile Dropdown ──────────────────────────────────────
 function ProfileDropdown({
-  name, role, initials,
+  name, role, initials, avatarUrl,
   onProfile, onPassword, onClose, onLogout,
 }: {
-  name: string; email: string; role: string; initials: string;
+  name: string; email: string; role: string; initials: string; avatarUrl?: string;
   onProfile: () => void; onPassword: () => void;
   onClose: () => void; onLogout: () => void;
 }) {
   const roleLabel = ROLE_LABELS[role] ?? role;
   const roleColor = ROLE_COLORS[role] ?? { bg: "#F3F4F6", color: "#374151" };
+  const router = useRouter();
 
   const item = (icon: React.ReactNode, label: string, onClick: () => void, danger = false) => (
     <button onClick={() => { onClose(); onClick(); }}
@@ -333,12 +377,18 @@ function ProfileDropdown({
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px",
         padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
-        <div style={{ width: "38px", height: "38px", borderRadius: "50%",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "13px", fontWeight: 700, color: "#fff",
-          backgroundColor: "#16a34a", flexShrink: 0 }}>
-          {initials}
-        </div>
+        {avatarUrl ? (
+          <div style={{ width: "38px", height: "38px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, position: "relative" }}>
+            <Image src={avatarUrl} alt={name} fill style={{ objectFit: "cover" }} unoptimized />
+          </div>
+        ) : (
+          <div style={{ width: "38px", height: "38px", borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "13px", fontWeight: 700, color: "#fff",
+            backgroundColor: "#16a34a", flexShrink: 0 }}>
+            {initials}
+          </div>
+        )}
         <div style={{ minWidth: 0 }}>
           <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", margin: "0 0 4px",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</p>
@@ -369,11 +419,14 @@ export default function Topbar({ title }: TopbarProps) {
   const dispatch  = useAppDispatch();
   const router    = useRouter();
 
-  const { admin }                    = useAppSelector((s) => s.auth);
-  const { listStatus, unreadCount }  = useAppSelector((s) => s.notifications);
+  // Cast selector value to include custom avatar object properties safely
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const authState = useAppSelector((s) => s.auth) as any;
+  const admin     = authState.admin;
+  const { listStatus, unreadCount } = useAppSelector((s) => s.notifications);
 
-  const [showNotifs,   setShowNotifs]   = useState(false);
-  const [showProfile,  setShowProfile]  = useState(false);
+  const [showNotifs,    setShowNotifs]   = useState(false);
+  const [showProfile,   setShowProfile]  = useState(false);
   const [showMyProfile, setShowMyProfile] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -395,10 +448,13 @@ export default function Topbar({ title }: TopbarProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const adminName  = admin?.name  ?? "Admin";
-  const adminEmail = admin?.email ?? "";
-  const adminRole  = admin?.role  ?? "view_only_admin";
-  const initials   = adminName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+  const adminName      = admin?.name      ?? "Admin";
+  const adminEmail     = admin?.email     ?? "";
+  const adminRole      = admin?.role      ?? "view_only_admin";
+  const adminStatus    = admin?.status    ?? "active";
+  const adminCreatedAt = admin?.createdAt ?? "";
+  const adminAvatarUrl = admin?.avatar?.secureUrl ?? admin?.avatar?.url;
+  const initials       = adminName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -473,12 +529,20 @@ export default function Topbar({ title }: TopbarProps) {
                 transition: "background 0.15s" }}
               onMouseEnter={(e) => { if (!showProfile) e.currentTarget.style.backgroundColor = "#F9FAFB"; }}
               onMouseLeave={(e) => { if (!showProfile) e.currentTarget.style.backgroundColor = "transparent"; }}>
-              <div style={{ width: "32px", height: "32px", borderRadius: "50%",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "12px", fontWeight: 700, color: "#fff",
-                backgroundColor: "#16a34a", flexShrink: 0 }}>
-                {initials}
-              </div>
+              
+              {adminAvatarUrl ? (
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, position: "relative" }}>
+                  <Image src={adminAvatarUrl} alt={adminName} fill style={{ objectFit: "cover" }} unoptimized />
+                </div>
+              ) : (
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "12px", fontWeight: 700, color: "#fff",
+                  backgroundColor: "#16a34a", flexShrink: 0 }}>
+                  {initials}
+                </div>
+              )}
+
               <div className="nav-admin-detail" style={{ textAlign: "left" }}>
                 <p style={{ fontSize: "13px", fontWeight: 600, lineHeight: 1.2,
                   color: "var(--color-text-main)", margin: 0 }}>{adminName}</p>
@@ -498,6 +562,7 @@ export default function Topbar({ title }: TopbarProps) {
                 email={adminEmail}
                 role={adminRole}
                 initials={initials}
+                avatarUrl={adminAvatarUrl}
                 onProfile={() => { setShowProfile(false); setShowMyProfile(true); }}
                 onPassword={() => { setShowProfile(false); setShowPassword(true); }}
                 onClose={() => setShowProfile(false)}
@@ -508,10 +573,15 @@ export default function Topbar({ title }: TopbarProps) {
         </div>
       </header>
 
-      {/* Modals — rendered outside header so they stack correctly */}
+      {/* Modals */}
       {showMyProfile && (
         <ProfileModal
-          name={adminName} email={adminEmail} role={adminRole}
+          name={adminName} 
+          email={adminEmail} 
+          role={adminRole}
+          status={adminStatus}
+          createdAt={adminCreatedAt}
+          avatarUrl={adminAvatarUrl}
           onClose={() => setShowMyProfile(false)}
         />
       )}

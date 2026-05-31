@@ -1,57 +1,57 @@
-import axiosInstance from "./axiosInstance"; // Adjust the path to your axios instance
+// lib/api/tastierApi.ts
+import axiosInstance from "./axiosInstance";
 
-// ── TYPES & INTERFACES ──────────────────────────────────────────────────────
+export interface TierConfig {
+  experts: number;
+  bonus:   number;
+}
+
 export interface TasTierData {
-  tier1: Record<string, unknown>;
-  tier2: Record<string, unknown>;
-  tier3: Record<string, unknown>;
-  tier4: Record<string, unknown>;
-  tier5: Record<string, unknown>;
-  tier6: Record<string, unknown>;
+  tier1:   TierConfig;
+  tier2:   TierConfig;
+  tier3:   TierConfig;
+  tier4:   TierConfig;
+  tier5:   TierConfig;
+  tier6:   TierConfig;
   status?: boolean;
 }
 
 export interface TasTier extends TasTierData {
-  id: string;
+  id:         string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-// ── API METHODS ─────────────────────────────────────────────────────────────
+interface Envelope<T> { status: boolean; message: string; data: T; }
+
 export const tasApi = {
-  // GET /api/settings/tas-tier
   fetchAll: async (): Promise<TasTier[]> => {
-    const response = await axiosInstance.get<TasTier[]>("/api/settings/tas-tier");
-    return response.data;
+    const { data } = await axiosInstance.get<Envelope<TasTier[]>>("/settings/tas-tier");
+    return data.data ?? [];
   },
 
-  // GET /api/settings/tas-tier/{id}
   fetchById: async (id: string): Promise<TasTier> => {
-    const response = await axiosInstance.get<TasTier>(`/api/settings/tas-tier/${id}`);
-    return response.data;
+    const { data } = await axiosInstance.get<Envelope<TasTier>>(`/settings/tas-tier/${id}`);
+    return data.data;
   },
 
-  // POST /api/settings/tas-tier/create -> Returns 201 Created
-  create: async (data: TasTierData): Promise<TasTier> => {
-    const response = await axiosInstance.post<TasTier>("/api/settings/tas-tier/create", data);
-    return response.data;
+  create: async (payload: TasTierData): Promise<TasTier> => {
+    const { data } = await axiosInstance.post<Envelope<TasTier>>("/settings/tas-tier/create", payload);
+    return data.data;
   },
 
-  // PUT /api/settings/tas-tier/{id}
-  update: async (id: string, data: TasTierData): Promise<TasTier> => {
-    const response = await axiosInstance.put<TasTier>(`/api/settings/tas-tier/${id}`, data);
-    return response.data;
+  update: async (id: string, payload: TasTierData): Promise<TasTier> => {
+    const { data } = await axiosInstance.put<Envelope<TasTier>>(`/settings/tas-tier/${id}`, payload);
+    return data.data;
   },
 
-  // DELETE /api/settings/tas-tier/{id}
   delete: async (id: string): Promise<string> => {
-    await axiosInstance.delete(`/api/settings/tas-tier/${id}`);
+    await axiosInstance.delete(`/settings/tas-tier/${id}`);
     return id;
   },
 
-  // PATCH /api/settings/tas-tier/{id}/toggle-status
   toggleStatus: async (id: string): Promise<TasTier> => {
-    const response = await axiosInstance.patch<TasTier>(`/api/settings/tas-tier/${id}/toggle-status`);
-    return response.data;
+    const { data } = await axiosInstance.patch<Envelope<TasTier>>(`/settings/tas-tier/${id}/toggle-status`);
+    return data.data;
   },
 };

@@ -1,4 +1,3 @@
-// app/(dashboard)/dashboard/page.tsx
 "use client";
 
 import { useEffect } from "react";
@@ -12,8 +11,12 @@ import {
   fetchUserGrowthThunk,
   fetchRevenueTrendThunk,
   fetchTopCategoriesThunk,
-  fetchTopCitiesThunk,          // ← was missing from dispatch
+  fetchTopCitiesThunk,
 } from "@/lib/redux/reportSlice";
+import {
+  fetchRecentActivityThunk,
+  fetchPendingAlertsThunk,
+} from "@/lib/redux/dashboardSlice";
 
 const CHART_COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
 
@@ -36,9 +39,9 @@ const today      = new Date().toISOString().split("T")[0];
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const query      = { fromDate: oneYearAgo, toDate: today };
 
-// ── Static UI-only data (TODO-BACKEND: replace with real endpoints) ────────────
+// ── Mock fallbacks ─────────────────────────────────────────────────────────────
 
-const RECENT_ACTIVITY = [
+const RECENT_ACTIVITY: { dot: string; time: string; text: string }[] = [
   { dot: "#16a34a", time: "10:30 AM", text: "New expert registered: Adebayo S." },
   { dot: "#F9A826", time: "10:15 AM", text: "Job completed: Plumbing in Ikeja – ₦25,000" },
   { dot: "#EF4444", time: "09:45 AM", text: "Dispute opened: CASE-2026-03-21" },
@@ -47,14 +50,24 @@ const RECENT_ACTIVITY = [
   { dot: "#2563eb", time: "08:45 AM", text: "Payment received: ₦50,000 from client Funke" },
 ];
 
-const PENDING_ALERTS = [
-  { label: "Pending verifications", value: "156", sub: "45 Tier 1 · 32 Tier 2 · 12 Tier 3", color: "#7c3aed", bg: "#F5F3FF" },
-  { label: "Open disputes",         value: "25",  sub: "12 new · 8 in progress · 5 in mediation", color: "#EF4444", bg: "#FEF2F2" },
-  { label: "TAS applications",      value: "8",   sub: "Pending review",                    color: "#F9A826", bg: "#FFFBEB" },
-  { label: "Pending payouts",       value: "3",   sub: "₦125,000 total",                    color: "#16a34a", bg: "#F0FDF4" },
+const PENDING_ALERTS: { label: string; value: string; sub: string; color: string; bg: string }[] = [
+  { label: "Pending verifications", value: "156", sub: "45 Tier 1 · 32 Tier 2 · 12 Tier 3",          color: "#7c3aed", bg: "#F5F3FF" },
+  { label: "Open disputes",         value: "25",  sub: "12 new · 8 in progress · 5 in mediation",     color: "#EF4444", bg: "#FEF2F2" },
+  { label: "TAS applications",      value: "8",   sub: "Pending review",                              color: "#F9A826", bg: "#FFFBEB" },
+  { label: "Pending payouts",       value: "3",   sub: "₦125,000 total",                              color: "#16a34a", bg: "#F0FDF4" },
 ];
 
-// ── Top Cities bar (uses live data, falls back to static) ──────────────────────
+const DOT_COLORS: Record<string, string> = {
+  expert_registered: "#16a34a",
+  job_completed:     "#F9A826",
+  dispute_opened:    "#EF4444",
+  payout_processed:  "#16a34a",
+  tas_application:   "#F9A826",
+  payment_received:  "#2563eb",
+};
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
 function TopCitiesBar({ cities }: { cities: { city: string; pct: number }[] }) {
   return (
     <div style={{ padding: "4px 0" }}>
@@ -73,24 +86,33 @@ function TopCitiesBar({ cities }: { cities: { city: string; pct: number }[] }) {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const dispatch = useAppDispatch();
+
   const { adminStats, statsStatus } = useAppSelector((s) => s.users);
   const {
-    userGrowth,     userGrowthStatus,
-    revenueTrend,   revenueTrendStatus,
-    topCategories,  topCategoriesStatus,
-    topCitiesData,  topCitiesStatus,        // ← now consumed
+    userGrowth,    userGrowthStatus,
+    revenueTrend,  revenueTrendStatus,
+    topCategories, topCategoriesStatus,
+    topCitiesData, topCitiesStatus,
   } = useAppSelector((s) => s.report);
+  const {
+    recentActivity,     recentActivityStatus,
+    pendingAlerts,      pendingAlertsStatus,
+  } = useAppSelector((s) => s.dashboard);
 
   useEffect(() => {
     if (statsStatus          === "idle") dispatch(fetchAdminStats());
     if (userGrowthStatus     === "idle") dispatch(fetchUserGrowthThunk(query));
     if (revenueTrendStatus   === "idle") dispatch(fetchRevenueTrendThunk(query));
     if (topCategoriesStatus  === "idle") dispatch(fetchTopCategoriesThunk(query));
-    if (topCitiesStatus      === "idle") dispatch(fetchTopCitiesThunk(query));   // ← was missing
-  }, [dispatch, statsStatus, userGrowthStatus, revenueTrendStatus, topCategoriesStatus, topCitiesStatus]);
+    if (topCitiesStatus      === "idle") dispatch(fetchTopCitiesThunk(query));
+    if (recentActivityStatus === "idle") dispatch(fetchRecentActivityThunk());
+    if (pendingAlertsStatus  === "idle") dispatch(fetchPendingAlertsThunk());
+  }, [
+    dispatch, statsStatus, userGrowthStatus, revenueTrendStatus,
+    topCategoriesStatus, topCitiesStatus, recentActivityStatus, pendingAlertsStatus,
+  ]);
 
   // ── Stat cards ────────────────────────────────────────────────────────────
   const isStatsLoading = statsStatus === "loading" || statsStatus === "idle";
@@ -100,10 +122,10 @@ export default function DashboardPage() {
   } | null;
 
   const stats = [
-    { label: "Total Users",      value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                   icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
-    { label: "Verified Experts", value: isStatsLoading ? "—" : String(s?.verifiedExperts ?? "—"),              icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
-    { label: "Revenue",          value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`, icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
-    { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
+    { label: "Total Users",      value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                    icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Verified Experts", value: isStatsLoading ? "—" : String(s?.verifiedExperts ?? "—"),               icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",          value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,  icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                       icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
   // ── User growth chart ─────────────────────────────────────────────────────
@@ -112,7 +134,7 @@ export default function DashboardPage() {
   const FLAT_DATA       = [0,0,0,0,0,0,0,0,0,0,0,0];
   const hasGrowthData   = userGrowth.length > 0 && userGrowth.some((d) => d.count > 0);
   const userGrowthChart = hasGrowthData
-    ? { data: userGrowth.map((d) => d.count),   labels: userGrowth.map((d) => d.month.slice(0, 3)) }
+    ? { data: userGrowth.map((d) => d.count),    labels: userGrowth.map((d) => d.month.slice(0, 3)) }
     : { data: FLAT_DATA, labels: MONTH_LABELS };
 
   // ── Revenue trend chart ───────────────────────────────────────────────────
@@ -124,15 +146,37 @@ export default function DashboardPage() {
 
   // ── Donut — Top Service Categories ───────────────────────────────────────
   const isDonutLoading = topCategoriesStatus === "loading" || topCategoriesStatus === "idle";
-  const donutSegments  = topCategories?.categories?.length
-    ? topCategories.categories.map((c, i) => ({
+  let donutSegments    = FALLBACK_SEGMENTS;
+
+  if (topCategories?.categories?.length) {
+    const sorted = [...topCategories.categories].sort(
+      (a: { category: string; percentage: number }, b: { category: string; percentage: number }) =>
+        b.percentage - a.percentage
+    );
+    if (sorted.length <= 5) {
+      donutSegments = sorted.map((c: { category: string; percentage: number }, i: number) => ({
         label: c.category,
         value: Math.round(c.percentage),
         color: CHART_COLORS[i % CHART_COLORS.length],
-      }))
-    : FALLBACK_SEGMENTS;
+      }));
+    } else {
+      const topFour   = sorted.slice(0, 4);
+      const rest      = sorted.slice(4);
+      const othersPct = rest.reduce(
+        (sum: number, c: { category: string; percentage: number }) => sum + c.percentage, 0
+      );
+      donutSegments = [
+        ...topFour.map((c: { category: string; percentage: number }, i: number) => ({
+          label: c.category,
+          value: Math.round(c.percentage),
+          color: CHART_COLORS[i % CHART_COLORS.length],
+        })),
+        { label: "Others", value: Math.round(othersPct), color: "#9CA3AF" },
+      ];
+    }
+  }
 
-  // ── Top Cities bar — live data from /report/top-cities ───────────────────
+  // ── Top Cities ────────────────────────────────────────────────────────────
   const isCitiesLoading = topCitiesStatus === "loading" || topCitiesStatus === "idle";
   const cityBars = topCitiesData?.cities?.length
     ? topCitiesData.cities.map((c) => ({
@@ -140,6 +184,50 @@ export default function DashboardPage() {
         pct:  Math.round(c.totalUsersInCityPercentageOfOverall),
       }))
     : FALLBACK_CITIES;
+
+  // ── Recent Activity — live or mock ────────────────────────────────────────
+  const activityRows: { dot: string; time: string; text: string }[] =
+    recentActivityStatus === "succeeded" && recentActivity.length > 0
+      ? recentActivity.map((item) => ({
+          dot:  DOT_COLORS[item.type] ?? "#9CA3AF",
+          time: new Date(item.createdAt).toLocaleTimeString("en-GB", {
+            hour: "2-digit", minute: "2-digit",
+          }),
+          text: item.text,
+        }))
+      : RECENT_ACTIVITY;
+
+  // ── Pending Alerts — live or mock ─────────────────────────────────────────
+  const pa = pendingAlerts;
+  const alertRows: { label: string; value: string; sub: string; color: string; bg: string }[] =
+    pendingAlertsStatus === "succeeded" && pa
+      ? [
+          {
+            label: "Pending verifications",
+            value: String(pa.pendingVerifications.total),
+            sub:   `${pa.pendingVerifications.tier1} Tier 1 · ${pa.pendingVerifications.tier2} Tier 2 · ${pa.pendingVerifications.tier3} Tier 3`,
+            color: "#7c3aed", bg: "#F5F3FF",
+          },
+          {
+            label: "Open disputes",
+            value: String(pa.openDisputes.total),
+            sub:   `${pa.openDisputes.new} new · ${pa.openDisputes.inProgress} in progress · ${pa.openDisputes.inMediation} in mediation`,
+            color: "#EF4444", bg: "#FEF2F2",
+          },
+          {
+            label: "TAS applications",
+            value: String(pa.tasApplications.total),
+            sub:   "Pending review",
+            color: "#F9A826", bg: "#FFFBEB",
+          },
+          {
+            label: "Pending payouts",
+            value: String(pa.pendingPayouts.total),
+            sub:   `₦${pa.pendingPayouts.amountNaira.toLocaleString()} total`,
+            color: "#16a34a", bg: "#F0FDF4",
+          },
+        ]
+      : PENDING_ALERTS;
 
   // ── Shared card style ─────────────────────────────────────────────────────
   const card: React.CSSProperties = {
@@ -216,7 +304,6 @@ export default function DashboardPage() {
 
         {/* ── Donut + Top Cities ── */}
         <div className="db-2col">
-          {/* Top Service Categories — /report/top-service-category */}
           <div style={card}>
             {isDonutLoading ? (
               <div className="db-skeleton" style={{ height: 280 }}><div className="db-spin" /> Loading top categories…</div>
@@ -225,7 +312,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Top Cities — /report/top-cities */}
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
               <p className="section-title" style={{ margin: 0 }}>Top Cities</p>
@@ -239,10 +325,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Recent Activity + Pending Alerts ── */}
-        {/* TODO-BACKEND: both sections are static — see backend request */}
         <div className="db-2col">
-
-          {/* Recent Activity */}
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
               <p className="section-title" style={{ margin: 0 }}>
@@ -252,7 +335,7 @@ export default function DashboardPage() {
               <button className="view-all">View all</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              {RECENT_ACTIVITY.map((item, i) => (
+              {activityRows.map((item: { dot: string; time: string; text: string }, i: number) => (
                 <div key={i} className="activity-row"
                   style={{ display: "flex", alignItems: "flex-start", gap: "10px",
                     padding: "9px 8px", borderRadius: "8px", transition: "background 0.15s" }}>
@@ -267,7 +350,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Pending Alerts */}
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
               <p className="section-title" style={{ margin: 0 }}>
@@ -276,7 +358,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {PENDING_ALERTS.map((alert) => (
+              {alertRows.map((alert: { label: string; value: string; sub: string; color: string; bg: string }) => (
                 <div key={alert.label} className="alert-pill" style={{ backgroundColor: alert.bg }}>
                   <div style={{ width: "36px", height: "36px", borderRadius: "10px",
                     backgroundColor: alert.color, display: "flex", alignItems: "center",
@@ -291,8 +373,8 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
-
         </div>
+
       </main>
     </div>
   );

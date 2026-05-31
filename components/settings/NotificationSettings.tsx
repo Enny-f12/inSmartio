@@ -1,211 +1,187 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react-hooks/set-state-in-effect */
 // components/settings/NotificationSettings.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { SubPageShell } from "./SettingsShared";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import {
+  fetchNotificationSettings,
+  saveNotificationSettings,
+} from "@/lib/redux/notificationSettingsSlice";
+import type { NotificationSettingsPayload } from "@/lib/api/notificationSettingsApi";
 
-// ── Notification settings relevant to what's been built ──
+// ── Static config ─────────────────────────────────────────
 interface NotifSetting {
-  id:          string;
+  id:          keyof NotificationSettingsPayload;
   label:       string;
   description: string;
   category:    string;
 }
 
 const SETTINGS: NotifSetting[] = [
-  // Disputes
-  {
-    id:          "dispute_opened",
-    label:       "New Dispute Opened",
-    description: "Get notified when a client or expert opens a new dispute.",
-    category:    "Disputes",
-  },
-  {
-    id:          "dispute_resolved",
-    label:       "Dispute Resolved",
-    description: "Get notified when a dispute decision is submitted.",
-    category:    "Disputes",
-  },
-  // Verifications
-  {
-    id:          "verification_submitted",
-    label:       "Verification Submitted",
-    description: "Get notified when an expert submits a new verification request.",
-    category:    "Verifications",
-  },
-  {
-    id:          "verification_approved",
-    label:       "Verification Approved / Rejected",
-    description: "Get notified when a verification is approved or rejected.",
-    category:    "Verifications",
-  },
-  // Users
-  {
-    id:          "new_user",
-    label:       "New User Registration",
-    description: "Get notified when a new client, expert, or TAS registers.",
-    category:    "Users",
-  },
-  {
-    id:          "user_suspended",
-    label:       "User Suspended / Reinstated",
-    description: "Get notified when an admin suspends or reinstates a user.",
-    category:    "Users",
-  },
-  // Payments
-  {
-    id:          "payment_received",
-    label:       "Payment Received",
-    description: "Get notified when a payment is made on the platform.",
-    category:    "Payments",
-  },
-  {
-    id:          "payout_processed",
-    label:       "Payout Processed",
-    description: "Get notified when a TAS or expert payout is processed.",
-    category:    "Payments",
-  },
-  // TAS
-  {
-    id:          "tas_application",
-    label:       "New TAS Application",
-    description: "Get notified when a new TAS application is submitted.",
-    category:    "TAS",
-  },
-  {
-    id:          "tas_tier_adjusted",
-    label:       "TAS Tier Adjusted",
-    description: "Get notified when an admin adjusts a TAS agent's tier.",
-    category:    "TAS",
-  },
+  { id: "dispute_opened",         label: "New Dispute Opened",               description: "Get notified when a client or expert opens a new dispute.",        category: "Disputes"      },
+  { id: "dispute_resolved",       label: "Dispute Resolved",                 description: "Get notified when a dispute decision is submitted.",                category: "Disputes"      },
+  { id: "verification_submitted", label: "Verification Submitted",           description: "Get notified when an expert submits a new verification request.",  category: "Verifications" },
+  { id: "verification_approved",  label: "Verification Approved / Rejected", description: "Get notified when a verification is approved or rejected.",        category: "Verifications" },
+  { id: "new_user",               label: "New User Registration",            description: "Get notified when a new client, expert, or TAS registers.",        category: "Users"         },
+  { id: "user_suspended",         label: "User Suspended / Reinstated",      description: "Get notified when an admin suspends or reinstates a user.",        category: "Users"         },
+  { id: "payment_received",       label: "Payment Received",                 description: "Get notified when a payment is made on the platform.",             category: "Payments"      },
+  { id: "payout_processed",       label: "Payout Processed",                 description: "Get notified when a TAS or expert payout is processed.",          category: "Payments"      },
+  { id: "tas_application",        label: "New TAS Application",              description: "Get notified when a new TAS application is submitted.",            category: "TAS"           },
+  { id: "tas_tier_adjusted",      label: "TAS Tier Adjusted",                description: "Get notified when an admin adjusts a TAS agent's tier.",          category: "TAS"           },
 ];
 
-// Group by category
 const CATEGORIES = Array.from(new Set(SETTINGS.map((s) => s.category)));
 
-// Toggle switch component
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+const DEFAULT_STATE: NotificationSettingsPayload = {
+  dispute_opened:         true,
+  dispute_resolved:       true,
+  verification_submitted: true,
+  verification_approved:  true,
+  new_user:               true,
+  user_suspended:         true,
+  payment_received:       true,
+  payout_processed:       true,
+  tas_application:        true,
+  tas_tier_adjusted:      true,
+};
+
+// ── Toggle ────────────────────────────────────────────────
+function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
   return (
-    <button
-      onClick={() => onChange(!value)}
-      style={{
-        width: "44px", height: "24px", borderRadius: "999px", border: "none",
+    <button onClick={onChange}
+      style={{ width: "44px", height: "24px", borderRadius: "999px", border: "none",
         backgroundColor: value ? "#16a34a" : "#D1D5DB",
-        position: "relative", cursor: "pointer", flexShrink: 0,
-        transition: "background 0.2s",
-      }}>
-      <span style={{
-        position: "absolute", top: "3px",
-        left: value ? "23px" : "3px",
-        width: "18px", height: "18px",
-        borderRadius: "50%", backgroundColor: "#fff",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        transition: "left 0.2s",
-      }} />
+        position: "relative", cursor: "pointer", flexShrink: 0, transition: "background 0.2s" }}>
+      <span style={{ position: "absolute", top: "3px", left: value ? "23px" : "3px",
+        width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#fff",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
     </button>
   );
 }
 
+// ── Main component ────────────────────────────────────────
 export default function NotificationSettings({ onBack }: { onBack: () => void }) {
-  const [settings, setSettings] = useState<Record<string, boolean>>(
-    Object.fromEntries(SETTINGS.map((s) => [s.id, true]))
-  );
-  const [saving, setSaving] = useState(false);
+  const dispatch = useAppDispatch();
+  const { settings, loading, saving, error } = useAppSelector((s) => s.notificationSettings);
 
-  const toggle = (id: string) =>
-    setSettings((prev) => ({ ...prev, [id]: !prev[id] }));
+  // Local toggle state — seeded from redux once loaded
+  const [form, setForm] = useState<NotificationSettingsPayload>(DEFAULT_STATE);
+
+  // Fetch on mount
+  useEffect(() => {
+    dispatch(fetchNotificationSettings());
+  }, [dispatch]);
+
+  // Sync redux → local form when settings load
+  useEffect(() => {
+    if (settings) {
+      const { id: _id, createdAt: _c, updatedAt: _u, ...payload } = settings;
+      setForm(payload as NotificationSettingsPayload);
+    }
+  }, [settings]);
+
+  // Show error toast if fetch/save fails
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
+
+  // ── Handlers ──────────────────────────────────────────────
+  const toggle = (id: keyof NotificationSettingsPayload) =>
+    setForm((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const toggleAll = (category: string, value: boolean) => {
     const ids = SETTINGS.filter((s) => s.category === category).map((s) => s.id);
-    setSettings((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, value])) }));
+    setForm((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, value])) }));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // TODO-BACKEND: POST /admin/notification-settings { settings }
-      await new Promise((r) => setTimeout(r, 800));
-      toast.success("Notification settings saved");
-    } catch {
-      toast.error("Failed to save settings");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    dispatch(saveNotificationSettings({ id: settings?.id ?? null, payload: form }))
+      .unwrap()
+      .then(() => toast.success("Notification settings saved"))
+      .catch((err: string) => toast.error("Failed to save", { description: err }));
   };
 
   return (
     <SubPageShell title="Notification Settings" onBack={onBack}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-        {CATEGORIES.map((cat) => {
-          const catSettings = SETTINGS.filter((s) => s.category === cat);
-          const allOn  = catSettings.every((s) => settings[s.id]);
-          const allOff = catSettings.every((s) => !settings[s.id]);
+      {loading ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "64px", gap: "10px", color: "#9CA3AF" }}>
+          <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+          <span style={{ fontSize: "13px" }}>Loading settings…</span>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
 
-          return (
-            <div key={cat}>
-              {/* Category header */}
-              <div style={{ display: "flex", alignItems: "center",
-                justifyContent: "space-between", marginBottom: "12px" }}>
-                <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: "0.08em", color: "#6B7280", margin: 0 }}>
-                  {cat}
-                </p>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => toggleAll(cat, true)}
-                    style={{ fontSize: "11px", fontWeight: 500, color: allOn ? "#9CA3AF" : "#2563EB",
-                      background: "none", border: "none", cursor: allOn ? "default" : "pointer",
-                      padding: 0 }}>
-                    All on
-                  </button>
-                  <span style={{ color: "#E5E7EB" }}>|</span>
-                  <button onClick={() => toggleAll(cat, false)}
-                    style={{ fontSize: "11px", fontWeight: 500,
-                      color: allOff ? "#9CA3AF" : "#6B7280",
-                      background: "none", border: "none",
-                      cursor: allOff ? "default" : "pointer", padding: 0 }}>
-                    All off
-                  </button>
+          {CATEGORIES.map((cat) => {
+            const catSettings = SETTINGS.filter((s) => s.category === cat);
+            const allOn  = catSettings.every((s) => form[s.id]);
+            const allOff = catSettings.every((s) => !form[s.id]);
+            return (
+              <div key={cat}>
+                <div style={{ display: "flex", alignItems: "center",
+                  justifyContent: "space-between", marginBottom: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.08em", color: "#6B7280", margin: 0 }}>{cat}</p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button onClick={() => toggleAll(cat, true)}
+                      style={{ fontSize: "11px", fontWeight: 500,
+                        color: allOn ? "#9CA3AF" : "#2563EB", background: "none", border: "none",
+                        cursor: allOn ? "default" : "pointer", padding: 0 }}>
+                      All on
+                    </button>
+                    <span style={{ color: "#E5E7EB" }}>|</span>
+                    <button onClick={() => toggleAll(cat, false)}
+                      style={{ fontSize: "11px", fontWeight: 500,
+                        color: allOff ? "#9CA3AF" : "#6B7280", background: "none", border: "none",
+                        cursor: allOff ? "default" : "pointer", padding: 0 }}>
+                      All off
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
+                  borderRadius: "14px", overflow: "hidden" }}>
+                  {catSettings.map((s, i) => (
+                    <div key={s.id}
+                      style={{ display: "flex", alignItems: "center",
+                        justifyContent: "space-between", gap: "16px", padding: "16px 20px",
+                        borderBottom: i < catSettings.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827",
+                          margin: "0 0 3px" }}>{s.label}</p>
+                        <p style={{ fontSize: "12px", color: "#6B7280", margin: 0,
+                          lineHeight: 1.5 }}>{s.description}</p>
+                      </div>
+                      <Toggle value={form[s.id]} onChange={() => toggle(s.id)} />
+                    </div>
+                  ))}
                 </div>
               </div>
+            );
+          })}
 
-              {/* Settings rows */}
-              <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB",
-                borderRadius: "14px", overflow: "hidden" }}>
-                {catSettings.map((s, i) => (
-                  <div key={s.id}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                      gap: "16px", padding: "16px 20px",
-                      borderBottom: i < catSettings.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827",
-                        margin: "0 0 3px" }}>{s.label}</p>
-                      <p style={{ fontSize: "12px", color: "#6B7280", margin: 0,
-                        lineHeight: 1.5 }}>{s.description}</p>
-                    </div>
-                    <Toggle value={settings[s.id]} onChange={() => toggle(s.id)} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={handleSave} disabled={saving}
+              style={{ display: "flex", alignItems: "center", gap: "8px",
+                padding: "11px 28px", borderRadius: "12px", border: "none",
+                backgroundColor: "#2563EB", color: "#fff", fontSize: "13px",
+                fontWeight: 600, cursor: saving ? "not-allowed" : "pointer",
+                opacity: saving ? 0.7 : 1 }}>
+              {saving
+                ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+                : "Save Settings"}
+            </button>
+          </div>
 
-        {/* Save button */}
-        <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "8px" }}>
-          <button onClick={handleSave} disabled={saving}
-            style={{ display: "flex", alignItems: "center", gap: "8px",
-              padding: "11px 28px", borderRadius: "12px", border: "none",
-              backgroundColor: "#2563EB", color: "#fff", fontSize: "13px",
-              fontWeight: 600, cursor: saving ? "not-allowed" : "pointer",
-              opacity: saving ? 0.7 : 1 }}>
-            {saving ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Settings"}
-          </button>
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
+      )}
     </SubPageShell>
   );
 }

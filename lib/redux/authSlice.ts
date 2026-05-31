@@ -22,17 +22,26 @@ const parseJwt = (token: string): Record<string, unknown> => {
 interface AuthState {
   token:  string | null;
   admin:  Admin  | null;
-  role:   string | null;   // parsed from JWT — more reliable than data.role
+  role:   string | null;
   status: "idle" | "loading" | "succeeded" | "failed";
   error:  string | null;
 }
 
 const storedToken = Cookies.get("token") ?? null;
-const storedRole  = storedToken ? (parseJwt(storedToken).role as string ?? null) : null;
+const storedRole  = storedToken ? ((parseJwt(storedToken).role as string) ?? null) : null;
+
+const storedAdmin = (() => {
+  try {
+    const raw = localStorage.getItem("admin");
+    return raw ? (JSON.parse(raw) as Admin) : null;
+  } catch {
+    return null;
+  }
+})();
 
 const initialState: AuthState = {
   token:  storedToken,
-  admin:  null,
+  admin:  storedAdmin,
   role:   storedRole,
   status: "idle",
   error:  null,
@@ -70,6 +79,7 @@ const authSlice = createSlice({
       state.status = "idle";
       state.error  = null;
       Cookies.remove("token", { path: "/" });
+      try { localStorage.removeItem("admin"); } catch { /* noop */ }
     },
     resetAuthStatus: (state) => {
       state.status = "idle";
@@ -78,23 +88,24 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(login.pending,   (state) => { state.status = "loading"; state.error = null; })
+      .addCase(login.pending, (state) => {
+        state.status = "loading";
+        state.error  = null;
+      })
       .addCase(login.fulfilled, (state, action) => {
         const claims = parseJwt(action.payload.token);
         state.status = "succeeded";
         state.token  = action.payload.token;
-        // Prefer JWT claim role over data.role (data.role is "" but JWT has "admin")
         state.role   = (claims.role as string) || action.payload.data.role || null;
         state.admin  = {
           ...action.payload.data,
           role: (claims.role as string) || action.payload.data.role || "",
         };
-        // Log so you can confirm what the JWT contains
-        console.log("🔑 JWT claims:", claims);
-        console.log("👤 Admin role from JWT:", claims.role);
-        console.log("👤 Admin role from data:", action.payload.data.role);
+        try {
+          localStorage.setItem("admin", JSON.stringify(state.admin));
+        } catch { /* noop */ }
       })
-      .addCase(login.rejected,  (state, action) => {
+      .addCase(login.rejected, (state, action) => {
         state.status = "failed";
         state.error  = action.payload as string;
       });
