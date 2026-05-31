@@ -21,6 +21,7 @@ import verificationsettingsReducer from "./verificationSettingsSlice"; // new ve
 import dashboardReducer           from "./dashboardSlice";
 import scheduledReportsReducer    from "./schedduleReportSlice";
 import reportTemplatesReducer     from "./reportTemplatesSlice";
+import notificationSettingsReducer from "./notificationSettingsSlice"
 
 export const store = configureStore({
   reducer: {
@@ -46,6 +47,7 @@ export const store = configureStore({
     dashboard:             dashboardReducer,
     scheduledReports:      scheduledReportsReducer,
     reportTemplates:       reportTemplatesReducer,
+    notificationSettings: notificationSettingsReducer,
   },
 });
 

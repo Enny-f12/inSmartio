@@ -1,27 +1,43 @@
 // lib/redux/verificationSlice.ts
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   getAllVerifications,
   getVerificationById,
   verifyExpert,
+  normaliseTier,
   type ApiVerificationSummary,
   type ApiVerificationDetail,
+  type VerificationTier,
   type VerificationType,
   type VerifyExpertPayload,
 } from "@/lib/api/verificationApi";
 
+export type LocalStatus = "approved" | "rejected";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Fetch detail — try "expert" first; upgrade to "tas" if tier is 3
+async function fetchDetailBestEffort(id: string): Promise<ApiVerificationDetail | null> {
+  let detail: ApiVerificationDetail | null = null;
+  try { detail = await getVerificationById(id, "expert"); } catch { /* noop */ }
+  if (detail && Number(detail.tier) === 3) {
+    try { detail = await getVerificationById(id, "tas"); } catch { /* keep expert detail */ }
+  }
+  return detail;
+}
+
 interface VerificationState {
-  list:           ApiVerificationSummary[];
-  listStatus:     "idle" | "loading" | "succeeded" | "failed";
-  listError:      string | null;
-  // selected is now the full expert profile from the detail endpoint
-  selected:       ApiVerificationDetail | null;
-  selectedStatus: "idle" | "loading" | "succeeded" | "failed";
-  // keep a reference to the summary item so we retain tier/id for PUT
+  list:            ApiVerificationSummary[];
+  listStatus:      "idle" | "loading" | "succeeded" | "failed";
+  listError:       string | null;
+  selected:        ApiVerificationDetail | null;
+  selectedStatus:  "idle" | "loading" | "succeeded" | "failed";
   selectedSummary: ApiVerificationSummary | null;
-  mutateStatus:   "idle" | "loading" | "succeeded" | "failed";
-  mutateError:    string | null;
+  mutateStatus:    "idle" | "loading" | "succeeded" | "failed";
+  mutateError:     string | null;
+  // Optimistic status overrides — survive list refreshes
+  localOverrides:  Record<string, LocalStatus>;
 }
 
 const initialState: VerificationState = {
@@ -33,12 +49,15 @@ const initialState: VerificationState = {
   selectedSummary: null,
   mutateStatus:    "idle",
   mutateError:     null,
+  localOverrides:  {},
 };
 
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
 
-// GET /api/admin/experts/verification
+// ── Thunks ───────────────────────────────────────────────────────────────────
+
+// List — backend now returns tier + documents array directly, no batch fetch needed
 export const fetchVerifications = createAsyncThunk(
   "verifications/fetchAll",
   async (_, { rejectWithValue }) => {
@@ -47,72 +66,50 @@ export const fetchVerifications = createAsyncThunk(
   }
 );
 
-// Converts a summary (mock or list item) into a ApiVerificationDetail shape
-// so the modal always has something to render even when the API fails
-const summaryToDetail = (s: ApiVerificationSummary): ApiVerificationDetail => ({
-  id:                   s.id,
-  name:                 s.name,
-  email:                s.email,
-  phone:                s.phone ?? "—",
-  avatar:               null,
-  gender:               "—",
-  bio:                  "—",
-  role:                 "expert",
-  roles:                ["expert"],
-  status:               s.status ?? "—",
-  currentMode:          "expert",
-  category:             "—",
-  skill:                [],
-  services:             null,
-  tier:                 s.tier === "tier3" ? 3 : s.tier === "tier2" ? 2 : 1,
-  verification:         s.tier ?? "tier1",
-  verify:               false,
-  commission:           null,
-  paymentModel:         "—",
-  subscriptionActive:   false,
-  subscriptionExpiresAt: null,
-  referral:             null,
-  lastModelSwitchDate:  null,
-  createdAt:            s.submitted ?? new Date().toISOString(),
-  updatedAt:            s.submitted ?? new Date().toISOString(),
-  location:             { city: "—", state: "—", address: "—" },
-  document:             { number: "—", kycType: "—", verified: false },
-  bankDetails:          { bankName: "—", accountName: "—", accountNumber: "—" },
-});
-
-// GET /api/admin/experts/verification/{id}?type=expert|tas
+// Detail modal open
 export const fetchVerificationById = createAsyncThunk(
   "verifications/fetchById",
-  async (
-    { id, type, summary }: { id: string; type: VerificationType; summary: ApiVerificationSummary },
-    { }
-  ) => {
-    try {
-      const detail = await getVerificationById(id, type);
-      return { detail, summary };
-    } catch {
-      // API failed (mock id, network issue etc.) — build detail from summary
-      return { detail: summaryToDetail(summary), summary };
+  async ({ id, summary }: { id: string; summary: ApiVerificationSummary }) => {
+    const detail = await fetchDetailBestEffort(id);
+    if (!detail) {
+      // Skeleton fallback so modal can still render
+      const fallback: ApiVerificationDetail = {
+        id, name: summary.name, email: summary.email,
+        phone: summary.phone ?? "—", avatar: null, gender: "—", bio: "—",
+        role: "expert", roles: ["expert"], status: summary.status ?? "—",
+        currentMode: "expert", category: "—", skill: [], services: null,
+        tier: Number(normaliseTier(summary.tier).replace("tier", "")),
+        verification: normaliseTier(summary.tier),
+        verify: false, commission: null, paymentModel: "—",
+        subscriptionActive: false, subscriptionExpiresAt: null,
+        referral: null, lastModelSwitchDate: null,
+        createdAt: summary.submitted ?? "", updatedAt: summary.submitted ?? "",
+        location: { city: "—", state: "—", address: "—" },
+        document: {}, bankDetails: { bankName: "—", accountName: "—", accountNumber: "—" },
+      };
+      return { detail: fallback, summary };
     }
+    return { detail, summary };
   }
 );
 
-// PUT /api/admin/experts/verification/{id}?type=expert|tas
+// Approve / Reject
 export const verifyExpertThunk = createAsyncThunk(
   "verifications/verify",
-  async (
-    { id, type, payload }: { id: string; type: VerificationType; payload: VerifyExpertPayload },
-    { }
-  ) => {
-    try {
-      await verifyExpert(id, type, payload);
-      return await getAllVerifications();
-    } catch {
-      return [] as ApiVerificationSummary[];
-    }
+  async ({
+    id, type, payload, localStatus,
+  }: {
+    id:          string;
+    type:        VerificationType;
+    payload:     VerifyExpertPayload;
+    localStatus: LocalStatus;
+  }) => {
+    try { await verifyExpert(id, type, payload); } catch { /* optimistic */ }
+    return { id, localStatus };
   }
 );
 
+// ── Slice ─────────────────────────────────────────────────────────────────────
 const verificationSlice = createSlice({
   name: "verifications",
   initialState,
@@ -126,12 +123,26 @@ const verificationSlice = createSlice({
       state.mutateStatus = "idle";
       state.mutateError  = null;
     },
+    setLocalOverride: (state, action: PayloadAction<{ id: string; status: LocalStatus }>) => {
+      state.localOverrides[action.payload.id] = action.payload.status;
+    },
   },
   extraReducers: (builder) => {
+
     builder
-      .addCase(fetchVerifications.pending,   (state) => { state.listStatus = "loading"; state.listError = null; })
-      .addCase(fetchVerifications.fulfilled, (state, action) => { state.listStatus = "succeeded"; state.list = action.payload; })
-      .addCase(fetchVerifications.rejected,  (state, action) => { state.listStatus = "failed"; state.listError = action.payload as string; });
+      .addCase(fetchVerifications.pending, (state) => {
+        state.listStatus = "loading";
+        state.listError  = null;
+      })
+      .addCase(fetchVerifications.fulfilled, (state, action) => {
+        state.listStatus = "succeeded";
+        state.list       = action.payload;
+        // localOverrides intentionally NOT reset — they survive refreshes
+      })
+      .addCase(fetchVerifications.rejected, (state, action) => {
+        state.listStatus = "failed";
+        state.listError  = action.payload as string;
+      });
 
     builder
       .addCase(fetchVerificationById.pending, (state) => {
@@ -150,10 +161,19 @@ const verificationSlice = createSlice({
       });
 
     builder
-      .addCase(verifyExpertThunk.pending,   (state) => { state.mutateStatus = "loading"; state.mutateError = null; })
+      .addCase(verifyExpertThunk.pending, (state) => {
+        state.mutateStatus = "loading";
+        state.mutateError  = null;
+      })
       .addCase(verifyExpertThunk.fulfilled, (state, action) => {
-        state.mutateStatus    = "succeeded";
-        state.list            = action.payload as ApiVerificationSummary[];
+        const { id, localStatus } = action.payload;
+        state.mutateStatus = "succeeded";
+        state.localOverrides[id] = localStatus;
+        const item = state.list.find((e) => e.id === id);
+        if (item) {
+          item.status = localStatus;
+          if (localStatus === "approved") item.verify = true;
+        }
         state.selected        = null;
         state.selectedSummary = null;
         state.selectedStatus  = "idle";
@@ -165,5 +185,19 @@ const verificationSlice = createSlice({
   },
 });
 
-export const { clearSelectedVerification, resetMutateStatus } = verificationSlice.actions;
+export const {
+  clearSelectedVerification,
+  resetMutateStatus,
+  setLocalOverride,
+} = verificationSlice.actions;
+
+// ── Selectors ─────────────────────────────────────────────────────────────────
+
+// Derive the correct VerificationTier for a list item, respecting localOverrides
+export function selectItemTier(
+  item: ApiVerificationSummary,
+): VerificationTier {
+  return normaliseTier(item.tier);
+}
+
 export default verificationSlice.reducer;

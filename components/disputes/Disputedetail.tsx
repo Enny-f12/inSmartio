@@ -21,18 +21,13 @@ const FALLBACK_EVIDENCE = [
   "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=120&h=120&fit=crop&auto=format",
 ];
 
-const FALLBACK_MEDIATION: MediationNote[] = [
-  { date: "20/03/2026", time: "14:30", note: "Called both parties. Expert insists cabinet was pre-damaged. Client denies." },
-  { date: "20/03/2026", time: "15:45", note: "Expert sent before photos. Shows some wear but not clear if same spot." },
-];
-
 // ── Resolution options ────────────────────────────────────
 const RESOLUTION_OPTIONS: { value: ResolutionType; label: string; hasPercent?: boolean }[] = [
-  { value: "REFUND_EXPERT",         label: "Full payment to expert"   },
-  { value: "REFUND_CLIENT",         label: "Full refund to client"    },
-  { value: "DISMISS_DISPUTE",       label: "Dismiss dispute"          },
-  { value: "PARTIAL_REFUND_EXPERT", label: "Partial payment",         hasPercent: true },
-  { value: "RE_PERFORM",            label: "Re-performance ordered"   },
+  { value: "REFUND_EXPERT",         label: "Full payment to expert"  },
+  { value: "REFUND_CLIENT",         label: "Full refund to client"   },
+  { value: "DISMISS_DISPUTE",       label: "Dismiss dispute"         },
+  { value: "PARTIAL_REFUND_EXPERT", label: "Partial payment",        hasPercent: true },
+  { value: "RE_PERFORM",            label: "Re-performance ordered"  },
 ];
 
 // ── Small shared components ───────────────────────────────
@@ -54,7 +49,6 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-// ── Field label for modal inputs ──────────────────────────
 function FieldLabel({ text }: { text: string }) {
   return (
     <p style={{ fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
@@ -69,7 +63,6 @@ const inputStyle: React.CSSProperties = {
   fontSize: "13px", color: "#111827", outline: "none", boxSizing: "border-box",
 };
 
-// ── Props ─────────────────────────────────────────────────
 interface Props {
   dispute:   Dispute;
   disputeId: string;
@@ -89,24 +82,24 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
   const [appealing,      setAppealing]      = useState(false);
 
   // Mediation state
-  const [mediationOpen,  setMediationOpen]  = useState(false);
-  const [mediationNote,  setMediationNote]  = useState("");
-  const [mediationDate,  setMediationDate]  = useState("");   // "YYYY-MM-DD" from <input type="date">
-  const [mediationTime,  setMediationTime]  = useState("");   // "HH:MM" from <input type="time">
-  const [addingNote,     setAddingNote]     = useState(false);
-  // Local list so UI updates immediately after POST
-  const [localMediation, setLocalMediation] = useState<MediationNote[] | null>(null);
+  const [mediationOpen,   setMediationOpen]   = useState(false);
+  const [mediationNote,   setMediationNote]   = useState("");
+  const [mediationDate,   setMediationDate]   = useState(""); // "YYYY-MM-DD"
+  const [mediationTime,   setMediationTime]   = useState(""); // "HH:MM"
+  const [addingNote,      setAddingNote]      = useState(false);
+  // Local override so UI updates immediately after PUT
+  const [localMediation,  setLocalMediation]  = useState<MediationNote | null>(null);
 
-  // ── Mediation notes: real → local override → fallback ────
-  const rawMediation = dispute.mediationNotes ?? [];
-  const mediationNotes: MediationNote[] =
+  // ── Mediation note: local override → real API data
+  // mediation is a single object: { date, time, note }
+  const rawMediation = dispute.mediationNotes as unknown as MediationNote | MediationNote[] | null;
+  const currentMediation: MediationNote | null =
     localMediation ??
-    (rawMediation.length > 0
-      ? rawMediation.map((n: { timestamp: string; note: string }) => {
-          const [datePart = "", timePart = ""] = (n.timestamp ?? "").split(" ");
-          return { date: datePart, time: timePart, note: n.note };
-        })
-      : FALLBACK_MEDIATION);
+    (rawMediation
+      ? Array.isArray(rawMediation)
+        ? rawMediation[rawMediation.length - 1] ?? null  // if somehow array, take last
+        : rawMediation
+      : null);
 
   const resetMediationForm = () => {
     setMediationNote("");
@@ -114,38 +107,32 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
     setMediationTime("");
   };
 
-  // ── Add mediation note ────────────────────────────────────
+  // ── Add / update mediation note (PUT) ────────────────────
   const handleAddMediationNote = async () => {
     if (!mediationDate.trim()) { toast.warning("Please select a date."); return; }
     if (!mediationTime.trim()) { toast.warning("Please select a time."); return; }
-    if (!mediationNote.trim()) { toast.warning("Please enter a note."); return; }
+    if (!mediationNote.trim()) { toast.warning("Please enter a note.");  return; }
 
     setAddingNote(true);
     try {
-      // Build ISO datetime from the date + time inputs, e.g. "2026-05-31T14:30:00.000Z"
-      const isoDate = new Date(`${mediationDate}T${mediationTime}:00`).toISOString();
-      const [y, m, d] = mediationDate.split("-");
-      const displayDate = `${d}/${m}/${y}`;
-
-      const newNote: MediationNote = {
-        date: isoDate,         // sent to API as ISO string
-        time: mediationTime,   // sent to API as HH:MM
+      // Send exactly what the backend expects:
+      // { mediation: { date: "2026-05-19", time: "14:30", note: "..." } }
+      const payload: MediationNote = {
+        date: mediationDate,       // "YYYY-MM-DD" — backend stores as-is
+        time: mediationTime,       // "HH:MM"
         note: mediationNote.trim(),
       };
 
-      await addMediationNote(disputeId, { mediation: newNote });
+      await addMediationNote(disputeId, { mediation: payload });
 
-      // Optimistic UI update using display-formatted date
-      setLocalMediation([
-        ...(localMediation ?? mediationNotes),
-        { date: displayDate, time: mediationTime, note: mediationNote.trim() },
-      ]);
+      // Optimistic update — show the new note immediately
+      setLocalMediation(payload);
       resetMediationForm();
       setMediationOpen(false);
-      toast.success("Mediation note added");
+      toast.success("Mediation note saved");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to add note";
-      toast.error("Failed to add mediation note", { description: msg });
+      const msg = err instanceof Error ? err.message : "Failed to save note";
+      toast.error("Failed to save mediation note", { description: msg });
     } finally {
       setAddingNote(false);
     }
@@ -185,7 +172,7 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
       .finally(() => setAppealing(false));
   };
 
-  // ── Evidence arrays (fallback if empty) ──────────────────
+  // ── Evidence arrays ───────────────────────────────────────
   const clientEvidence = dispute.clientEvidence.length > 0
     ? dispute.clientEvidence : [FALLBACK_EVIDENCE[0], FALLBACK_EVIDENCE[1]];
   const expertEvidence = dispute.expertEvidence.length > 0
@@ -283,32 +270,36 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
             </div>
           </div>
 
-          {/* ── Mediation Notes ── */}
+          {/* ── Mediation Note ── */}
           <div style={{ padding: "20px 24px", borderBottom: "1px solid #E5E7EB" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
               marginBottom: "12px" }}>
               <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.08em", color: "#6B7280", margin: 0 }}>Mediation Notes</p>
+                letterSpacing: "0.08em", color: "#6B7280", margin: 0 }}>Mediation Note</p>
               <button onClick={() => setMediationOpen(true)}
                 style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px",
                   borderRadius: "8px", border: "1px solid #2563EB", backgroundColor: "#EFF6FF",
                   color: "#2563EB", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-                <Plus size={13} /> Add Note
+                <Plus size={13} /> {currentMediation ? "Update Note" : "Add Note"}
               </button>
             </div>
-            <div style={{ borderRadius: "12px", border: "1px solid #E5E7EB",
-              backgroundColor: "#F9FAFB", overflow: "hidden" }}>
-              {mediationNotes.map((n, i) => (
-                <div key={i} style={{ padding: "12px 16px", fontSize: "13px",
-                  borderBottom: i < mediationNotes.length - 1 ? "1px solid #E5E7EB" : "none",
-                  display: "flex", gap: "12px", alignItems: "flex-start" }}>
-                  <span style={{ fontWeight: 600, color: "#6B7280", flexShrink: 0, whiteSpace: "nowrap" }}>
-                    [{n.date} {n.time}]
-                  </span>
-                  <span style={{ color: "#111827" }}>{n.note}</span>
-                </div>
-              ))}
-            </div>
+
+            {currentMediation ? (
+              <div style={{ borderRadius: "12px", border: "1px solid #E5E7EB",
+                backgroundColor: "#F9FAFB", padding: "12px 16px",
+                display: "flex", gap: "12px", alignItems: "flex-start", fontSize: "13px" }}>
+                <span style={{ fontWeight: 600, color: "#6B7280", flexShrink: 0, whiteSpace: "nowrap" }}>
+                  [{currentMediation.date} {currentMediation.time}]
+                </span>
+                <span style={{ color: "#111827" }}>{currentMediation.note}</span>
+              </div>
+            ) : (
+              <p style={{ fontSize: "13px", color: "#9CA3AF", fontStyle: "italic",
+                padding: "12px 16px", borderRadius: "12px", border: "1px dashed #E5E7EB",
+                backgroundColor: "#F9FAFB" }}>
+                No mediation note yet — click Add Note to record one.
+              </p>
+            )}
           </div>
 
           {/* ── Resolution ── */}
@@ -368,10 +359,11 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
         <button onClick={() => setAppealOpen(true)} className="dd-footer-btn">Appeal Later</button>
       </div>
 
-      {/* ── Add Mediation Note modal ── */}
+      {/* ── Add / Update Mediation Note modal ── */}
       <Modal open={mediationOpen}
         onClose={() => { setMediationOpen(false); resetMediationForm(); }}
-        title="Add Mediation Note" size="sm"
+        title={currentMediation ? "Update Mediation Note" : "Add Mediation Note"}
+        size="sm"
         footer={
           <div style={{ display: "flex", gap: "12px", width: "100%" }}>
             <button onClick={() => { setMediationOpen(false); resetMediationForm(); }}
@@ -391,7 +383,14 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
           </div>
         }>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Date + Time row */}
+          {/* Pre-fill with existing note if updating */}
+          {currentMediation && (
+            <p style={{ fontSize: "12px", color: "#6B7280", margin: 0,
+              padding: "8px 12px", backgroundColor: "#F9FAFB", borderRadius: "8px",
+              border: "1px solid #E5E7EB" }}>
+              Current: <strong>{currentMediation.date} {currentMediation.time}</strong> — {currentMediation.note}
+            </p>
+          )}
           <div style={{ display: "flex", gap: "12px" }}>
             <div style={{ flex: 1 }}>
               <FieldLabel text="Date" />
@@ -406,7 +405,6 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                 style={inputStyle} />
             </div>
           </div>
-          {/* Note */}
           <div>
             <FieldLabel text="Note" />
             <textarea rows={4}

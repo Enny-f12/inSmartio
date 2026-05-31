@@ -11,7 +11,7 @@ export interface MediationNote {
 }
 
 export interface DisputeParty {
-  name: string;
+  name:      string;
   id:        string;
   statement: string;
   evidence:  string[];
@@ -27,7 +27,7 @@ export interface ApiDispute {
   client:          DisputeParty;
   expert:          DisputeParty;
   chatId:          string | null;
-  mediation:       MediationNote[];
+  mediation:       MediationNote;   // ← object, not array
   status?:         DisputeStatus;
   resolution?:     string | null;
   decisionReason?: string | null;
@@ -50,7 +50,6 @@ export interface UpdateDisputePayload extends Partial<CreateDisputePayload> {
   status?: DisputeStatus;
 }
 
-// ── Resolution enum — matches backend exactly ─────────────
 export type ResolutionType =
   | "REFUND_EXPERT"
   | "REFUND_CLIENT"
@@ -60,18 +59,16 @@ export type ResolutionType =
   | "DISMISS_DISPUTE"
   | "RE_PERFORM";
 
-// POST /api/dispute/{id}/resolve
 export interface ResolveDisputePayload {
   resolution: ResolutionType;
   reason:     string;
 }
 
-// POST /api/dispute/{id}/appeal
 export interface AppealDisputePayload {
   reason: string;
 }
 
-// POST /api/dispute/{id}/mediation
+// PUT /api/dispute/{id}/mediation — single mediation object
 export interface AddMediationPayload {
   mediation: MediationNote;
 }
@@ -117,7 +114,6 @@ export const deleteDispute = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/dispute/${id}`);
 };
 
-// POST /api/dispute/{id}/resolve — Submit Decision
 export const resolveDispute = async (
   id:      string,
   payload: ResolveDisputePayload,
@@ -126,7 +122,6 @@ export const resolveDispute = async (
   return data.data;
 };
 
-// POST /api/dispute/{id}/appeal — Appeal Later
 export const appealDispute = async (
   id:      string,
   payload: AppealDisputePayload,
@@ -135,11 +130,12 @@ export const appealDispute = async (
   return data.data;
 };
 
-// POST /api/dispute/{id}/mediation — Add Mediation Note
+// ✅ Changed to PUT — sends single mediation object matching backend shape:
+// { mediation: { date: "2026-05-19", time: "14:30", note: "..." } }
 export const addMediationNote = async (
   id:      string,
   payload: AddMediationPayload,
 ): Promise<ApiDispute> => {
-  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/mediation`, payload);
+  const { data } = await axiosInstance.put<DisputeResponse>(`/dispute/${id}/mediation`, payload);
   return data.data;
 };
