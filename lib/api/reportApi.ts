@@ -1,4 +1,3 @@
-// lib/api/reportApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export interface ReportQuery {
@@ -115,15 +114,18 @@ export interface DisputeAnalysisData {
 }
 
 export type DownloadReportType =
+  | "user-growth"
+  | "revenue-trend"
+  | "service-category"
+  | "cities"
+  | "job-completion-report"
+  | "tas-performance-report"
+  | "dispute-analysis-report"
+  | "expert-verification"
   | "users"
   | "jobs"
   | "escrows"
-  | "dispute"
-  | "userGrowth"
-  | "revenueTrend"
-  | "serviceCategory"
-  | "cities"
-  | "jobCompletion";
+  | "dispute";
 
 export type ReportFileType = "pdf" | "csv";
 
@@ -134,7 +136,7 @@ export interface DownloadReportPayload {
   toDate:     string;
 }
 
-// ── Existing endpoints ────────────────────────────────────
+// ── Endpoints ─────────────────────────────────────────────
 
 export const fetchUserGrowth = async (q: ReportQuery): Promise<MonthlyUserGrowthItem[]> => {
   const { data } = await axiosInstance.get("/report/monthly-user-growth", { params: q });
@@ -162,7 +164,7 @@ export const fetchReportsSummary = async (): Promise<ReportsSummaryData> => {
 };
 
 export const fetchExpertPerformance = async (limit?: number): Promise<ExpertPerformanceItem[]> => {
-  const { data } = await axiosInstance.get("/reports/expert-performance", {
+  const { data } = await axiosInstance.get("/reports/expert-verification", {
     params: limit ? { limit } : undefined,
   });
   return data.data ?? [];
@@ -175,15 +177,13 @@ export const fetchTasPerformance = async (limit?: number): Promise<TasPerformanc
   return data.data ?? [];
 };
 
-// ── New endpoints ─────────────────────────────────────────
-
 export const fetchJobCompletion = async (q: ReportQuery): Promise<JobCompletionData> => {
-  const { data } = await axiosInstance.get("/report/job-completion", { params: q });
+  const { data } = await axiosInstance.get("/reports/job-completion", { params: q });
   return data.data;
 };
 
 export const fetchDisputeAnalysis = async (q: ReportQuery): Promise<DisputeAnalysisData> => {
-  const { data } = await axiosInstance.get("/report/dispute-analysis", { params: q });
+  const { data } = await axiosInstance.get("/reports/dispute-analysis", { params: q });
   return data.data;
 };
 

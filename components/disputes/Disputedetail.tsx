@@ -2,15 +2,16 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { PriorityLabel, DisputeStatusBadge } from "./DisputeBadges";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch } from "@/hooks/redux";
 import { resolveDisputeThunk, appealDisputeThunk } from "@/lib/redux/disputeSlice";
+import { addMediationNote } from "@/lib/api/disputeApi";
 import type { Dispute } from "@/components/disputes/types";
-import type { ResolutionType } from "@/lib/api/disputeApi";
+import type { ResolutionType, MediationNote } from "@/lib/api/disputeApi";
 
 // ── Evidence fallbacks ────────────────────────────────────
 const FALLBACK_EVIDENCE = [
@@ -20,7 +21,12 @@ const FALLBACK_EVIDENCE = [
   "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=120&h=120&fit=crop&auto=format",
 ];
 
-// ── Resolution options — matches Image 1 exactly ──────────
+const FALLBACK_MEDIATION: MediationNote[] = [
+  { date: "20/03/2026", time: "14:30", note: "Called both parties. Expert insists cabinet was pre-damaged. Client denies." },
+  { date: "20/03/2026", time: "15:45", note: "Expert sent before photos. Shows some wear but not clear if same spot." },
+];
+
+// ── Resolution options ────────────────────────────────────
 const RESOLUTION_OPTIONS: { value: ResolutionType; label: string; hasPercent?: boolean }[] = [
   { value: "REFUND_EXPERT",         label: "Full payment to expert"   },
   { value: "REFUND_CLIENT",         label: "Full refund to client"    },
@@ -41,13 +47,27 @@ function SectionLabel({ text }: { text: string }) {
 
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "10px",
-      flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "10px", flexWrap: "wrap" }}>
       <span style={{ minWidth: "150px", flexShrink: 0, color: "#6B7280" }}>{label}</span>
       <span style={{ color: "#111827", flex: 1 }}>{children}</span>
     </div>
   );
 }
+
+// ── Field label for modal inputs ──────────────────────────
+function FieldLabel({ text }: { text: string }) {
+  return (
+    <p style={{ fontSize: "12px", fontWeight: 600, color: "#374151", marginBottom: "6px" }}>
+      {text}
+    </p>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "10px 14px", borderRadius: "10px",
+  border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+  fontSize: "13px", color: "#111827", outline: "none", boxSizing: "border-box",
+};
 
 // ── Props ─────────────────────────────────────────────────
 interface Props {
@@ -67,6 +87,69 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
   const [appealOpen,     setAppealOpen]     = useState(false);
   const [appealReason,   setAppealReason]   = useState("");
   const [appealing,      setAppealing]      = useState(false);
+
+  // Mediation state
+  const [mediationOpen,  setMediationOpen]  = useState(false);
+  const [mediationNote,  setMediationNote]  = useState("");
+  const [mediationDate,  setMediationDate]  = useState("");   // "YYYY-MM-DD" from <input type="date">
+  const [mediationTime,  setMediationTime]  = useState("");   // "HH:MM" from <input type="time">
+  const [addingNote,     setAddingNote]     = useState(false);
+  // Local list so UI updates immediately after POST
+  const [localMediation, setLocalMediation] = useState<MediationNote[] | null>(null);
+
+  // ── Mediation notes: real → local override → fallback ────
+  const rawMediation = dispute.mediationNotes ?? [];
+  const mediationNotes: MediationNote[] =
+    localMediation ??
+    (rawMediation.length > 0
+      ? rawMediation.map((n: { timestamp: string; note: string }) => {
+          const [datePart = "", timePart = ""] = (n.timestamp ?? "").split(" ");
+          return { date: datePart, time: timePart, note: n.note };
+        })
+      : FALLBACK_MEDIATION);
+
+  const resetMediationForm = () => {
+    setMediationNote("");
+    setMediationDate("");
+    setMediationTime("");
+  };
+
+  // ── Add mediation note ────────────────────────────────────
+  const handleAddMediationNote = async () => {
+    if (!mediationDate.trim()) { toast.warning("Please select a date."); return; }
+    if (!mediationTime.trim()) { toast.warning("Please select a time."); return; }
+    if (!mediationNote.trim()) { toast.warning("Please enter a note."); return; }
+
+    setAddingNote(true);
+    try {
+      // Build ISO datetime from the date + time inputs, e.g. "2026-05-31T14:30:00.000Z"
+      const isoDate = new Date(`${mediationDate}T${mediationTime}:00`).toISOString();
+      const [y, m, d] = mediationDate.split("-");
+      const displayDate = `${d}/${m}/${y}`;
+
+      const newNote: MediationNote = {
+        date: isoDate,         // sent to API as ISO string
+        time: mediationTime,   // sent to API as HH:MM
+        note: mediationNote.trim(),
+      };
+
+      await addMediationNote(disputeId, { mediation: newNote });
+
+      // Optimistic UI update using display-formatted date
+      setLocalMediation([
+        ...(localMediation ?? mediationNotes),
+        { date: displayDate, time: mediationTime, note: mediationNote.trim() },
+      ]);
+      resetMediationForm();
+      setMediationOpen(false);
+      toast.success("Mediation note added");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add note";
+      toast.error("Failed to add mediation note", { description: msg });
+    } finally {
+      setAddingNote(false);
+    }
+  };
 
   // ── Submit decision ───────────────────────────────────────
   const handleSubmitDecision = () => {
@@ -104,11 +187,9 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
 
   // ── Evidence arrays (fallback if empty) ──────────────────
   const clientEvidence = dispute.clientEvidence.length > 0
-    ? dispute.clientEvidence
-    : [FALLBACK_EVIDENCE[0], FALLBACK_EVIDENCE[1]];
+    ? dispute.clientEvidence : [FALLBACK_EVIDENCE[0], FALLBACK_EVIDENCE[1]];
   const expertEvidence = dispute.expertEvidence.length > 0
-    ? dispute.expertEvidence
-    : [FALLBACK_EVIDENCE[2], FALLBACK_EVIDENCE[3]];
+    ? dispute.expertEvidence : [FALLBACK_EVIDENCE[2], FALLBACK_EVIDENCE[3]];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -132,10 +213,8 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
       `}</style>
 
       {/* ── Scrollable content ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px",
-        backgroundColor: "#F4F5F7" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
 
-        {/* Back */}
         <button onClick={onBack}
           style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
             fontWeight: 500, color: "#111827", background: "none", border: "none",
@@ -157,10 +236,8 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
             <InfoRow label="Status:"><DisputeStatusBadge status={dispute.status} /></InfoRow>
           </div>
 
-          {/* ── Statements (side by side on desktop) ── */}
+          {/* ── Statements ── */}
           <div className="dd-statements">
-
-            {/* Client */}
             <div className="dd-statement">
               <SectionLabel text="Client Statement" />
               <p style={{ fontSize: "13px", fontStyle: "italic", color: "#111827",
@@ -168,28 +245,21 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                 &ldquo;{dispute.clientStatement}&rdquo;
               </p>
               <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.08em", color: "#6B7280", marginBottom: "10px" }}>
-                Evidence:
-              </p>
+                letterSpacing: "0.08em", color: "#6B7280", marginBottom: "10px" }}>Evidence:</p>
               <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
                 {clientEvidence.slice(0, 2).map((src, i) => (
                   <div key={i} style={{ width: 64, height: 64, borderRadius: "10px",
                     overflow: "hidden", border: "1px solid #E5E7EB", flexShrink: 0 }}>
-                    <Image src={src} alt={`Client evidence ${i + 1}`}
-                      width={64} height={64}
+                    <Image src={src} alt={`Client evidence ${i + 1}`} width={64} height={64}
                       style={{ width: 64, height: 64, objectFit: "cover" }} />
                   </div>
                 ))}
               </div>
-              {/* View chat Log — both sides (Image 1) */}
               <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
                 fontWeight: 500, border: "1px solid #2563EB", color: "#2563EB",
-                background: "none", cursor: "pointer" }}>
-                View chat Log
-              </button>
+                background: "none", cursor: "pointer" }}>View chat Log</button>
             </div>
 
-            {/* Expert */}
             <div className="dd-statement">
               <SectionLabel text="Expert Statement" />
               <p style={{ fontSize: "13px", fontStyle: "italic", color: "#111827",
@@ -197,61 +267,54 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                 &ldquo;{dispute.expertStatement}&rdquo;
               </p>
               <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.08em", color: "#6B7280", marginBottom: "10px" }}>
-                Evidence:
-              </p>
+                letterSpacing: "0.08em", color: "#6B7280", marginBottom: "10px" }}>Evidence:</p>
               <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
                 {expertEvidence.slice(0, 2).map((src, i) => (
                   <div key={i} style={{ width: 64, height: 64, borderRadius: "10px",
                     overflow: "hidden", border: "1px solid #E5E7EB", flexShrink: 0 }}>
-                    <Image src={src} alt={`Expert evidence ${i + 1}`}
-                      width={64} height={64}
+                    <Image src={src} alt={`Expert evidence ${i + 1}`} width={64} height={64}
                       style={{ width: 64, height: 64, objectFit: "cover" }} />
                   </div>
                 ))}
               </div>
-              {/* View chat Log on expert side too */}
               <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
                 fontWeight: 500, border: "1px solid #2563EB", color: "#2563EB",
-                background: "none", cursor: "pointer" }}>
-                View chat Log
-              </button>
+                background: "none", cursor: "pointer" }}>View chat Log</button>
             </div>
           </div>
 
-          {/* ── Mediation Notes — always shown (TODO-BACKEND: mediationNotes missing from API) ── */}
-          {(() => {
-            /* TODO-BACKEND: mediationNotes not returned in dispute detail response.
-               Needs: [{ timestamp: string, note: string }] */
-            const FALLBACK_NOTES = [
-              { timestamp: "20/03 14:30", note: "Called both parties. Expert insists cabinet was pre-damaged. Client denies." },
-              { timestamp: "20/03 15:45", note: "Expert sent before photos. Shows some wear but not clear if same spot." },
-            ];
-            const notes = dispute.mediationNotes.length > 0 ? dispute.mediationNotes : FALLBACK_NOTES;
-            return (
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid #E5E7EB" }}>
-                <SectionLabel text="Mediation Notes" />
-                <div style={{ borderRadius: "12px", border: "1px solid #E5E7EB",
-                  backgroundColor: "#F9FAFB", overflow: "hidden" }}>
-                  {notes.map((n, i) => (
-                    <div key={i} style={{ padding: "12px 16px", fontSize: "13px",
-                      borderBottom: i < notes.length - 1 ? "1px solid #E5E7EB" : "none",
-                      display: "flex", gap: "12px", alignItems: "flex-start" }}>
-                      <span style={{ fontWeight: 600, color: "#6B7280", flexShrink: 0,
-                        whiteSpace: "nowrap" }}>[{n.timestamp}]</span>
-                      <span style={{ color: "#111827" }}>{n.note}</span>
-                    </div>
-                  ))}
+          {/* ── Mediation Notes ── */}
+          <div style={{ padding: "20px 24px", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: "12px" }}>
+              <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                letterSpacing: "0.08em", color: "#6B7280", margin: 0 }}>Mediation Notes</p>
+              <button onClick={() => setMediationOpen(true)}
+                style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px",
+                  borderRadius: "8px", border: "1px solid #2563EB", backgroundColor: "#EFF6FF",
+                  color: "#2563EB", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                <Plus size={13} /> Add Note
+              </button>
+            </div>
+            <div style={{ borderRadius: "12px", border: "1px solid #E5E7EB",
+              backgroundColor: "#F9FAFB", overflow: "hidden" }}>
+              {mediationNotes.map((n, i) => (
+                <div key={i} style={{ padding: "12px 16px", fontSize: "13px",
+                  borderBottom: i < mediationNotes.length - 1 ? "1px solid #E5E7EB" : "none",
+                  display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                  <span style={{ fontWeight: 600, color: "#6B7280", flexShrink: 0, whiteSpace: "nowrap" }}>
+                    [{n.date} {n.time}]
+                  </span>
+                  <span style={{ color: "#111827" }}>{n.note}</span>
                 </div>
-              </div>
-            );
-          })()}
+              ))}
+            </div>
+          </div>
 
           {/* ── Resolution ── */}
           <div style={{ padding: "20px 24px" }}>
             <SectionLabel text="Resolution" />
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px",
-              marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
               {RESOLUTION_OPTIONS.map((opt) => (
                 <div key={opt.value}>
                   <label style={{ display: "flex", alignItems: "center", gap: "10px",
@@ -259,22 +322,17 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                     <input type="radio" name="resolution" value={opt.value}
                       checked={resolution === opt.value}
                       onChange={() => setResolution(opt.value)}
-                      style={{ width: "16px", height: "16px", accentColor: "#2563EB",
-                        flexShrink: 0 }} />
+                      style={{ width: "16px", height: "16px", accentColor: "#2563EB", flexShrink: 0 }} />
                     {opt.label}
-                    {/* Partial payment % inline input */}
                     {opt.hasPercent && (
                       <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                         <span style={{ color: "#6B7280", fontSize: "13px" }}>(</span>
-                        <input
-                          type="number" min={1} max={99}
-                          placeholder="__"
-                          value={partialPct}
+                        <input type="number" min={1} max={99} placeholder="__" value={partialPct}
                           onChange={(e) => setPartialPct(e.target.value)}
                           disabled={resolution !== opt.value}
                           style={{ width: "48px", padding: "2px 6px", borderRadius: "6px",
-                            border: "1px solid #E5E7EB", fontSize: "13px",
-                            color: "#111827", outline: "none",
+                            border: "1px solid #E5E7EB", fontSize: "13px", color: "#111827",
+                            outline: "none",
                             backgroundColor: resolution === opt.value ? "#fff" : "#F9FAFB" }} />
                         <span style={{ color: "#6B7280", fontSize: "13px" }}>%)</span>
                       </span>
@@ -283,14 +341,12 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                 </div>
               ))}
             </div>
-
             <p style={{ fontSize: "13px", fontWeight: 500, color: "#111827", marginBottom: "8px" }}>
               Decision reason:
             </p>
             <textarea rows={3}
               placeholder="[Insufficient evidence of pre-damage, 70% payment...]"
-              value={decisionReason}
-              onChange={(e) => setDecisionReason(e.target.value)}
+              value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)}
               style={{ width: "100%", padding: "12px 16px", borderRadius: "12px",
                 fontSize: "13px", outline: "none", resize: "none",
                 border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
@@ -299,25 +355,67 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
         </div>
       </div>
 
-      {/* ── Sticky footer — 3 buttons (Image 1) ── */}
+      {/* ── Sticky footer ── */}
       <div className="dd-footer">
-        <button onClick={handleSubmitDecision} disabled={submitting}
-          className="dd-footer-btn"
+        <button onClick={handleSubmitDecision} disabled={submitting} className="dd-footer-btn"
           style={{ color: "#111827", fontWeight: 600, opacity: submitting ? 0.7 : 1 }}>
-          {submitting
-            ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
-            : "Submit Decision"}
+          {submitting ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : "Submit Decision"}
         </button>
-        <button onClick={handleSaveDraft} disabled={draftSaved}
-          className="dd-footer-btn"
-          style={{ color: draftSaved ? "#16a34a" : "#6B7280",
-            fontWeight: draftSaved ? 600 : 500 }}>
+        <button onClick={handleSaveDraft} disabled={draftSaved} className="dd-footer-btn"
+          style={{ color: draftSaved ? "#16a34a" : "#6B7280", fontWeight: draftSaved ? 600 : 500 }}>
           {draftSaved ? "✓ Saved as Draft" : "Save Draft"}
         </button>
-        <button onClick={() => setAppealOpen(true)} className="dd-footer-btn">
-          Appeal Later
-        </button>
+        <button onClick={() => setAppealOpen(true)} className="dd-footer-btn">Appeal Later</button>
       </div>
+
+      {/* ── Add Mediation Note modal ── */}
+      <Modal open={mediationOpen}
+        onClose={() => { setMediationOpen(false); resetMediationForm(); }}
+        title="Add Mediation Note" size="sm"
+        footer={
+          <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+            <button onClick={() => { setMediationOpen(false); resetMediationForm(); }}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px",
+                border: "1px solid #E5E7EB", backgroundColor: "#fff",
+                fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
+              Cancel
+            </button>
+            <button onClick={handleAddMediationNote} disabled={addingNote}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none",
+                backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600,
+                cursor: addingNote ? "not-allowed" : "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center", gap: "8px",
+                opacity: addingNote ? 0.7 : 1 }}>
+              {addingNote ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : "Save Note"}
+            </button>
+          </div>
+        }>
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {/* Date + Time row */}
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div style={{ flex: 1 }}>
+              <FieldLabel text="Date" />
+              <input type="date" value={mediationDate}
+                onChange={(e) => setMediationDate(e.target.value)}
+                style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <FieldLabel text="Time" />
+              <input type="time" value={mediationTime}
+                onChange={(e) => setMediationTime(e.target.value)}
+                style={inputStyle} />
+            </div>
+          </div>
+          {/* Note */}
+          <div>
+            <FieldLabel text="Note" />
+            <textarea rows={4}
+              placeholder="e.g. Spoke with both parties, expert provided additional photos..."
+              value={mediationNote} onChange={(e) => setMediationNote(e.target.value)}
+              style={{ ...inputStyle, resize: "none" }} />
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Appeal modal ── */}
       <Modal open={appealOpen} onClose={() => setAppealOpen(false)}
@@ -336,24 +434,18 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
                 cursor: appealing ? "not-allowed" : "pointer", display: "flex",
                 alignItems: "center", justifyContent: "center", gap: "8px",
                 opacity: appealing ? 0.7 : 1 }}>
-              {appealing
-                ? <><Loader2 size={14} className="animate-spin" /> Submitting...</>
-                : "Submit Appeal"}
+              {appealing ? <><Loader2 size={14} className="animate-spin" /> Submitting...</> : "Submit Appeal"}
             </button>
           </div>
         }>
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
-            Provide a reason for appealing this dispute later.
-            This will be logged against the case.
+            Provide a reason for appealing this dispute later. This will be logged against the case.
           </p>
           <textarea rows={4}
             placeholder="e.g. I disagree with the resolution because..."
             value={appealReason} onChange={(e) => setAppealReason(e.target.value)}
-            style={{ width: "100%", padding: "12px 16px", borderRadius: "12px",
-              fontSize: "13px", outline: "none", resize: "none",
-              border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
-              color: "#111827", boxSizing: "border-box" }} />
+            style={{ ...inputStyle, resize: "none" }} />
         </div>
       </Modal>
     </div>

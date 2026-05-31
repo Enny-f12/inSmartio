@@ -8,7 +8,11 @@ export type ReportType =
   | "Job Completion Report"
   | "TAS Performance Report"
   | "Dispute Analysis Report"
-  | "Verification Report";
+  | "Verification Report"
+  | "Users Report"
+  | "Jobs Report"
+  | "Escrow Report"
+  | "Disputes Report";
 
 export type FormatType = "PDF" | "CSV";
 
@@ -24,8 +28,8 @@ export interface DonutSegment {
 }
 
 export interface ReportConfig {
-  yLabel: string;
-  chartType: string;
+  yLabel:      string;
+  chartType:   string;
   title:       string;
   description: string;
   weeks?:      number[];
@@ -61,7 +65,7 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
     description: "Jobs by service category",
     yLabel:      "Percentage",
     chartType:   "donut",
-    segments:    [
+    segments: [
       { label: "Auto Repair",           value: 32, color: "#2563eb" },
       { label: "Creativity",            value: 27, color: "#F9A826" },
       { label: "Repair & Construction", value: 23, color: "#2E7D32" },
@@ -80,8 +84,8 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
     yLabel:      "Percentage",
     chartType:   "bar",
     weeks:       [42, 28, 16, 9, 5],
-    weekLabels:  ["Lagos","Abuja","PH","Ibadan","Kano"],
-    summary:     [
+    weekLabels:  ["Lagos", "Abuja", "PH", "Ibadan", "Kano"],
+    summary: [
       { label: "Lagos:",  value: "42%" },
       { label: "Abuja:",  value: "28%" },
       { label: "PH:",     value: "16%" },
@@ -124,5 +128,43 @@ export const reportConfigs: Record<ReportType, ReportConfig> = {
     weeks:       [0],
     weekLabels:  ["No data"],
     summary:     [{ label: "Total Verifications:", value: "0" }],
+  },
+
+  // ── Download-only types (no chart rendered) ───────────────
+  "Users Report": {
+    title:       "Users Report",
+    description: "Comprehensive user registrations (clients, experts, TAS)",
+    yLabel:      "",
+    chartType:   "none",
+    weeks:       [],
+    weekLabels:  [],
+    summary:     [],
+  },
+  "Jobs Report": {
+    title:       "Jobs Report",
+    description: "Jobs list and basic job metrics",
+    yLabel:      "",
+    chartType:   "none",
+    weeks:       [],
+    weekLabels:  [],
+    summary:     [],
+  },
+  "Escrow Report": {
+    title:       "Escrow Report",
+    description: "Finance escrow records (client/expert)",
+    yLabel:      "",
+    chartType:   "none",
+    weeks:       [],
+    weekLabels:  [],
+    summary:     [],
+  },
+  "Disputes Report": {
+    title:       "Disputes Report",
+    description: "Dispute cases list",
+    yLabel:      "",
+    chartType:   "none",
+    weeks:       [],
+    weekLabels:  [],
+    summary:     [],
   },
 };

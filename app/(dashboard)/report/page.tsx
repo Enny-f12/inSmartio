@@ -1,4 +1,3 @@
-// app/(dashboard)/report/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -37,7 +36,7 @@ import type {
   DownloadReportType,
 } from "@/lib/api/reportApi";
 
-// ── All 8 report types ────────────────────────────────────
+// ── Report type lists ─────────────────────────────────────
 export const ALL_REPORT_TYPES: ReportType[] = [
   "User Growth Report",
   "Revenue Report",
@@ -47,9 +46,10 @@ export const ALL_REPORT_TYPES: ReportType[] = [
   "TAS Performance Report",
   "Dispute Analysis Report",
   "Verification Report",
+  
 ];
 
-// All types now have live endpoints
+// Have a chart endpoint — show chart + summary
 const LIVE_REPORT_TYPES: ReportType[] = [
   "User Growth Report",
   "Revenue Report",
@@ -61,17 +61,29 @@ const LIVE_REPORT_TYPES: ReportType[] = [
   "Verification Report",
 ];
 
+// No chart — clicking Generate triggers PDF download immediately
+const DOWNLOAD_ONLY_TYPES: ReportType[] = [
+  "Users Report",
+  "Jobs Report",
+  "Escrow Report",
+  "Disputes Report",
+];
+
 const DONUT_TYPES: ReportType[] = ["Top Service Category"];
 
 const reportTypeToDownload: Record<ReportType, DownloadReportType> = {
-  "User Growth Report":       "userGrowth",
-  "Revenue Report":           "revenueTrend",
-  "Top Service Category":     "serviceCategory",
+  "User Growth Report":       "user-growth",
+  "Revenue Report":           "revenue-trend",
+  "Top Service Category":     "service-category",
   "Top Cities":               "cities",
-  "Job Completion Report":    "jobCompletion",
-  "TAS Performance Report":   "users",
-  "Dispute Analysis Report":  "dispute",
-  "Verification Report":      "users",
+  "Job Completion Report":    "job-completion-report",
+  "TAS Performance Report":   "tas-performance-report",
+  "Dispute Analysis Report":  "dispute-analysis-report",
+  "Verification Report":      "expert-verification",
+  "Users Report":             "users",
+  "Jobs Report":              "jobs",
+  "Escrow Report":            "escrows",
+  "Disputes Report":          "dispute",
 };
 
 const reportTypeToSlug: Record<ReportType, string> = {
@@ -83,6 +95,10 @@ const reportTypeToSlug: Record<ReportType, string> = {
   "TAS Performance Report":   "tas-performance",
   "Dispute Analysis Report":  "dispute-analysis",
   "Verification Report":      "verification",
+  "Users Report":             "users",
+  "Jobs Report":              "jobs",
+  "Escrow Report":            "escrow",
+  "Disputes Report":          "disputes",
 };
 
 // ── Helpers ───────────────────────────────────────────────
@@ -106,7 +122,7 @@ const fmtDisplay = (iso: string) => {
   return `${d}/${m}/${y}`;
 };
 
-const COLORS = ["#2563eb","#F9A826","#2E7D32","#7B3F9E","#db2777","#0891b2"];
+const COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
 
 // ── Build config from API data ────────────────────────────
 const buildConfig = (
@@ -201,10 +217,10 @@ const buildConfig = (
         weeks:      monthly.map((m) => m.completed),
         weekLabels: monthly.map((m) => m.month.slice(0, 3)),
         summary: [
-          { label: "Total Jobs:",       value: summary.totalJobs.toLocaleString() },
-          { label: "Completed:",        value: `${summary.completedJobs.toLocaleString()} (${summary.completionRate.toFixed(1)}%)` },
-          { label: "Cancelled:",        value: summary.cancelledJobs.toLocaleString() },
-          { label: "Disputed:",         value: summary.disputedJobs.toLocaleString() },
+          { label: "Total Jobs:",   value: summary.totalJobs.toLocaleString() },
+          { label: "Completed:",    value: `${summary.completedJobs.toLocaleString()} (${summary.completionRate.toFixed(1)}%)` },
+          { label: "Cancelled:",    value: summary.cancelledJobs.toLocaleString() },
+          { label: "Disputed:",     value: summary.disputedJobs.toLocaleString() },
         ],
       };
     }
@@ -218,10 +234,10 @@ const buildConfig = (
         weeks:      monthly.map((m) => m.total),
         weekLabels: monthly.map((m) => m.month.slice(0, 3)),
         summary: [
-          { label: "Total Disputes:",   value: summary.totalDisputes.toLocaleString() },
-          { label: "Resolved:",         value: `${summary.resolved} (${summary.resolutionRate.toFixed(1)}%)` },
-          { label: "In Progress:",      value: summary.inProgress.toLocaleString() },
-          { label: "Escalated:",        value: summary.escalated.toLocaleString() },
+          { label: "Total Disputes:", value: summary.totalDisputes.toLocaleString() },
+          { label: "Resolved:",       value: `${summary.resolved} (${summary.resolutionRate.toFixed(1)}%)` },
+          { label: "In Progress:",    value: summary.inProgress.toLocaleString() },
+          { label: "Escalated:",      value: summary.escalated.toLocaleString() },
           ...topReasons.map((r) => ({
             label: r.reason + ":",
             value: `${r.count} (${r.percentage.toFixed(1)}%)`,
@@ -262,9 +278,6 @@ const buildConfig = (
       return mock;
   }
 };
-
-
-
 
 // ── Inline Report Card ────────────────────────────────────
 interface InlineReportCardProps {
@@ -314,8 +327,6 @@ function InlineReportCard({ config, isDonut, onDownloadPdf, onDownloadCsv, onEma
   );
 }
 
-
-
 // ── Main Page ─────────────────────────────────────────────
 export default function ReportsPage() {
   const dispatch = useAppDispatch();
@@ -327,9 +338,10 @@ export default function ReportsPage() {
   const [dateTo,     setDateTo]     = useState(new Date().toISOString().split("T")[0]);
   const [generated,  setGenerated]  = useState(false);
 
-  const query   = { fromDate: dateFrom, toDate: dateTo };
-  const isLive  = LIVE_REPORT_TYPES.includes(reportType);
-  const isDonut = DONUT_TYPES.includes(reportType);
+  const query          = { fromDate: dateFrom, toDate: dateTo };
+  const isLive         = LIVE_REPORT_TYPES.includes(reportType);
+  const isDownloadOnly = DOWNLOAD_ONLY_TYPES.includes(reportType);
+  const isDonut        = DONUT_TYPES.includes(reportType);
 
   const isLoading =
     report.userGrowthStatus        === "loading" ||
@@ -341,20 +353,6 @@ export default function ReportsPage() {
     report.jobCompletionStatus     === "loading" ||
     report.disputeAnalysisStatus   === "loading";
 
-  const handleGenerate = () => {
-    setGenerated(true);
-    switch (reportType) {
-      case "User Growth Report":       dispatch(fetchUserGrowthThunk(query));        break;
-      case "Revenue Report":           dispatch(fetchRevenueTrendThunk(query));       break;
-      case "Top Service Category":     dispatch(fetchTopCategoriesThunk(query));      break;
-      case "Top Cities":               dispatch(fetchTopCitiesThunk(query));          break;
-      case "Job Completion Report":    dispatch(fetchJobCompletionThunk(query));      break;
-      case "TAS Performance Report":   dispatch(fetchTasPerformanceThunk({}));        break;
-      case "Dispute Analysis Report":  dispatch(fetchDisputeAnalysisThunk(query));   break;
-      case "Verification Report":      dispatch(fetchExpertPerformanceThunk({}));     break;
-    }
-  };
-
   const handleDownloadPdf = () => {
     dispatch(downloadReportThunk({
       payload:  { reportType: reportTypeToDownload[reportType], type: "pdf", fromDate: dateFrom, toDate: dateTo },
@@ -362,7 +360,26 @@ export default function ReportsPage() {
     })).unwrap().catch(() => toast.error("Failed to download PDF"));
   };
 
+  const handleGenerate = () => {
+    setGenerated(true);
+    if (isDownloadOnly) {
+      handleDownloadPdf();
+      return;
+    }
+    switch (reportType) {
+      case "User Growth Report":      dispatch(fetchUserGrowthThunk(query));      break;
+      case "Revenue Report":          dispatch(fetchRevenueTrendThunk(query));     break;
+      case "Top Service Category":    dispatch(fetchTopCategoriesThunk(query));    break;
+      case "Top Cities":              dispatch(fetchTopCitiesThunk(query));        break;
+      case "Job Completion Report":   dispatch(fetchJobCompletionThunk(query));    break;
+      case "TAS Performance Report":  dispatch(fetchTasPerformanceThunk({}));      break;
+      case "Dispute Analysis Report": dispatch(fetchDisputeAnalysisThunk(query));  break;
+      case "Verification Report":     dispatch(fetchExpertPerformanceThunk({}));   break;
+    }
+  };
+
   const handleDownloadCsv = () => {
+    if (isDownloadOnly) { toast.info("Use Download PDF for this report type"); return; }
     const rows: unknown[] = (() => {
       switch (reportType) {
         case "User Growth Report":      return report.userGrowth;
@@ -395,16 +412,16 @@ export default function ReportsPage() {
     report.revenueTrend,
     report.topCategories,
     report.topCitiesData ?? null,
-    (report.tasPerformance  ?? []) as Record<string, unknown>[],
+    (report.tasPerformance   ?? []) as Record<string, unknown>[],
     (report.expertPerformance ?? []) as Record<string, unknown>[],
-    report.jobCompletion  ?? null,
+    report.jobCompletion   ?? null,
     report.disputeAnalysis ?? null,
     dateFrom,
     dateTo,
   );
 
-  const showLoading = generated && isLive && isLoading;
-  const showCard    = generated && isLive && !isLoading;
+  const showLoading = generated && !isDownloadOnly && isLive && isLoading;
+  const showCard    = generated && !isDownloadOnly && isLive && !isLoading;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -429,6 +446,7 @@ export default function ReportsPage() {
           onExport={handleExport}
         />
 
+        {/* Empty state */}
         {!generated && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "12px", color: "#9CA3AF" }}>
             <TrendingUp size={40} strokeWidth={1.2} />
@@ -438,6 +456,20 @@ export default function ReportsPage() {
           </div>
         )}
 
+        {/* Download-only confirmation */}
+        {generated && isDownloadOnly && (
+          <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", padding: "32px 28px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+            <Download size={32} strokeWidth={1.4} color="#2563eb" />
+            <p style={{ fontSize: "15px", fontWeight: 600, color: "#111827", margin: 0 }}>{reportType}</p>
+            <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Your PDF download has started.</p>
+            <button onClick={handleDownloadPdf} disabled={report.downloadStatus === "loading"}
+              style={{ marginTop: "8px", padding: "10px 24px", borderRadius: "10px", border: "none", backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+              {report.downloadStatus === "loading" ? "Downloading…" : "Download Again"}
+            </button>
+          </div>
+        )}
+
+        {/* Loading */}
         {showLoading && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "10px", color: "#9CA3AF", fontSize: "14px" }}>
             <span style={{ display: "inline-block", width: 20, height: 20, border: "2px solid #E5E7EB", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -445,6 +477,7 @@ export default function ReportsPage() {
           </div>
         )}
 
+        {/* Chart card */}
         {showCard && (
           <InlineReportCard
             config={config} isDonut={isDonut}

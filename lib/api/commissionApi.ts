@@ -2,24 +2,25 @@
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export interface ApiCommission {
-  id:          string;
-  name:        string;
-  type:        string;   // e.g. "expert" | "tas"
-  rate?:       number;
-  amount?:     number;
-  description?: string;
-  isActive?:   boolean;
-  createdAt?:  string;
-  updatedAt?:  string;
-  [key: string]: unknown;
+  id:                   string;
+  model2CommissionRate: number;
+  modelISubscription:   string;
+  tasRegistrationBonus: number;
+  tasModel1Commission:  number;
+  tasModel2Commission:  number;
+  effectiveDate:        string;
+  status:               boolean;
+  createdAt?:           string;
+  updatedAt?:           string;
 }
 
 export interface CreateCommissionPayload {
-  name:         string;
-  type:         string;
-  rate?:        number;
-  amount?:      number;
-  description?: string;
+  model2CommissionRate: number;
+  modelISubscription:   string;
+  tasRegistrationBonus: number;
+  tasModel1Commission:  number;
+  tasModel2Commission:  number;
+  effectiveDate:        string; // YYYY-MM-DD — NestJS transforms this to a Date instance
 }
 
 export type UpdateCommissionPayload = Partial<CreateCommissionPayload>;

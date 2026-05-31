@@ -4,6 +4,12 @@ import axiosInstance from "@/lib/api/axiosInstance";
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
 export type DisputeStatus   = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
+export interface MediationNote {
+  date: string;
+  time: string;
+  note: string;
+}
+
 export interface DisputeParty {
   name: string;
   id:        string;
@@ -20,8 +26,11 @@ export interface ApiDispute {
   amountInEscrows: number;
   client:          DisputeParty;
   expert:          DisputeParty;
-  chatId:          string;
+  chatId:          string | null;
+  mediation:       MediationNote[];
   status?:         DisputeStatus;
+  resolution?:     string | null;
+  decisionReason?: string | null;
   createdAt?:      string;
   updatedAt?:      string;
 }
@@ -60,6 +69,11 @@ export interface ResolveDisputePayload {
 // POST /api/dispute/{id}/appeal
 export interface AppealDisputePayload {
   reason: string;
+}
+
+// POST /api/dispute/{id}/mediation
+export interface AddMediationPayload {
+  mediation: MediationNote;
 }
 
 interface DisputesResponse {
@@ -118,5 +132,14 @@ export const appealDispute = async (
   payload: AppealDisputePayload,
 ): Promise<ApiDispute> => {
   const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/appeal`, payload);
+  return data.data;
+};
+
+// POST /api/dispute/{id}/mediation — Add Mediation Note
+export const addMediationNote = async (
+  id:      string,
+  payload: AddMediationPayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/mediation`, payload);
   return data.data;
 };

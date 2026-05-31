@@ -18,13 +18,20 @@ const MOCK_PAYOUTS: ApiPayout[] = [
   { id: "pay_005", recipientId: "exp_002", recipientName: "Mary K.",   recipientType: "expert", amount: 45000, status: "failed", bankName: "Zenith",   accountNumber: "0567890123", createdAt: "2026-05-20T00:00:00Z" },
 ];
 
-// Summary stats matching design spec 10.3
-const MOCK_SUMMARY = {
-  totalTasToPay:    156,
-  totalPayoutAmount: 1245800,
-  averagePerTas:    7986,
-  paymentDate:      "10/04/2026",
-};
+function computeSummary(data: ApiPayout[]) {
+  const tasPayouts = data.filter((p) => p.recipientType === "tas");
+  const totalTasToPay = tasPayouts.length;
+  const totalPayoutAmount = data.reduce((sum, p) => sum + Number(p.amount), 0);
+  const averagePerTas = totalTasToPay > 0 ? Math.round(totalPayoutAmount / totalTasToPay) : 0;
+  const latestDate = data.reduce((latest, p) => {
+    const d = new Date(p.createdAt);
+    return d > latest ? d : latest;
+  }, new Date(0));
+  const paymentDate = data.length > 0
+    ? latestDate.toLocaleDateString("en-GB").replace(/\//g, "/")
+    : "—";
+  return { totalTasToPay, totalPayoutAmount, averagePerTas, paymentDate };
+}
 
 function StatusPill({ status }: { status: string }) {
   const s = status?.toLowerCase() ?? "";
@@ -115,8 +122,12 @@ export default function PayoutsTab() {
     if (payoutsStatus === "idle") dispatch(fetchPayouts());
   }, [dispatch, payoutsStatus]);
 
-  // Use real data if available, else mock
-  const data = payoutsStatus === "succeeded" && payouts.length > 0 ? payouts : MOCK_PAYOUTS;
+  // Use real data once succeeded (even if empty), else fall back to mock
+  const isReal = payoutsStatus === "succeeded";
+  const data   = isReal ? payouts : MOCK_PAYOUTS;
+
+  // Compute summary from whatever data we're showing
+  const summary = computeSummary(data);
 
   const filtered = data.filter((p) => {
     const matchSearch = p.recipientName.toLowerCase().includes(search.toLowerCase());
@@ -130,9 +141,6 @@ export default function PayoutsTab() {
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
   if (selected) return <PayoutDetail payout={selected} onClose={() => setSelected(null)} />;
-
-  // Summary stats
-  const summary = MOCK_SUMMARY;
 
   const handleProcessPayouts = () => toast.info("Process Payouts — backend endpoint needed");
   const handleExportCsv      = () => toast.info("Export CSV — backend endpoint needed");
@@ -151,7 +159,7 @@ export default function PayoutsTab() {
         }
       `}</style>
 
-      {/* ── Summary card (spec 10.3) ── */}
+      {/* ── Summary card ── */}
       <div style={{ backgroundColor: "#fff", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px 24px", marginBottom: "0" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", marginBottom: "16px" }}>
           <div>
@@ -209,7 +217,7 @@ export default function PayoutsTab() {
         </div>
 
         {/* Loading */}
-        {payoutsStatus === "loading" && payouts.length === 0 && (
+        {payoutsStatus === "loading" && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
             <Loader2 size={18} className="animate-spin" /><span style={{ fontSize: "13px" }}>Loading payouts...</span>
           </div>
@@ -220,7 +228,7 @@ export default function PayoutsTab() {
 
         {payoutsStatus !== "loading" && (
           <>
-            {/* Desktop table — columns match design: TAS Name, TAS ID, Experts, Type, Amount, Status, Action */}
+            {/* Desktop table */}
             <div className="payouts-table-wrap" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
