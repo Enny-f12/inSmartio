@@ -6,13 +6,14 @@ export type VerificationType   = "expert" | "tas";
 export type VerificationStatus = "pending" | "approved" | "rejected";
 
 export interface VerificationDocument {
-  id?:     string | null;
-  url?:    string;
-  date?:   string;
-  status?: "verified" | "pending" | string;
-  type?:   string;
-  name?:   string;
-  verify?: boolean;
+  id?:        string | null;
+  publicId?:  string | null;
+  url?:       string;
+  date?:      string;
+  status?:    string;
+  type?:      string;
+  name?:      string;
+  verify?:    boolean;
 }
 
 export interface GuarantorInfo {
@@ -37,12 +38,12 @@ export interface NinVerification {
 }
 
 export interface ApiVerificationSummary {
-  id:             string;
+  id:             string;  // injected from `id` field if present, else email
   name:           string;
   email:          string;
   phone?:         string;
-  tier?:          string;
-  status:         string;
+  tier?:          string;  // "1" | "2" | "3" from backend
+  status:         string;  // account status — NOT verification status
   verify?:        boolean | string;
   submitted:      string;
   documents:      VerificationDocument[] | number;
@@ -57,31 +58,31 @@ export interface ApiVerificationSummary {
 }
 
 export interface ApiVerificationDetail {
-  id:                   string;
-  name:                 string;
-  email:                string;
-  phone:                string;
-  avatar:               string | null;
-  gender:               string;
-  bio:                  string;
-  role:                 string;
-  roles:                string[];
-  status:               string;
-  currentMode:          string;
-  category:             string | Record<string, unknown>;
-  skill:                string[] | Record<string, unknown>;
-  services:             string | null;
-  tier:                 number | string;
-  verification:         string;
-  verify:               boolean | string;
-  commission:           number | null;
-  paymentModel:         string;
-  subscriptionActive:   boolean;
+  id:                    string;
+  name:                  string;
+  email:                 string;
+  phone:                 string;
+  avatar:                string | null;
+  gender:                string;
+  bio:                   string;
+  role:                  string;
+  roles:                 string[];
+  status:                string;
+  currentMode:           string;
+  category:              string | Record<string, unknown>;
+  skill:                 string[] | Record<string, unknown>;
+  services:              string | null;
+  tier:                  number | string;
+  verification:          string;
+  verify:                boolean | string;
+  commission:            number | null;
+  paymentModel:          string;
+  subscriptionActive:    boolean;
   subscriptionExpiresAt: string | null;
-  referral:             string | null;
-  lastModelSwitchDate:  string | null;
-  createdAt:            string;
-  updatedAt:            string;
+  referral:              string | null;
+  lastModelSwitchDate:   string | null;
+  createdAt:             string;
+  updatedAt:             string;
   location: {
     city?:    string;
     state?:   string;
@@ -89,7 +90,8 @@ export interface ApiVerificationDetail {
     area?:    string;
     country?: string;
   };
-  document: Record<string, unknown> | unknown[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  document: Record<string, any> | any[];
   bankDetails: {
     bankName:      string;
     accountName:   string;
@@ -99,7 +101,7 @@ export interface ApiVerificationDetail {
 }
 
 export interface VerifyExpertPayload {
-  documentKey?: string; // publicId value from the document being verified
+  documentKey?: string;
   verify?:      boolean;
   reject?:      boolean;
   reason?:      string;
@@ -109,7 +111,8 @@ export interface VerifyExpertPayload {
 interface VerificationListResponse {
   status:  boolean;
   message: string;
-  data:    Omit<ApiVerificationSummary, "id">[];
+  // Backend may or may not include `id` — we handle both cases
+  data:    (Partial<ApiVerificationSummary> & { email: string; name: string })[];
 }
 
 interface VerificationDetailResponse {
@@ -124,7 +127,13 @@ interface VerifyResponse {
   data:    null;
 }
 
-const encodeId = (id: string) => id.split("/").map(encodeURIComponent).join("%2F");
+// ── ID encoding ───────────────────────────────────────────────────────────────
+// Real ID format: "EXPERT-032-05-26" (dashes only — safe for URL path as-is)
+// Legacy format:  "EXPERT-032/05/26" (slashes must be encoded)
+// We encode each slash-separated segment, joining with %2F.
+// Dash-only IDs pass through unchanged since they have no slashes to encode.
+export const encodeId = (id: string) =>
+  id.split("/").map(encodeURIComponent).join("%2F");
 
 // ── Tier normalisation ────────────────────────────────────────────────────────
 export function normaliseTier(raw: unknown): VerificationTier {
@@ -135,7 +144,12 @@ export function normaliseTier(raw: unknown): VerificationTier {
   return "tier1";
 }
 
-// ── Status normalisation ──────────────────────────────────────────────────────
+// ── Verification status normalisation ────────────────────────────────────────
+// `status` on the list is the USER ACCOUNT status ("active", "inactive", "pending").
+// Only `verify` determines whether a verification is approved.
+//   verify: true / "approved" / "verified"  --> approved
+//   verify: "rejected"                      --> rejected
+//   everything else                         --> pending
 export function normaliseVerificationStatus(
   status:  string,
   verify?: boolean | string,
@@ -145,10 +159,8 @@ export function normaliseVerificationStatus(
     const v = verify.toLowerCase();
     if (v === "approved" || v === "verified") return "approved";
     if (v === "rejected") return "rejected";
-    if (v === "pending")  return "pending";
   }
   const s = (status ?? "").toLowerCase();
-  if (s === "active" || s === "approved" || s === "verified") return "approved";
   if (s === "rejected") return "rejected";
   return "pending";
 }
@@ -169,14 +181,29 @@ export function docLabel(summary: ApiVerificationSummary): string {
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
+// GET /api/admin/experts/verification
+// Injects a stable `id`:
+//   1. Use `id` field from backend if present (preferred)
+//   2. Fall back to `email` (unique, works for detail endpoint lookup by email)
 export const getAllVerifications = async (): Promise<ApiVerificationSummary[]> => {
-  const { data } = await axiosInstance.get<VerificationListResponse>("/admin/experts/verification");
+  const { data } = await axiosInstance.get<VerificationListResponse>(
+    "/admin/experts/verification"
+  );
   return (data.data ?? []).map((item, index) => ({
+    documents:      [],
+    totalDocuments: 0,
+    status:         "pending",
+    submitted:      "",
     ...item,
-    id: item.email ?? `item-${index}`,
-  }));
+    // id priority: backend id field > email > fallback index string
+    id: (item as Record<string, unknown>).id as string
+        ?? item.email
+        ?? `item-${index}`,
+  })) as ApiVerificationSummary[];
 };
 
+// GET /api/admin/experts/verification/{id}?type=expert|tas
+// ID format: "EXPERT-032-05-26" (dashes) or legacy "EXPERT-032/05/26" (slashes)
 export const getVerificationById = async (
   id:   string,
   type: VerificationType,
