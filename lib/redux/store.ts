@@ -1,23 +1,28 @@
 import { configureStore } from "@reduxjs/toolkit";
-import counterReducer      from "./counterSlice";
-import authReducer         from "./authSlice";
-import usersReducer        from "./usersSlice";
-import categoriesReducer   from "./categoriesSlice";
-import jobsReducer         from "./jobSlice";
-import adminReducer        from "./adminSlice";
-import disputeReducer      from "./disputeSlice";
-import bannerReducer       from "./bannerSlice";
-import announcementReducer from "./announcementSlice";
-import verificationReducer from "./verificationSlice";
-import tasReducer          from "./tasSlice";
-import paymentReducer      from "./paymentSlice";
-import reportReducer       from "./reportSlice";
-import faqReducer          from "./faqSlice";
-import notificationReducer from "./notificationtemplateSlice";
-import commissionReducer   from "./commissionSlice";
-import notificationsReducer from "./notificationSlice";
-import tastierReducer from "./tastierSlice";
-import verificationsettingsReducer from "./verificationSettingsSlice"
+import counterReducer             from "./counterSlice";
+import authReducer                from "./authSlice";
+import usersReducer               from "./usersSlice";
+import categoriesReducer          from "./categoriesSlice";
+import jobsReducer                from "./jobSlice";
+import adminReducer               from "./adminSlice";
+import disputeReducer             from "./disputeSlice";
+import bannerReducer              from "./bannerSlice";
+import announcementReducer        from "./announcementSlice";
+import verificationReducer        from "./verificationSlice";         // old — keep for other pages
+import tasReducer                 from "./tasSlice";                  // old — keep for other pages
+import paymentReducer             from "./paymentSlice";
+import reportReducer              from "./reportSlice";
+import faqReducer                 from "./faqSlice";
+import notificationReducer        from "./notificationtemplateSlice";
+import commissionReducer          from "./commissionSlice";
+import notificationsReducer       from "./notificationSlice";
+import tastierReducer             from "./tastierSlice";              // new TAS tier settings
+import verificationsettingsReducer from "./verificationSettingsSlice"; // new verification settings
+import dashboardReducer           from "./dashboardSlice";
+import scheduledReportsReducer    from "./schedduleReportSlice";
+import reportTemplatesReducer     from "./reportTemplatesSlice";
+import notificationSettingsReducer from "./notificationSettingsSlice"
+
 export const store = configureStore({
   reducer: {
     counter:               counterReducer,
@@ -29,16 +34,20 @@ export const store = configureStore({
     disputes:              disputeReducer,
     banners:               bannerReducer,
     announcements:         announcementReducer,
-    verifications:         verificationReducer,
-    tas:                   tasReducer,
+    verifications:         verificationReducer,        // old slice — other pages use s.verifications
+    tas:                   tasReducer,                 // old slice — other pages use s.tas
     payments:              paymentReducer,
     report:                reportReducer,
     faq:                   faqReducer,
-    notificationTemplates: notificationReducer,  // was: notifications
+    notificationTemplates: notificationReducer,
     commission:            commissionReducer,
-    notifications:         notificationsReducer, // was: notification
-    tastier:               tastierReducer,
-    verification:          verificationsettingsReducer,
+    notifications:         notificationsReducer,
+    tastier:               tastierReducer,             // new TAS tier settings slice
+    verificationSettings:  verificationsettingsReducer, // new verification settings slice  ← renamed from 'verification'
+    dashboard:             dashboardReducer,
+    scheduledReports:      scheduledReportsReducer,
+    reportTemplates:       reportTemplatesReducer,
+    notificationSettings: notificationSettingsReducer,
   },
 });
 

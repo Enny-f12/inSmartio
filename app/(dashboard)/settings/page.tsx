@@ -9,7 +9,7 @@ import CategoriesManagement   from "@/components/settings/CategoriesMnagement";
 import FaqManagement          from "@/components/settings/FaqManagement";
 import BannerManagement       from "@/components/settings/BannerManagement";
 import AnnouncementManagement from "@/components/settings/AnnouncementManagement";
-//import CommissionSettings     from "@/components/settings/CommisionSettings";
+import CommissionSettings     from "@/components/settings/CommisionSettings";
 import NotificationTemplates  from "@/components/settings/Notification";
 import NotificationSettings   from "@/components/settings/NotificationSettings";
 import AdminManagement        from "@/components/settings/AdminManagement";
@@ -45,7 +45,7 @@ function SettingsInner() {
   if (view === "faq")            return <FaqManagement          onBack={() => setView("main")} />;
   if (view === "banners")        return <BannerManagement       onBack={() => setView("main")} />;
   if (view === "announcements")  return <AnnouncementManagement onBack={() => setView("main")} />;
- // if (view === "commission")     return <CommissionSettings      onBack={() => setView("main")} />;
+ if (view === "commission")     return <CommissionSettings      onBack={() => setView("main")} />;
   if (view === "notifications")  return <NotificationTemplates  onBack={() => setView("main")} />;
   if (view === "notif-settings") return <NotificationSettings   onBack={() => setView("main")} />;
   if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />;

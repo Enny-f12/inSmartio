@@ -15,9 +15,25 @@ import { toast } from "sonner";
 
 type AppTab  = "pending" | "approved" | "rejected";
 type MainTab = "applications" | "active";
-
-// Local override map: id → "approved" | "rejected"
 type LocalOverride = Record<string, "approved" | "rejected">;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Route by status:
+// status === "active"   → Active TAS Agents tab
+// status === "inactive" → Applications tab (pending)
+//
+// NOTE FOR BACKEND: The API must return status as a plain string:
+//   "active" | "inactive" | "suspended"
+// Currently the field may arrive as boolean or object — this guard handles both.
+const isVerified = (t: ApiTas) => {
+  const s = t.status;
+  if (!s) return false;
+  if (typeof s === "boolean") return s === true;
+  if (typeof s === "object")  return false; // unexpected shape — treat as not verified
+  return String(s).toLowerCase() === "active";
+};
+const isApplication = (t: ApiTas) => !isVerified(t);
 
 // ── Tier config ───────────────────────────────────────────────────────────────
 
@@ -33,12 +49,11 @@ const TAS_TIERS = [
 const getTierBonus = (tier: number) => TAS_TIERS.find((t) => t.value === tier)?.bonus ?? "—";
 const getTierLabel = (tier: number) => TAS_TIERS.find((t) => t.value === tier)?.label ?? `Tier ${tier}`;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 const fmtMoney = (n?: number | null) =>
   n != null ? `₦${Number(n).toLocaleString()}` : "—";
 
-const statusBadge = (s: string) => {
+const statusBadge = (s: unknown) => {
+  const str = s != null && typeof s !== "object" ? String(s) : "";
   const map: Record<string, { bg: string; color: string }> = {
     pending:   { bg: "#FEF3C7", color: "#B45309" },
     approved:  { bg: "#D1FAE5", color: "#065F46" },
@@ -47,12 +62,13 @@ const statusBadge = (s: string) => {
     inactive:  { bg: "#FEF3C7", color: "#B45309" },
     suspended: { bg: "#FEE2E2", color: "#991B1B" },
   };
-  const key = (s ?? "").toLowerCase();
+  const key = str.toLowerCase();
   const c = map[key] ?? { bg: "#F3F4F6", color: "#374151" };
+  const label = str ? str.charAt(0).toUpperCase() + str.slice(1) : "—";
   return (
     <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999,
       backgroundColor: c.bg, color: c.color, whiteSpace: "nowrap" }}>
-      {s.charAt(0).toUpperCase() + s.slice(1)}
+      {label}
     </span>
   );
 };
@@ -80,8 +96,8 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
   agent:     ApiTas;
   appStatus: AppTab;
   onClose:   () => void;
-  onApprove: (id: string) => Promise<void>;
-  onReject:  (id: string, reason: string) => Promise<void>;
+  onApprove: (id: string, documentKey: string) => Promise<void>;
+  onReject:  (id: string, reason: string, documentKey: string) => Promise<void>;
 }) {
   const [rejectOpen,   setRejectOpen]   = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -91,9 +107,9 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
   const toggleDoc = (key: string) =>
     setDocChecks((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  // Backend sends document as array: [{ type: "nin slip", secureUrl: "...", verify, reject }]
-  // Also handle the data.user nesting from getTasById response
   const rawAgent = ((agent as Record<string, unknown>).user as ApiTas | undefined) ?? agent;
+
+  // document can be array (new API) or object (old API)
   const docArray = (rawAgent.document ?? agent.document) as {
     type: string; secureUrl?: string; url?: string; verify?: boolean; reject?: boolean;
   }[] | Record<string, string> | null;
@@ -116,16 +132,23 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
 
   const mailHref = `mailto:${rawAgent.email}?subject=${encodeURIComponent("TAS Application – More Information Needed")}&body=${encodeURIComponent(`Dear ${rawAgent.name},\n\nWe need more information regarding your TAS application.\n\nThank you.`)}`;
 
+  // Extract publicId value, stored as documentKey
+  const documentKey = Array.isArray(docArray)
+    ? ((docArray as unknown as { publicId?: string }[])[0]?.publicId ?? "")
+    : "";
+
   const handleApprove = async () => {
     setLoading(true);
-    try { await onApprove(agent.id); } finally { setLoading(false); }
+    try { await onApprove(agent.id, documentKey); } finally { setLoading(false); }
   };
 
   const handleReject = async () => {
     if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
     setLoading(true);
-    try { await onReject(agent.id, rejectReason.trim()); } finally { setLoading(false); }
+    try { await onReject(agent.id, rejectReason.trim(), documentKey); } finally { setLoading(false); }
   };
+
+  const re = rawAgent.recruitExpectations as Record<string, unknown> | string | null;
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 50,
@@ -144,31 +167,37 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
           {/* Applicant Info */}
           <div>
             <p style={sectionLabel}>Applicant Information</p>
-            <InfoRow label="Name:"          value={rawAgent.name} />
-            <InfoRow label="Phone:"         value={rawAgent.phone} />
-            <InfoRow label="Email:"         value={rawAgent.email} />
-            <InfoRow label="TAS ID:"        value={(rawAgent.applicationCode as string) ?? rawAgent.id} />
-            <InfoRow label="Submitted:"     value={new Date(rawAgent.createdAt).toLocaleDateString("en-GB")} />
-            {(() => {
-              const re = rawAgent.recruitExpectations as Record<string, unknown> | string | null;
-              if (!re) return null;
-              if (typeof re === "string") return <InfoRow label="Recruit Exp.:" value={re} />;
-              return (
-                <>
-                  {re.area            && <InfoRow label="Area:"               value={String(re.area)} />}
-                  {re.years           && <InfoRow label="Years Exp.:"         value={String(re.years)} />}
-                  {re.networkSize     && <InfoRow label="Network Size:"       value={String(re.networkSize)} />}
-                  {re.recruitCountMonthly && <InfoRow label="Monthly Recruits:" value={String(re.recruitCountMonthly)} />}
-                  {re.selectedCategories  && <InfoRow label="Categories:"       value={Array.isArray(re.selectedCategories) ? (re.selectedCategories as string[]).join(", ") : String(re.selectedCategories)} />}
-                  {re.recruitmentExperienceDescription && <InfoRow label="Experience:" value={String(re.recruitmentExperienceDescription)} />}
-                </>
-              );
-            })()}
+            <InfoRow label="Name:"      value={rawAgent.name} />
+            <InfoRow label="Phone:"     value={rawAgent.phone} />
+            <InfoRow label="Email:"     value={rawAgent.email} />
+            <InfoRow label="TAS ID:"    value={(rawAgent.applicationCode as string) ?? rawAgent.id} />
+            <InfoRow label="Submitted:" value={new Date(rawAgent.createdAt).toLocaleDateString("en-GB")} />
+            <InfoRow label="Status:"    value={statusBadge(rawAgent.status ?? "inactive")} />
+            <InfoRow label="Verify:"    value={statusBadge(String(rawAgent.verify ?? "pending"))} />
+            {/* Categories */}
+            {Array.isArray(rawAgent.category) && rawAgent.category.length > 0 && (
+              <InfoRow label="Categories:" value={(rawAgent.category as string[]).join(", ")} />
+            )}
+            {/* Recruit expectations */}
+            {re && typeof re === "object" && (
+              <>
+                {re.area              && <InfoRow label="Area:"               value={String(re.area)} />}
+                {re.years             && <InfoRow label="Years Exp.:"         value={String(re.years)} />}
+                {re.networkSize       && <InfoRow label="Network Size:"       value={String(re.networkSize)} />}
+                {re.recruitCountMonthly && <InfoRow label="Monthly Recruits:" value={String(re.recruitCountMonthly)} />}
+                {re.recruitmentExperienceDescription && (
+                  <InfoRow label="Experience:" value={String(re.recruitmentExperienceDescription)} />
+                )}
+              </>
+            )}
           </div>
 
           {/* Documents */}
           <div>
             <p style={sectionLabel}>Documents</p>
+            {docList.length === 0 && (
+              <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic" }}>No documents uploaded.</p>
+            )}
             {docList.map((doc) => {
               const isChecked = !!docChecks[doc.label];
               return (
@@ -177,22 +206,18 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
                   <span style={{ flex: 1, fontSize: 13, color: "#111827" }}>{doc.label}</span>
                   {doc.url ? (
                     <>
-                      {/* View — opens PDF/image in new tab */}
-                      <a href={doc.url} target="_blank" rel="noreferrer"
-                        title="View" style={{ color: "#9CA3AF", display: "flex", alignItems: "center" }}>
+                      <a href={doc.url} target="_blank" rel="noreferrer" title="View"
+                        style={{ color: "#9CA3AF", display: "flex", alignItems: "center" }}>
                         <Eye size={15} strokeWidth={1.8} />
                       </a>
-                      {/* Download — forces download as PDF */}
-                      <a href={doc.url} download={`${doc.label}.pdf`}
-                        title="Download" style={{ color: "#9CA3AF", display: "flex", alignItems: "center" }}>
+                      <a href={doc.url} download={`${doc.label}.pdf`} title="Download"
+                        style={{ color: "#9CA3AF", display: "flex", alignItems: "center" }}>
                         <Download size={15} strokeWidth={1.8} />
                       </a>
-                      {/* Verified checkbox */}
                       <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
                         fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
                         color: isChecked ? "#16a34a" : "#d97706" }}>
-                        <input type="checkbox" checked={isChecked}
-                          onChange={() => toggleDoc(doc.label)}
+                        <input type="checkbox" checked={isChecked} onChange={() => toggleDoc(doc.label)}
                           style={{ accentColor: "#16a34a", width: 14, height: 14 }} />
                         {isChecked ? "Verified" : "Pending"}
                       </label>
@@ -222,12 +247,12 @@ function AppModal({ agent, appStatus, onClose, onApprove, onReject }: {
                   boxSizing: "border-box", backgroundColor: "#F9FAFB" }} />
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => { setRejectOpen(false); setRejectReason(""); }}
-                  style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #E5E7EB",
+                  style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid #E5E7EB",
                     backgroundColor: "#fff", fontSize: 13, cursor: "pointer", color: "#6B7280" }}>
                   Cancel
                 </button>
                 <button onClick={handleReject} disabled={loading}
-                  style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none",
+                  style={{ flex: 1, padding: 10, borderRadius: 10, border: "none",
                     backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600,
                     cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -302,7 +327,7 @@ function AdjustTierModal({ agent, onClose }: { agent: ApiTas; onClose: () => voi
           </p>
           <p style={{ fontSize: 13, color: "#374151", margin: "0 0 16px" }}>
             <span style={{ color: "#6B7280" }}>Current Tier: </span>
-            {currentTier} ({getTierLabel(currentTier).replace(`Tier ${currentTier} (`, "").replace(")", "")})
+            {currentTier}
           </p>
           <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 10px" }}>New Tier:</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
@@ -318,7 +343,7 @@ function AdjustTierModal({ agent, onClose }: { agent: ApiTas; onClose: () => voi
           </div>
           <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 8px" }}>Reason:</p>
           <textarea value={reason} onChange={(e) => setReason(e.target.value)}
-            placeholder="enter reason…." rows={3}
+            placeholder="Enter reason…" rows={3}
             style={{ width: "100%", borderRadius: 8, border: "1px solid #E5E7EB",
               padding: "10px 12px", fontSize: 13, color: "#111827", resize: "none",
               outline: "none", boxSizing: "border-box", backgroundColor: "#F9FAFB" }} />
@@ -358,10 +383,7 @@ function AgentDetail({ agentId, fallback, onBack }: {
   const agent     = selected ?? fallback;
   const isLoading = selectedStatus === "loading";
   const tierNum   = Number(agent.tier ?? 1);
-  const tierBonus = getTierBonus(tierNum);
-  const tasId     = (agent.applicationCode as string) ?? agent.id;
-  const joinDate  = new Date(agent.createdAt).toLocaleDateString("en-GB");
-  const expertsObj   = agent.experts as { total?: number; active?: number } | null;
+  const expertsObj    = agent.experts as { total?: number; active?: number } | null;
   const totalEarnings    = fmtMoney((agent as Record<string, unknown>).totalEarnings    as number | undefined);
   const thisMonth        = fmtMoney((agent as Record<string, unknown>).thisMonth        as number | undefined);
   const availableBalance = fmtMoney((agent as Record<string, unknown>).availableBalance as number | undefined);
@@ -403,14 +425,14 @@ function AgentDetail({ agentId, fallback, onBack }: {
         <div style={{ padding: "20px 32px 100px", flex: 1, overflowY: "auto" }}>
           <div style={{ backgroundColor: "#fff", borderRadius: 16, border: "1px solid #E5E7EB", overflow: "hidden" }}>
             <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
-              <p style={sectionLabel}>Job Information</p>
+              <p style={sectionLabel}>Agent Information</p>
               <InfoRow label="Name:"   value={agent.name} />
-              <InfoRow label="TAS ID:" value={tasId} />
+              <InfoRow label="TAS ID:" value={(agent.applicationCode as string) ?? agent.id} />
               <InfoRow label="Phone:"  value={agent.phone} />
               <InfoRow label="Email:"  value={agent.email} />
               <InfoRow label="Tier:"   value={`${tierNum} (${getTierLabel(tierNum).replace(`Tier ${tierNum} (`, "").replace(")", "")})`} />
-              <InfoRow label="Bonus:"  value={tierBonus} />
-              <InfoRow label="Joined:" value={joinDate} />
+              <InfoRow label="Bonus:"  value={getTierBonus(tierNum)} />
+              <InfoRow label="Joined:" value={new Date(agent.createdAt).toLocaleDateString("en-GB")} />
               <div style={{ display: "flex", gap: 8, fontSize: 13, alignItems: "center" }}>
                 <span style={{ minWidth: 165, color: "#6B7280" }}>Status:</span>
                 {statusBadge(agent.status ?? "active")}
@@ -419,7 +441,7 @@ function AgentDetail({ agentId, fallback, onBack }: {
             <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Performance Metrics</p>
               <InfoRow label="Total Experts Recruited:"      value={expertsObj?.total != null ? String(expertsObj.total) : "—"} />
-              <InfoRow label="Active Experts (3-month avg):" value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
+              <InfoRow label="Active Experts:"               value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
               <InfoRow label="Total Earnings:"               value={totalEarnings} />
               <InfoRow label="This Month:"                   value={thisMonth} />
               <InfoRow label="Available Balance:"            value={availableBalance} />
@@ -470,18 +492,26 @@ function AgentDetail({ agentId, fallback, onBack }: {
   );
 }
 
-// ── Applications Tab — verify === false ───────────────────────────────────────
+// ── Applications Tab ──────────────────────────────────────────────────────────
 
 function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
+  // Same pattern as VerificationModal — s.auth.admin.id
+  const { admin } = useAppSelector((s) => s.auth);
+  const adminId = (admin as Record<string, string> | null)?.id ?? "";
   const [appTab,         setAppTab]         = useState<AppTab>("pending");
   const [search,         setSearch]         = useState("");
   const [selected,       setSelected]       = useState<ApiTas | null>(null);
   const [localOverrides, setLocalOverrides] = useState<LocalOverride>({});
 
-  // Derive tab status: use local override first, then verify flag
+  // Derive tab — local override wins, then use status/verify
+  // inactive → pending tab | approved/active → approved tab | rejected → rejected tab
   const getAppStatus = (a: ApiTas): AppTab => {
     if (localOverrides[a.id]) return localOverrides[a.id];
-    return "pending"; // all unverified TAS are pending until admin acts
+    const status = a.status != null && typeof a.status !== "object" ? String(a.status).toLowerCase() : "";
+    const verify = a.verify != null && typeof a.verify !== "object" ? String(a.verify).toLowerCase() : "pending";
+    if (status === "active" || verify === "approved") return "approved";
+    if (verify === "rejected")                        return "rejected";
+    return "pending";
   };
 
   const counts = {
@@ -496,24 +526,34 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
     return matchTab && matchSearch;
   });
 
-  const handleApprove = async (id: string) => {
-    await verifyTas(id, { verify: true, reject: false });
-    setLocalOverrides((prev) => ({ ...prev, [id]: "approved" }));
-    setSelected(null);
-    toast.success("TAS application approved");
+  const handleApprove = async (id: string, documentKey: string) => {
+    try {
+      await verifyTas(id, { verify: true, reject: false, adminId, documentKey });
+      setLocalOverrides((prev) => ({ ...prev, [id]: "approved" }));
+      setSelected(null);
+      toast.success("TAS application approved");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Approval failed";
+      toast.error("Failed to approve application", { description: msg });
+    }
   };
 
-  const handleReject = async (id: string, reason: string) => {
-    await verifyTas(id, { verify: false, reject: true, reason });
-    setLocalOverrides((prev) => ({ ...prev, [id]: "rejected" }));
-    setSelected(null);
-    toast.success("TAS application rejected");
+  const handleReject = async (id: string, reason: string, documentKey: string) => {
+    try {
+      await verifyTas(id, { verify: false, reject: true, reason, adminId, documentKey });
+      setLocalOverrides((prev) => ({ ...prev, [id]: "rejected" }));
+      setSelected(null);
+      toast.success("TAS application rejected");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Rejection failed";
+      toast.error("Failed to reject application", { description: msg });
+    }
   };
 
   const appTabs: { key: AppTab; label: string }[] = [
-    { key: "pending",  label: "Pending"  },
-    { key: "approved", label: "Approved" },
-    { key: "rejected", label: "Rejected" },
+    { key: "pending",  label: "Pending (Inactive)"  },
+    { key: "approved", label: "Approved (Active)"   },
+    { key: "rejected", label: "Rejected"             },
   ];
 
   return (
@@ -555,7 +595,7 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                {["Name", "TAS ID", "Email", "Submitted", "Actions"].map((h) => (
+                {["Name", "TAS ID", "Email", "Submitted", "Status", "Actions"].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: 12,
                     fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
                 ))}
@@ -563,7 +603,7 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: "center", padding: 48, fontSize: 13, color: "#9CA3AF" }}>
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 48, fontSize: 13, color: "#9CA3AF" }}>
                   No {appTab} applications.
                 </td></tr>
               ) : filtered.map((agent) => (
@@ -576,6 +616,7 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
                   <td style={{ padding: "15px 24px", fontSize: 13, color: "#6B7280" }}>
                     {new Date(agent.createdAt).toLocaleDateString("en-GB")}
                   </td>
+                  <td style={{ padding: "15px 24px" }}>{statusBadge(agent.status ?? "inactive")}</td>
                   <td style={{ padding: "15px 24px" }}>
                     {appTab === "pending" ? (
                       <button onClick={() => setSelected(agent)}
@@ -603,7 +644,7 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
           padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
           <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
-            Showing 1–{filtered.length} of {filtered.length} results
+            Showing {filtered.length} of {agents.length} results
           </p>
         </div>
       </div>
@@ -621,7 +662,7 @@ function ApplicationsTab({ agents }: { agents: ApiTas[] }) {
   );
 }
 
-// ── Active TAS Agents Tab — verify === true ───────────────────────────────────
+// ── Active TAS Agents Tab ─────────────────────────────────────────────────────
 
 function ActiveAgentsTab({ agents }: { agents: ApiTas[] }) {
   const [search,     setSearch]     = useState("");
@@ -664,7 +705,7 @@ function ActiveAgentsTab({ agents }: { agents: ApiTas[] }) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-              {["Name", "TAS ID", "Tier", "Experts", "Earnings", "Actions"].map((h) => (
+              {["Name", "TAS ID", "Tier", "Experts", "Earnings", "Status", "Actions"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: 12,
                   fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
               ))}
@@ -672,7 +713,7 @@ function ActiveAgentsTab({ agents }: { agents: ApiTas[] }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", padding: 48, fontSize: 13, color: "#9CA3AF" }}>No active agents found.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, fontSize: 13, color: "#9CA3AF" }}>No active agents found.</td></tr>
             ) : filtered.map((agent) => {
               const expertsCount = (agent.experts as { total?: number } | null)?.total ?? "—";
               const earnings     = fmtMoney((agent as Record<string, unknown>).totalEarnings as number | undefined);
@@ -683,6 +724,7 @@ function ActiveAgentsTab({ agents }: { agents: ApiTas[] }) {
                   <td style={{ padding: "15px 24px", fontSize: 13, color: "#374151" }}>{agent.tier ?? "—"}</td>
                   <td style={{ padding: "15px 24px", fontSize: 13, color: "#374151" }}>{expertsCount}</td>
                   <td style={{ padding: "15px 24px", fontSize: 13, fontWeight: 500, color: "#111827" }}>{earnings}</td>
+                  <td style={{ padding: "15px 24px" }}>{statusBadge(agent.status ?? "active")}</td>
                   <td style={{ padding: "15px 24px" }}>
                     <button onClick={() => setSelectedId(agent.id)}
                       style={{ padding: 6, borderRadius: 8, border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex" }}>
@@ -699,7 +741,7 @@ function ActiveAgentsTab({ agents }: { agents: ApiTas[] }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
         padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
         <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
-          Showing 1–{filtered.length} of {agents.length} results
+          Showing {filtered.length} of {agents.length} results
         </p>
       </div>
     </div>
@@ -717,9 +759,9 @@ export default function TASPage() {
     if (listStatus === "idle") dispatch(fetchTas());
   }, [dispatch, listStatus]);
 
-  // Split on verify flag
-  const applications = list.filter((t) => t.verify === false);
-  const activeAgents  = list.filter((t) => t.verify === true);
+  // ✅ Fixed: verify is a string ("pending" | "approved" | "rejected"), not boolean
+  const applications = list.filter((t) => isApplication(t));
+  const activeAgents  = list.filter((t) => isVerified(t));
 
   const tabs = [
     { key: "applications" as MainTab, label: "Applications",      count: applications.length },
@@ -736,20 +778,20 @@ export default function TASPage() {
             <Loader2 size={18} className="animate-spin" /> Loading TAS data…
           </div>
         )}
-        {listStatus === "failed" && (
+        {listStatus === "failed" && list.length === 0 && (
           <p style={{ textAlign: "center", padding: 40, fontSize: 13, color: "#ef4444" }}>{listError}</p>
         )}
 
-        {listStatus !== "loading" && (
+        {(listStatus === "succeeded" || listStatus === "failed") && (
           <>
             <div style={{ display: "flex", gap: 8 }}>
               {tabs.map((t) => (
                 <button key={t.key} onClick={() => setMainTab(t.key)}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 22px",
                     borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                    border:          mainTab === t.key ? "none"      : "1px solid #D1D5DB",
-                    backgroundColor: mainTab === t.key ? "#2563eb"   : "#fff",
-                    color:           mainTab === t.key ? "#fff"      : "#6B7280" }}>
+                    border:          mainTab === t.key ? "none"    : "1px solid #D1D5DB",
+                    backgroundColor: mainTab === t.key ? "#2563eb" : "#fff",
+                    color:           mainTab === t.key ? "#fff"    : "#6B7280" }}>
                   {t.label}
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999,
                     backgroundColor: mainTab === t.key ? "rgba(255,255,255,0.25)" : "#E5E7EB",

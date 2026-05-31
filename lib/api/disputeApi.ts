@@ -4,8 +4,14 @@ import axiosInstance from "@/lib/api/axiosInstance";
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
 export type DisputeStatus   = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
 
+export interface MediationNote {
+  date: string;
+  time: string;
+  note: string;
+}
+
 export interface DisputeParty {
-  name: string;
+  name:      string;
   id:        string;
   statement: string;
   evidence:  string[];
@@ -20,8 +26,11 @@ export interface ApiDispute {
   amountInEscrows: number;
   client:          DisputeParty;
   expert:          DisputeParty;
-  chatId:          string;
+  chatId:          string | null;
+  mediation:       MediationNote;   // ← object, not array
   status?:         DisputeStatus;
+  resolution?:     string | null;
+  decisionReason?: string | null;
   createdAt?:      string;
   updatedAt?:      string;
 }
@@ -41,7 +50,6 @@ export interface UpdateDisputePayload extends Partial<CreateDisputePayload> {
   status?: DisputeStatus;
 }
 
-// ── Resolution enum — matches backend exactly ─────────────
 export type ResolutionType =
   | "REFUND_EXPERT"
   | "REFUND_CLIENT"
@@ -51,15 +59,18 @@ export type ResolutionType =
   | "DISMISS_DISPUTE"
   | "RE_PERFORM";
 
-// POST /api/dispute/{id}/resolve
 export interface ResolveDisputePayload {
   resolution: ResolutionType;
   reason:     string;
 }
 
-// POST /api/dispute/{id}/appeal
 export interface AppealDisputePayload {
   reason: string;
+}
+
+// PUT /api/dispute/{id}/mediation — single mediation object
+export interface AddMediationPayload {
+  mediation: MediationNote;
 }
 
 interface DisputesResponse {
@@ -103,7 +114,6 @@ export const deleteDispute = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/dispute/${id}`);
 };
 
-// POST /api/dispute/{id}/resolve — Submit Decision
 export const resolveDispute = async (
   id:      string,
   payload: ResolveDisputePayload,
@@ -112,11 +122,20 @@ export const resolveDispute = async (
   return data.data;
 };
 
-// POST /api/dispute/{id}/appeal — Appeal Later
 export const appealDispute = async (
   id:      string,
   payload: AppealDisputePayload,
 ): Promise<ApiDispute> => {
   const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/appeal`, payload);
+  return data.data;
+};
+
+// ✅ Changed to PUT — sends single mediation object matching backend shape:
+// { mediation: { date: "2026-05-19", time: "14:30", note: "..." } }
+export const addMediationNote = async (
+  id:      string,
+  payload: AddMediationPayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.put<DisputeResponse>(`/dispute/${id}/mediation`, payload);
   return data.data;
 };

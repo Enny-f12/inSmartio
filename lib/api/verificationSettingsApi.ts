@@ -1,6 +1,6 @@
+// lib/api/verificationSettingsApi.ts
 import axiosInstance from "./axiosInstance";
 
-// ── TYPES & INTERFACES ──────────────────────────────────────────────────────
 export interface VerificationSettingsData {
   tier1MaxJobValue: number;
   tier2MaxJobValue: number;
@@ -9,46 +9,41 @@ export interface VerificationSettingsData {
 }
 
 export interface VerificationSettings extends VerificationSettingsData {
-  id: string;
+  id:         string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-// ── API METHODS ─────────────────────────────────────────────────────────────
+interface Envelope<T> { status: boolean; message: string; data: T; }
+
 export const verificationSettingsApi = {
-  // GET /api/settings/verification
   fetchAll: async (): Promise<VerificationSettings[]> => {
-    const response = await axiosInstance.get<VerificationSettings[]>("/api/settings/verification");
-    return response.data;
+    const { data } = await axiosInstance.get<Envelope<VerificationSettings[]>>("/settings/verification");
+    return data.data ?? [];
   },
 
-  // GET /api/settings/verification/{id}
   fetchById: async (id: string): Promise<VerificationSettings> => {
-    const response = await axiosInstance.get<VerificationSettings>(`/api/settings/verification/${id}`);
-    return response.data;
+    const { data } = await axiosInstance.get<Envelope<VerificationSettings>>(`/settings/verification/${id}`);
+    return data.data;
   },
 
-  // POST /api/settings/verification/create
-  create: async (data: VerificationSettingsData): Promise<VerificationSettings> => {
-    const response = await axiosInstance.post<VerificationSettings>("/api/settings/verification/create", data);
-    return response.data;
+  create: async (payload: VerificationSettingsData): Promise<VerificationSettings> => {
+    const { data } = await axiosInstance.post<Envelope<VerificationSettings>>("/settings/verification/create", payload);
+    return data.data;
   },
 
-  // PUT /api/settings/verification/{id}
-  update: async (id: string, data: VerificationSettingsData): Promise<VerificationSettings> => {
-    const response = await axiosInstance.put<VerificationSettings>(`/api/settings/verification/${id}`, data);
-    return response.data;
+  update: async (id: string, payload: VerificationSettingsData): Promise<VerificationSettings> => {
+    const { data } = await axiosInstance.put<Envelope<VerificationSettings>>(`/settings/verification/${id}`, payload);
+    return data.data;
   },
 
-  // DELETE /api/settings/verification/{id}
   delete: async (id: string): Promise<string> => {
-    await axiosInstance.delete(`/api/settings/verification/${id}`);
+    await axiosInstance.delete(`/settings/verification/${id}`);
     return id;
   },
 
-  // PATCH /api/settings/verification/{id}/toggle-status
   toggleStatus: async (id: string): Promise<VerificationSettings> => {
-    const response = await axiosInstance.patch<VerificationSettings>(`/api/settings/verification/${id}/toggle-status`);
-    return response.data;
+    const { data } = await axiosInstance.patch<Envelope<VerificationSettings>>(`/settings/verification/${id}/toggle-status`);
+    return data.data;
   },
 };
