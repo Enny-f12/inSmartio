@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Users, ShieldCheck, DollarSign, TrendingUp, Activity, AlertTriangle } from "lucide-react";
+import { Users, Briefcase, DollarSign, TrendingUp, Activity, AlertTriangle } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
@@ -106,15 +106,15 @@ export default function DashboardPage() {
   // ── Stat cards ────────────────────────────────────────────────────────────
   const isStatsLoading = statsStatus === "loading" || statsStatus === "idle";
   const s = adminStats as {
-    totalUsers?: number; verifiedExperts?: number;
+    totalUsers?: number; jobs?: number;
     revenue?: number; growthRate?: number;
   } | null;
 
   const stats = [
-    { label: "Total Users",      value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                   icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
-    { label: "Verified Experts", value: isStatsLoading ? "—" : String(s?.verifiedExperts ?? "—"),              icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
-    { label: "Revenue",          value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`, icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
-    { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                      icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
+    { label: "Total Users", value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                    icon: Users,     iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Total Jobs",  value: isStatsLoading ? "—" : String(s?.jobs ?? "—"),                          icon: Briefcase, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",     value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,  icon: DollarSign, iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",      value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                       icon: TrendingUp, iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
   // ── User growth chart ─────────────────────────────────────────────────────
@@ -321,7 +321,6 @@ export default function DashboardPage() {
                 <Activity size={15} color="#374151" />
                 Recent Activity
               </p>
-              
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
               {recentActivityStatus === "loading" || recentActivityStatus === "idle" ? (

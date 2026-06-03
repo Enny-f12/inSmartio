@@ -425,7 +425,7 @@ export default function ReportsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-      <Topbar title="Reports" />
+      <Topbar title="Reports and Analytics" />
 
       <style>{`
         .report-main { padding: 12px; gap: 16px; }
