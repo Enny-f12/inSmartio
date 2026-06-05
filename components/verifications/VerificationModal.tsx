@@ -144,12 +144,6 @@ function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[]
   return docs;
 }
 
-/**
- * documentKey = the `id` field on each document entry (Cloudinary path).
- * Matches the TAS pattern: { id: "experts/documents/abc123", url: "...", type: "...", verify: false }
- * The expert detail endpoint returns document as a keyed object { "0": {...}, "1": {...} }
- * rather than an array, but the inner shape is the same.
- */
 function resolveDocumentKey(detail: ApiVerificationDetail): string | undefined {
   const raw = detail.document as Record<string, unknown> | null | undefined;
   if (!raw || typeof raw !== "object") return undefined;
@@ -157,6 +151,8 @@ function resolveDocumentKey(detail: ApiVerificationDetail): string | undefined {
   for (const idx of indices) {
     const el = raw[idx] as Record<string, unknown> | undefined;
     if (!el) continue;
+    // Use publicId first, fall back to id
+    if (typeof el.publicId === "string" && el.publicId.length > 0) return el.publicId;
     if (typeof el.id === "string" && el.id.length > 0) return el.id;
   }
   return undefined;

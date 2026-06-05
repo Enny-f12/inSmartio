@@ -66,6 +66,23 @@ const fmt = (iso?: string | null) => {
   catch { return String(iso); }
 };
 
+// Formats date + time e.g. "04 Jun 2026, 10:08 PM"
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return String(iso);
+  }
+};
+
 const fmtMoney = (amount?: number | null, fallback = "—") =>
   amount != null ? `₦${amount.toLocaleString()}` : fallback;
 
@@ -114,35 +131,49 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
 
   // ── Budget / Financial ────────────────────────────────
   const budgetObj  = job["budget"] as { amount?: number; min?: number; max?: number } | undefined;
-  // Display budget as range if min/max exist, else single amount
   const budget = budgetObj
     ? budgetObj.min != null && budgetObj.max != null
       ? `₦${budgetObj.min.toLocaleString()} – ₦${budgetObj.max.toLocaleString()}`
       : fmtMoney(budgetObj.amount)
     : "—";
 
-  // finalAmount comes from the accepted bid amount
   const finalAmount = fmtMoney(job["finalAmount"] as number | undefined);
 
-  const commissionPct   = (job["commissionPercent"] as number | undefined) ?? null;
   const commissionAmt   = fmtMoney(job["commissionAmount"] as number | undefined);
   const expertPayout    = fmtMoney(job["expertPayout"]    as number | undefined);
   const paymentStatus   = val(job, "paymentStatus");
   const paymentMethod   = job["paymentMethod"] === "any" ? "Any" : val(job, "paymentMethod");
 
-  // ── Client — comes from /jobs list response ───────────
+  // ── Client ────────────────────────────────────────────
   const clientObj   = job["client"] as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
   const clientName  = clientObj?.name  ?? val(job, "postedBy");
   const clientPhone = clientObj?.phone ?? "—";
   const clientEmail = clientObj?.email ?? "—";
   const clientRating = clientObj?.rating ?? null;
 
-  // ── Expert — comes from /jobs list response ───────────
-  const expertObj   = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
-  const expertName  = expertObj?.name  ?? null;
-  const expertPhone = expertObj?.phone ?? "—";
-  const expertEmail = expertObj?.email ?? "—";
-  const expertRating = expertObj?.rating ?? null;
+  // ── Expert — prefer list data, fall back to accepted bid ─
+  const bids = (job["bids"] as Array<{
+    status: string;
+    expert?: {
+      name?: string;
+      phone?: string;
+      email?: string;
+      rating?: number;
+      commission?: number;
+    };
+  }> | undefined) ?? [];
+  const acceptedBid = bids.find(b => b.status === "accepted");
+
+  const expertObj    = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number; commission?: number } | undefined;
+  const expertName   = expertObj?.name   ?? acceptedBid?.expert?.name   ?? null;
+  const expertPhone  = expertObj?.phone  ?? acceptedBid?.expert?.phone  ?? "—";
+  const expertEmail  = expertObj?.email  ?? acceptedBid?.expert?.email  ?? "—";
+  const expertRating = expertObj?.rating ?? acceptedBid?.expert?.rating ?? null;
+  const expertCommission = (
+    expertObj?.commission ??
+    acceptedBid?.expert?.commission ??
+    null
+  ) as number | null;
 
   // ── Status ────────────────────────────────────────────
   const status = deriveStatus(job);
@@ -154,10 +185,10 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
 
   // ── Timeline ──────────────────────────────────────────
   const allTimeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
-  // Deduplicate: keep only unique labels (take first occurrence)
+  // Deduplicate: keep only unique label+datetime combos
   const seen = new Set<string>();
   const uniqueTimeline = allTimeline.filter(t => {
-    const key = `${t.label}`;
+    const key = `${t.label}||${t.datetime}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -165,9 +196,6 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
   const TIMELINE_LIMIT = 10;
   const visibleTimeline = timelineExpanded ? uniqueTimeline : uniqueTimeline.slice(0, TIMELINE_LIMIT);
   const hasMoreTimeline = uniqueTimeline.length > TIMELINE_LIMIT;
-
-  // ── Reviews ───────────────────────────────────────────
-  const reviews = (job["reviews"] as { reviewerName?: string; reviewer?: string; rating: number; comment?: string; createdAt?: string }[] | undefined) ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
@@ -234,14 +262,14 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
             <SectionLabel text="Payment Information" />
             <InfoRow label="Payment Method:" value={paymentMethod} />
             <InfoRow label="Final Amount:"   value={finalAmount} />
-            <InfoRow label={`Platform Commission${commissionPct != null ? ` (${commissionPct}%)` : ""}:`}
-              value={commissionAmt} />
+            <InfoRow label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
+              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"} />
             <InfoRow label="Expert Payout:"  value={expertPayout} />
             <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
           </div>
 
           {/* ── Timeline ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: "24px 32px" }}>
             <SectionLabel text="Timeline" />
             {uniqueTimeline.length === 0 ? (
               <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No timeline events available.</p>
@@ -254,7 +282,7 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
                         backgroundColor: "#2563EB", flexShrink: 0, marginTop: "4px" }} />
                       <p style={{ fontSize: "13px", margin: 0 }}>
                         <span style={{ fontWeight: 500, color: "#111827" }}>
-                          {fmt(event.datetime)}
+                          {fmtDateTime(event.datetime)}
                         </span>
                         <span style={{ color: "#6B7280" }}> — {event.label}</span>
                       </p>
@@ -279,30 +307,6 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
             )}
           </div>
 
-          {/* ── Reviews ── */}
-          <div style={{ padding: "24px 32px" }}>
-            <SectionLabel text="Reviews" />
-            {reviews.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No reviews found.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {reviews.map((review, i) => (
-                  <div key={i} style={{ padding: "14px 16px", borderRadius: "10px",
-                    border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                        {review.reviewerName ?? review.reviewer ?? "Anonymous"}
-                      </span>
-                      <StarRating value={review.rating} />
-                    </div>
-                    {review.comment && (
-                      <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>{review.comment}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </main>
     </div>
@@ -428,7 +432,6 @@ export default function JobsPage() {
 
   // ── Bulk actions ──────────────────────────────────────
   const handleCancelSelected = () => {
-    // TODO: wire to API
     toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} cancelled`);
     setSelectedIds(new Set());
   };
@@ -452,7 +455,6 @@ export default function JobsPage() {
   };
 
   const handleAssignConfirm = (expertId: string) => {
-    // TODO: wire to API
     toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} assigned to ${expertId}`);
     setShowAssignModal(false);
     setSelectedIds(new Set());
@@ -491,21 +493,16 @@ export default function JobsPage() {
   }
 
   if (selectedStatus === "succeeded" && selected) {
-    // The /job/:id response has the job directly or nested
     const raw     = selected as unknown as Record<string, unknown>;
     const rawJob  = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
 
-    // Find matching job from list to get client/expert data
     const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
 
-    // Merge: list job has client/expert objects, detail job has more timeline/bid data
     const enrichedJob: ApiJob = {
       ...(listJob ?? {}),
       ...rawJob,
-      // Prefer list-level client/expert since they have name/email/phone
       client: (listJob?.["client"] ?? rawJob["client"]) as ApiJob[string],
       expert: (listJob?.["expert"] ?? rawJob["expert"]) as ApiJob[string],
-      // Use finalAmount from list job if present
       finalAmount: (listJob?.["finalAmount"] ?? rawJob["finalAmount"]) as ApiJob[string],
     } as ApiJob;
 
@@ -556,7 +553,6 @@ export default function JobsPage() {
       <div className="jobs-header flex items-center justify-between" style={{ gap: "12px", flexWrap: "wrap" }}>
         <p style={{ fontSize: "16px", fontWeight: 600, color: "#111827", margin: 0 }}>Jobs List</p>
 
-        {/* Bulk Actions — always visible */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginLeft: "auto" }}>
           {selectedCount > 0 && (
             <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, marginRight: "4px" }}>
@@ -564,7 +560,6 @@ export default function JobsPage() {
             </span>
           )}
 
-          {/* Assign to Expert */}
           <button
             className="bulk-btn"
             onClick={() => setShowAssignModal(true)}
@@ -577,7 +572,6 @@ export default function JobsPage() {
             <UserPlus size={13} /> Assign to Expert
           </button>
 
-          {/* Cancel Selected */}
           <button
             className="bulk-btn"
             onClick={handleCancelSelected}
@@ -590,7 +584,6 @@ export default function JobsPage() {
             <XCircle size={13} /> Cancel Selected
           </button>
 
-          {/* Export Selected */}
           <button
             className="bulk-btn"
             onClick={selectedCount > 0 ? handleExportSelected : handleExport}
@@ -664,7 +657,6 @@ export default function JobsPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      {/* Select all checkbox */}
                       <th style={{ padding: "12px 16px 12px 24px", width: "40px" }}>
                         <input
                           type="checkbox"
