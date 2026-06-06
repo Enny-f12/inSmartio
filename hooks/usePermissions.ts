@@ -9,7 +9,7 @@ import { getPermissions, normaliseRole, type Permissions, type AdminRole } from 
 
 interface UsePermissionsReturn {
   role: AdminRole;
-  can:  Permissions;
+  can:  Permissions; 
 }
 
 export const usePermissions = (): UsePermissionsReturn => {

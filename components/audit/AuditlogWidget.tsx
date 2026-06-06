@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Shield, ArrowRight } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchRecentAuditLogs } from "@/lib/redux/auditLogsSlice";
+import { fetchRecentAuditLogs } from "@/lib/redux/auditlogSlice";
 
 // ── Helpers ───────────────────────────────────────────────
 
