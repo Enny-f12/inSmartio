@@ -9,30 +9,6 @@ import type { ApiPayout } from "@/lib/api/paymentApi";
 
 const PAGE_SIZE = 10;
 
-// ── Mock TAS payout data matching design (10.3) ───────────────────────────────
-const MOCK_PAYOUTS: ApiPayout[] = [
-  { id: "pay_001", recipientId: "tas_001", recipientName: "Chidi E.",  recipientType: "tas", amount: 333000, status: "paid",    bankName: "GTBank",     accountNumber: "0234567890", paidAt: "2026-04-10T00:00:00Z", createdAt: "2026-04-10T00:00:00Z" },
-  { id: "pay_002", recipientId: "tas_002", recipientName: "Bola A.",   recipientType: "tas", amount: 271000, status: "paid",    bankName: "Access",     accountNumber: "0345678901", paidAt: "2026-04-10T00:00:00Z", createdAt: "2026-04-10T00:00:00Z" },
-  { id: "pay_003", recipientId: "tas_003", recipientName: "Emeka O.",  recipientType: "tas", amount: 216000, status: "pending", bankName: "Zenith",     accountNumber: "0456789012", createdAt: "2026-04-10T00:00:00Z" },
-  { id: "pay_004", recipientId: "exp_001", recipientName: "Adebayo S.",recipientType: "expert", amount: 16650, status: "paid", bankName: "Access",     accountNumber: "0123456789", paidAt: "2026-05-16T00:00:00Z", createdAt: "2026-05-16T00:00:00Z" },
-  { id: "pay_005", recipientId: "exp_002", recipientName: "Mary K.",   recipientType: "expert", amount: 45000, status: "failed", bankName: "Zenith",   accountNumber: "0567890123", createdAt: "2026-05-20T00:00:00Z" },
-];
-
-function computeSummary(data: ApiPayout[]) {
-  const tasPayouts = data.filter((p) => p.recipientType === "tas");
-  const totalTasToPay = tasPayouts.length;
-  const totalPayoutAmount = data.reduce((sum, p) => sum + Number(p.amount), 0);
-  const averagePerTas = totalTasToPay > 0 ? Math.round(totalPayoutAmount / totalTasToPay) : 0;
-  const latestDate = data.reduce((latest, p) => {
-    const d = new Date(p.createdAt);
-    return d > latest ? d : latest;
-  }, new Date(0));
-  const paymentDate = data.length > 0
-    ? latestDate.toLocaleDateString("en-GB").replace(/\//g, "/")
-    : "—";
-  return { totalTasToPay, totalPayoutAmount, averagePerTas, paymentDate };
-}
-
 function StatusPill({ status }: { status: string }) {
   const s = status?.toLowerCase() ?? "";
   let style = { color: "var(--color-text-muted)", background: "var(--color-background)", border: "1px solid var(--color-border)" };
@@ -46,12 +22,11 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function TypeBadge({ type }: { type: "expert" | "tas" }) {
-  return (
-    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "20px", whiteSpace: "nowrap", color: type === "tas" ? "#7c3aed" : "#2563eb", background: type === "tas" ? "#f5f3ff" : "#eff6ff", border: `1px solid ${type === "tas" ? "#ddd6fe" : "#bfdbfe"}` }}>
-      {type.toUpperCase()}
-    </span>
-  );
+function fmt(n?: number) {
+  if (!n && n !== 0) return "—";
+  if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `₦${Math.round(n / 1_000)}K`;
+  return `₦${n.toLocaleString()}`;
 }
 
 // ── Payout Detail panel ───────────────────────────────────────────────────────
@@ -77,22 +52,24 @@ function PayoutDetail({ payout, onClose }: { payout: ApiPayout; onClose: () => v
       </div>
       <div style={{ borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
         {([
-          ["Payout ID",   payout.id],
-          ["Recipient",   payout.recipientName],
-          ["Type",        payout.recipientType],
-          ["Amount",      `₦${Number(payout.amount).toLocaleString()}`],
-          ["Status",      payout.status],
-          ["Bank",        payout.bankName ?? "—"],
-          ["Account No.", payout.accountNumber ?? "—"],
-          ["Created",     new Date(payout.createdAt).toLocaleString("en-GB")],
-          ["Paid At",     payout.paidAt ? new Date(payout.paidAt).toLocaleString("en-GB") : "—"],
+          ["Payout ID",    payout.id],
+          ["TAS Name",     payout.recipientName],
+          ["TAS ID",       payout.tasId ?? payout.recipientId],
+          ["Experts",      String(payout.experts ?? "—")],
+          ["Model 2",      fmt(payout.model2Amount)],
+          ["Model 1",      fmt(payout.model1Amount)],
+          ["Total",        fmt(payout.totalAmount ?? payout.amount)],
+          ["Status",       payout.status],
+          ["Bank",         payout.bankName ?? "—"],
+          ["Account No.",  payout.accountNumber ?? "—"],
+          ["Account Name", payout.accountName ?? "—"],
+          ["Paid At",      payout.paidAt ? new Date(payout.paidAt).toLocaleDateString("en-GB") : "—"],
+          ["Created",      new Date(payout.createdAt).toLocaleDateString("en-GB")],
         ] as [string, string][]).map(([label, value]) => (
           <div key={label} style={{ display: "flex", gap: "8px", fontSize: "13px" }}>
             <span style={{ minWidth: "120px", color: "var(--color-text-muted)", flexShrink: 0 }}>{label}:</span>
             <span style={{ color: "var(--color-text-main)", wordBreak: "break-all" }}>
-              {label === "Status" ? <StatusPill status={value} />
-                : label === "Type" ? <TypeBadge type={value as "expert" | "tas"} />
-                : value}
+              {label === "Status" ? <StatusPill status={value} /> : value}
             </span>
           </div>
         ))}
@@ -111,29 +88,20 @@ function PayoutDetail({ payout, onClose }: { payout: ApiPayout; onClose: () => v
 // ── Main tab ──────────────────────────────────────────────────────────────────
 export default function PayoutsTab() {
   const dispatch = useAppDispatch();
-  const { payouts, payoutsStatus, payoutsError } = useAppSelector((s) => s.payments);
+  const { payouts, payoutSummary, payoutsStatus, payoutsError } = useAppSelector((s) => s.payments);
 
-  const [search,     setSearch]     = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "expert" | "tas">("all");
-  const [page,       setPage]       = useState(1);
-  const [selected,   setSelected]   = useState<ApiPayout | null>(null);
+  const [search,   setSearch]   = useState("");
+  const [page,     setPage]     = useState(1);
+  const [selected, setSelected] = useState<ApiPayout | null>(null);
 
   useEffect(() => {
     if (payoutsStatus === "idle") dispatch(fetchPayouts());
   }, [dispatch, payoutsStatus]);
 
-  // Use real data once succeeded (even if empty), else fall back to mock
-  const isReal = payoutsStatus === "succeeded";
-  const data   = isReal ? payouts : MOCK_PAYOUTS;
-
-  // Compute summary from whatever data we're showing
-  const summary = computeSummary(data);
-
-  const filtered = data.filter((p) => {
-    const matchSearch = p.recipientName.toLowerCase().includes(search.toLowerCase());
-    const matchType   = typeFilter === "all" || p.recipientType === typeFilter;
-    return matchSearch && matchType;
-  });
+  const filtered = payouts.filter((p) =>
+    p.recipientName.toLowerCase().includes(search.toLowerCase()) ||
+    (p.tasId ?? p.recipientId).toLowerCase().includes(search.toLowerCase())
+  );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -146,6 +114,21 @@ export default function PayoutsTab() {
   const handleExportCsv      = () => toast.info("Export CSV — backend endpoint needed");
   const handleNotify         = () => toast.info("Send Notifications — backend endpoint needed");
 
+  // ── Summary values — from API or zeros while loading ─────────────────────
+  const summary = payoutSummary ?? {
+    totalTasToPay:     0,
+    totalPayoutAmount: 0,
+    averagePerTas:     0,
+    paymentDate:       "—",
+  };
+
+  const summaryItems = [
+    { label: "Total TAS to Pay",     value: String(summary.totalTasToPay) },
+    { label: "Total Payout Amount",  value: `₦${Number(summary.totalPayoutAmount).toLocaleString()}` },
+    { label: "Average per TAS",      value: `₦${Number(summary.averagePerTas).toLocaleString()}` },
+    { label: "Payment Date",         value: summary.paymentDate },
+  ];
+
   return (
     <>
       <style>{`
@@ -157,27 +140,20 @@ export default function PayoutsTab() {
           .payouts-cards      { display: none; }
           .payouts-pagination { flex-direction: row; align-items: center; }
         }
+        .payout-row:hover td { background: #f9fafb; }
       `}</style>
 
       {/* ── Summary card ── */}
-      <div style={{ backgroundColor: "#fff", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px 24px", marginBottom: "0" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", marginBottom: "16px" }}>
-          <div>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Total TAS to Pay</p>
-            <p style={{ fontSize: "18px", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>{summary.totalTasToPay}</p>
-          </div>
-          <div>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Total Payout Amount</p>
-            <p style={{ fontSize: "18px", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>₦{summary.totalPayoutAmount.toLocaleString()}</p>
-          </div>
-          <div>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Average per TAS</p>
-            <p style={{ fontSize: "18px", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>₦{summary.averagePerTas.toLocaleString()}</p>
-          </div>
-          <div>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Payment Date</p>
-            <p style={{ fontSize: "18px", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>{summary.paymentDate}</p>
-          </div>
+      <div style={{ backgroundColor: "#fff", border: "1px solid var(--color-border)", borderRadius: "16px", padding: "20px 24px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "24px", marginBottom: "16px" }}>
+          {summaryItems.map(({ label, value }) => (
+            <div key={label}>
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>{label}</p>
+              <p style={{ fontSize: "20px", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>
+                {payoutsStatus === "loading" ? "—" : value}
+              </p>
+            </div>
+          ))}
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={handleProcessPayouts}
@@ -197,22 +173,15 @@ export default function PayoutsTab() {
 
       {/* ── Table card ── */}
       <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden" }}>
+
         {/* Toolbar */}
         <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
             <Search size={14} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
-            <input type="text" placeholder="Search recipient…" value={search}
+            <input type="text" placeholder="Search TAS name or ID…" value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "12px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
             />
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            {(["all", "expert", "tas"] as const).map((t) => (
-              <button key={t} onClick={() => { setTypeFilter(t); setPage(1); }}
-                style={{ padding: "8px 14px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", border: typeFilter === t ? "none" : "1px solid var(--color-border)", backgroundColor: typeFilter === t ? "#2563eb" : "#ffffff", color: typeFilter === t ? "#fff" : "var(--color-text-muted)" }}>
-                {t === "all" ? "All" : t.toUpperCase()}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -228,28 +197,29 @@ export default function PayoutsTab() {
 
         {payoutsStatus !== "loading" && (
           <>
-            {/* Desktop table */}
+            {/* Desktop table — matches 10.3: TAS Name | TAS ID | Experts | Model 2 | Model 1 | Total | Status */}
             <div className="payouts-table-wrap" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                    {["Recipient", "Type", "Amount", "Bank", "Status", "Date", ""].map((h) => (
-                      <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>{h}</th>
+                    {["TAS Name", "TAS ID", "Experts", "Model 2", "Model 1", "Total", "Status", ""].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {paginated.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No payouts found.</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No payouts found.</td></tr>
                   ) : paginated.map((p) => (
-                    <tr key={p.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                      <td style={{ padding: "15px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)" }}>{p.recipientName}</td>
-                      <td style={{ padding: "15px 20px" }}><TypeBadge type={p.recipientType} /></td>
-                      <td style={{ padding: "15px 20px", fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>₦{Number(p.amount).toLocaleString()}</td>
-                      <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-muted)" }}>{p.bankName ?? "—"}</td>
-                      <td style={{ padding: "15px 20px" }}><StatusPill status={p.status} /></td>
-                      <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>{new Date(p.createdAt).toLocaleDateString("en-GB")}</td>
-                      <td style={{ padding: "15px 20px" }}>
+                    <tr key={p.id} className="payout-row" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                      <td style={{ padding: "14px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>{p.recipientName}</td>
+                      <td style={{ padding: "14px 20px", fontSize: "12px", color: "var(--color-text-muted)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{p.tasId ?? p.recipientId}</td>
+                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "var(--color-text-main)", textAlign: "center" }}>{p.experts ?? "—"}</td>
+                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "var(--color-text-main)", whiteSpace: "nowrap" }}>{fmt(p.model2Amount)}</td>
+                      <td style={{ padding: "14px 20px", fontSize: "13px", color: "var(--color-text-main)", whiteSpace: "nowrap" }}>{fmt(p.model1Amount)}</td>
+                      <td style={{ padding: "14px 20px", fontSize: "13px", fontWeight: 700, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>{fmt(p.totalAmount ?? p.amount)}</td>
+                      <td style={{ padding: "14px 20px" }}><StatusPill status={p.status} /></td>
+                      <td style={{ padding: "14px 20px" }}>
                         <button onClick={() => setSelected(p)}
                           style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)", display: "flex" }}>
                           <Eye size={16} strokeWidth={1.8} />
@@ -268,19 +238,29 @@ export default function PayoutsTab() {
               ) : paginated.map((p) => (
                 <div key={p.id} onClick={() => setSelected(p)}
                   style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#fff", cursor: "pointer" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px", gap: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px", gap: "8px" }}>
                     <div>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>{p.recipientName}</p>
-                      <TypeBadge type={p.recipientType} />
+                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", margin: "0 0 2px" }}>{p.recipientName}</p>
+                      <p style={{ fontSize: "11px", color: "var(--color-text-muted)", fontFamily: "monospace", margin: 0 }}>{p.tasId ?? p.recipientId}</p>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>₦{Number(p.amount).toLocaleString()}</p>
+                      <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-text-main)", margin: "0 0 4px" }}>{fmt(p.totalAmount ?? p.amount)}</p>
                       <StatusPill status={p.status} />
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "12px", paddingTop: "8px", borderTop: "1px solid var(--color-border)" }}>
-                    <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{new Date(p.createdAt).toLocaleDateString("en-GB")}</span>
-                    {p.bankName && <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{p.bankName}</span>}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", paddingTop: "10px", borderTop: "1px solid var(--color-border)" }}>
+                    <div>
+                      <p style={{ fontSize: "10px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Experts</p>
+                      <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>{p.experts ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "10px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Model 2</p>
+                      <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>{fmt(p.model2Amount)}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "10px", color: "var(--color-text-muted)", margin: "0 0 2px" }}>Model 1</p>
+                      <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>{fmt(p.model1Amount)}</p>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -298,7 +278,7 @@ export default function PayoutsTab() {
               style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--color-border)", backgroundColor: "#fff", color: "var(--color-text-muted)", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Prev</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
               <button key={p} onClick={() => setPage(p)}
-                style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: p === page ? "none" : "1px solid var(--color-border)", backgroundColor: p === page ? "#16a34a" : "#fff", color: p === page ? "#fff" : "var(--color-text-muted)", cursor: "pointer", fontWeight: p === page ? 600 : 400 }}>
+                style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", border: p === page ? "none" : "1px solid var(--color-border)", backgroundColor: p === page ? "#2563eb" : "#fff", color: p === page ? "#fff" : "var(--color-text-muted)", cursor: "pointer", fontWeight: p === page ? 600 : 400 }}>
                 {p}
               </button>
             ))}

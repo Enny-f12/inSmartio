@@ -14,15 +14,11 @@ import type {
 } from "@/lib/api/verificationApi";
 
 // ── Tier resolution ───────────────────────────────────────────────────────────
-// DETAIL endpoint is authoritative: returns tier as number 1 / 2 / 3
-// LIST  endpoint returns tier as string "tier1"/"tier2"/"tier3" (sometimes wrong)
-// → Always prefer detail.tier (number) first.
 function resolveTier(detail: ApiVerificationDetail, summary: ApiVerificationSummary): VerificationTier {
   const n = Number(detail.tier);
   if (n === 3) return "tier3";
   if (n === 2) return "tier2";
   if (n === 1) return "tier1";
-  // Fall back to summary string only if detail tier is missing/0
   if (summary.tier === "tier3" || summary.tier === "tier2" || summary.tier === "tier1") {
     return summary.tier;
   }
@@ -100,8 +96,7 @@ function DocumentRow({ name, url, checked, onCheck }: {
   );
 }
 
-// ── Parse the document array from the API ─────────────────────────────────────
-// API: document: { "0": { type: "nin slip", url: "...", verify: false }, "1": {...}, ... }
+// ── Doc parsing ───────────────────────────────────────────────────────────────
 
 const TYPE_LABEL: Record<string, string> = {
   "ninslip":         "NIN Slip",
@@ -115,10 +110,15 @@ const TYPE_LABEL: Record<string, string> = {
 
 const n = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "");
 
-// Tier 1 & 2 only show these three docs
 const TIER12_KEYS = new Set(["ninslip", "governmentid", "profilephoto"]);
 
-interface Doc { key: string; name: string; url?: string }
+// Now includes publicId so we can send it as documentKey
+interface Doc {
+  key:       string;
+  name:      string;
+  url?:      string;
+  publicId?: string;
+}
 
 function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[] {
   const raw = detail.document as Record<string, unknown> | null | undefined;
@@ -130,25 +130,41 @@ function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[]
   for (const idx of indices) {
     const el = raw[idx] as Record<string, unknown> | undefined;
     if (!el || typeof el !== "object") continue;
-    const typeKey = n(typeof el.type === "string" ? el.type : "");
-    const url = typeof el.url === "string" && el.url.length > 10 ? el.url : undefined;
-    const label = TYPE_LABEL[typeKey] ?? (typeof el.type === "string" ? el.type : "Document");
+
+    const typeKey  = n(typeof el.type     === "string" ? el.type     : "");
+    const url      = typeof el.url        === "string" && el.url.length > 10 ? el.url : undefined;
+    const publicId = typeof el.publicId   === "string" && el.publicId.length > 0 ? el.publicId : undefined;
+    const label    = TYPE_LABEL[typeKey] ?? (typeof el.type === "string" ? el.type : "Document");
 
     if (tier === "tier1" || tier === "tier2") {
       if (!TIER12_KEYS.has(typeKey)) continue;
     }
-    docs.push({ key: typeKey || idx, name: label, url });
+    docs.push({ key: typeKey || idx, name: label, url, publicId });
   }
   return docs;
+}
+
+function resolveDocumentKey(detail: ApiVerificationDetail): string | undefined {
+  const raw = detail.document as Record<string, unknown> | null | undefined;
+  if (!raw || typeof raw !== "object") return undefined;
+  const indices = Object.keys(raw).sort((a, b) => Number(a) - Number(b));
+  for (const idx of indices) {
+    const el = raw[idx] as Record<string, unknown> | undefined;
+    if (!el) continue;
+    // Use publicId first, fall back to id
+    if (typeof el.publicId === "string" && el.publicId.length > 0) return el.publicId;
+    if (typeof el.id === "string" && el.id.length > 0) return el.id;
+  }
+  return undefined;
 }
 
 // ── Approve / Reject footer ───────────────────────────────────────────────────
 
 function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
-  onApprove:   () => void;
-  onReject:    () => void;
-  mailtoHref:  string;
-  disabled:    boolean;
+  onApprove:  () => void;
+  onReject:   () => void;
+  mailtoHref: string;
+  disabled:   boolean;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", flexWrap: "wrap" }}>
@@ -169,7 +185,6 @@ function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TIER 1 & 2 MODAL
-// Shows: Expert Info | 3 Documents (NIN Slip, Gov ID, Profile Photo) | NIN Verification
 // ══════════════════════════════════════════════════════════════════════════════
 
 function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMutating, warningBanner }: {
@@ -199,7 +214,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
       size="md">
       <div style={{ display: "flex", flexDirection: "column" }}>
         {warningBanner}
-        {/* Expert Information */}
         <Card>
           <SectionTitle title="Expert Information" />
           <InfoRow label="Name:"         value={expert.name} />
@@ -209,7 +223,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
           <InfoRow label="Submitted:"    value={summary.submitted ? new Date(summary.submitted).toLocaleDateString("en-GB") : "—"} />
         </Card>
 
-        {/* Documents */}
         <Card>
           <SectionTitle title="Documents" />
           {docs.length === 0
@@ -221,15 +234,12 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
           }
         </Card>
 
-        {/* NIN Verification */}
         <Card>
           <SectionTitle title="NIN Verification" />
-
           <div style={{ ...rowStyle }}>
             <span style={lbl}>NIN Number:</span>
             <span style={{ color: "#111827", fontFamily: "monospace", fontWeight: 600 }}>{nin?.ninNumber || "—"}</span>
           </div>
-
           <div style={{ ...rowStyle }}>
             <span style={lbl}>NIN Status:</span>
             <span style={{ color: "#111827", flex: 1 }}>{nin?.ninStatus || "—"}</span>
@@ -238,7 +248,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
                 style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
             </label>
           </div>
-
           <div style={{ ...rowStyle }}>
             <span style={lbl}>Name Match:</span>
             <label style={chkLbl("ninNameMatch")}>
@@ -246,7 +255,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
                 style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
             </label>
           </div>
-
           <div style={{ ...rowStyle, borderBottom: "none" }}>
             <span style={lbl}>DOB Match:</span>
             <label style={chkLbl("ninDobMatch")}>
@@ -255,7 +263,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
             </label>
           </div>
         </Card>
-
       </div>
     </Modal>
   );
@@ -263,7 +270,6 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TIER 3 MODAL
-// Shows: Expert Info | All 7 Documents | Guarantor Verification | Police Clearance
 // ══════════════════════════════════════════════════════════════════════════════
 
 function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating, warningBanner }: {
@@ -290,7 +296,6 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
       size="md">
       <div style={{ display: "flex", flexDirection: "column" }}>
         {warningBanner}
-        {/* Expert Information */}
         <Card>
           <SectionTitle title="Expert Information" />
           <InfoRow label="Name:"         value={expert.name} />
@@ -301,7 +306,6 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
           {summary.verificationFee && <InfoRow label="Verification Fee:" value={summary.verificationFee} />}
         </Card>
 
-        {/* All Documents */}
         <Card>
           <SectionTitle title="Documents" />
           {docs.length === 0
@@ -313,7 +317,6 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
           }
         </Card>
 
-        {/* Guarantor Verification */}
         {guarantor ? (
           <Card>
             <SectionTitle title="Guarantor Verification" />
@@ -342,7 +345,6 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
           </Card>
         )}
 
-        {/* Police Clearance */}
         {policeClr ? (
           <Card>
             <SectionTitle title="Police Clearance Verification" />
@@ -363,14 +365,13 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
             <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No police clearance submitted.</p>
           </Card>
         )}
-
       </div>
     </Modal>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CONFIRM MODALS (shared)
+// CONFIRM MODALS
 // ══════════════════════════════════════════════════════════════════════════════
 
 function ApproveModal({ name, open, onClose, onConfirm, isMutating }: {
@@ -429,7 +430,7 @@ function RejectModal({ name, open, onClose, onConfirm, isMutating, reason, setRe
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ROOT EXPORT — routes to the correct modal based on tier
+// ROOT EXPORT
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface Props {
@@ -440,7 +441,7 @@ interface Props {
 
 export default function VerificationModal({ expert, onClose, onStatusChange }: Props) {
   const dispatch = useAppDispatch();
-  const { mutateStatus, selectedStatus, selectedSummary, selectedWarning } = useAppSelector(s => s.verifications);
+  const { mutateStatus, selectedStatus, selectedSummary } = useAppSelector(s => s.verifications);
   const { admin } = useAppSelector(s => s.auth);
 
   const [approveOpen,  setApproveOpen]  = useState(false);
@@ -450,41 +451,52 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
   const isMutating      = mutateStatus   === "loading";
   const isLoadingDetail = selectedStatus === "loading";
 
-  // Resolve tier — detail is authoritative
   const tier: VerificationTier = (expert && selectedSummary)
     ? resolveTier(expert, selectedSummary)
     : "tier1";
 
   const adminId = admin?.id ?? "";
 
+  // Resolve documentKey — `id` field on first document entry (Cloudinary path)
+  const documentKey = expert ? resolveDocumentKey(expert) : undefined;
+
   const handleApprove = () => {
     if (!expert || !selectedSummary) return;
+    const payload = { documentKey, verify: true, reject: false, adminId };
     dispatch(verifyExpertThunk({
       id:          expert.id,
       type:        toApiType(tier),
       localStatus: "approved" as const,
-      payload:     { verify: true, reject: false, adminId },
+      payload,
     }))
       .unwrap()
-      .then(() => { toast.success(`${expert.name} approved`); setApproveOpen(false); onStatusChange(expert.id, "approved"); })
+      .then(() => {
+        toast.success(`${expert.name} approved`);
+        setApproveOpen(false);
+        onStatusChange(expert.id, "approved");
+      })
       .catch((err: string) => toast.error("Approval failed", { description: err }));
   };
 
   const handleReject = () => {
     if (!expert || !selectedSummary) return;
     if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
+    const payload = { documentKey, verify: false, reject: true, reason: rejectReason.trim(), adminId };
     dispatch(verifyExpertThunk({
       id:          expert.id,
       type:        toApiType(tier),
       localStatus: "rejected" as const,
-      payload:     { verify: false, reject: true, reason: rejectReason.trim(), adminId },
+      payload,
     }))
       .unwrap()
-      .then(() => { toast.success(`${expert.name} rejected`); setRejectOpen(false); onStatusChange(expert.id, "rejected"); })
+      .then(() => {
+        toast.success(`${expert.name} rejected`);
+        setRejectOpen(false);
+        onStatusChange(expert.id, "rejected");
+      })
       .catch((err: string) => toast.error("Rejection failed", { description: err }));
   };
 
-  // Loading state
   if (isLoadingDetail) {
     return (
       <Modal open onClose={onClose} title="Verification Detail" size="md">
@@ -495,7 +507,6 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     );
   }
 
-  // Error state
   if (!expert || !selectedSummary) {
     return (
       <Modal open onClose={onClose} title="Verification Detail" size="md">
@@ -506,18 +517,17 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     );
   }
 
- 
-
   const commonProps = {
-    expert, summary: selectedSummary, onClose,
-    onApprove:     () => setApproveOpen(true),
-    onReject:      () => setRejectOpen(true),
+    expert,
+    summary: selectedSummary,
+    onClose,
+    onApprove:  () => setApproveOpen(true),
+    onReject:   () => setRejectOpen(true),
     isMutating,
-    
   };
+
   return (
     <>
-      {/* Tier-specific detail modal */}
       {(tier === "tier1" || tier === "tier2") && (
         <Tier12Modal {...commonProps} tier={tier} />
       )}
@@ -525,7 +535,6 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
         <Tier3Modal {...commonProps} />
       )}
 
-      {/* ── Confirm modals ── */}
       <ApproveModal
         name={expert.name} open={approveOpen}
         onClose={() => setApproveOpen(false)}

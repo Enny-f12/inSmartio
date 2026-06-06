@@ -22,7 +22,7 @@ import dashboardReducer           from "./dashboardSlice";
 import scheduledReportsReducer    from "./schedduleReportSlice";
 import reportTemplatesReducer     from "./reportTemplatesSlice";
 import notificationSettingsReducer from "./notificationSettingsSlice"
-
+import auditLogsReducer from "./auditlogSlice"; 
 export const store = configureStore({
   reducer: {
     counter:               counterReducer,
@@ -48,6 +48,7 @@ export const store = configureStore({
     scheduledReports:      scheduledReportsReducer,
     reportTemplates:       reportTemplatesReducer,
     notificationSettings: notificationSettingsReducer,
+    auditLogs:             auditLogsReducer,
   },
 });
 

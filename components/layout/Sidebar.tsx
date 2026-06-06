@@ -22,6 +22,7 @@ const navItems = [
   { label: "Disputes",       href: "/dispute",       icon: Scale },
   { label: "Reports",        href: "/report",        icon: BarChart2 },
   { label: "Settings",       href: "/settings",      icon: Settings },
+   { label: "Audit Logs",    href: "/audit-log",      icon: BarChart2 },
 ];
 
 interface SidebarContentProps {
@@ -51,7 +52,7 @@ function SidebarContent({ onClose, onLogout }: SidebarContentProps) {
         ) : (
           <>
             <Link href="/" className="shrink-0">
-              <Image src="/logo/insmartio.png" alt="inSmartio Logo" width={120} height={35} style={{ height: "auto", width: "auto" }} priority />
+              <Image src="/insmartio.png" alt="inSmartio Logo" width={180} height={45} style={{ height: "auto", width: "auto", marginLeft: "-20px", marginTop: "-10px" }} priority />
             </Link>
             <button
               onClick={onClose ?? toggle}

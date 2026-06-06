@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 // app/(dashboard)/jobs/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Eye, SlidersHorizontal, Loader2, ArrowLeft, Star } from "lucide-react";
+import {
+  Download, Eye, SlidersHorizontal, Loader2, ArrowLeft, Star,
+  UserPlus, XCircle, ChevronDown, ChevronUp,
+} from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { StatusBadge } from "@/components/ui/Badge";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
@@ -26,6 +30,7 @@ const getStatusVariant = (status: string): StatusVariant => {
     inprogress:  "yellow",
     in_progress: "yellow",
     active:      "yellow",
+    biding:      "purple",
     bidding:     "purple",
     open:        "purple",
     disputed:    "red",
@@ -35,16 +40,15 @@ const getStatusVariant = (status: string): StatusVariant => {
   return map[status?.toLowerCase()] ?? "gray";
 };
 
-// Derive a display status from available boolean flags
 const deriveStatus = (job: ApiJob): string => {
   const explicit = val(job, "status");
   if (explicit !== "—") return explicit;
   const closed   = job["closed"]   as boolean | undefined;
   const verified = job["verified"] as boolean | undefined;
-  return closed ? "closed" : verified ? "active" : "bidding";
+  return closed ? "closed" : verified ? "active" : "biding";
 };
 
-const STATUS_OPTIONS   = ["All", "completed", "inprogress", "bidding", "disputed", "cancelled"] as const;
+const STATUS_OPTIONS   = ["All", "completed", "inprogress", "biding", "disputed", "cancelled"] as const;
 const MONTH_OPTIONS    = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 const MONTH_MAP: Record<string, number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
@@ -60,6 +64,22 @@ const fmt = (iso?: string | null) => {
   if (!iso) return "—";
   try { return new Date(iso).toLocaleDateString("en-GB"); }
   catch { return String(iso); }
+};
+
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return String(iso);
+  }
 };
 
 const fmtMoney = (amount?: number | null, fallback = "—") =>
@@ -80,7 +100,7 @@ function SectionLabel({ text }: { text: string }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
-      <span style={{ minWidth: "160px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
+      <span style={{ minWidth: "220px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
       <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
     </div>
   );
@@ -97,63 +117,90 @@ function StarRating({ value }: { value?: number | null }) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Job Detail View  (follows Image 1)
+// Job Detail View
 // ─────────────────────────────────────────────────────────
 function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+
   // ── Location ──────────────────────────────────────────
-  const locationObj = job["location"] as { city?: string; address?: string } | undefined;
-  const location    = locationObj
-    ? [locationObj.address, locationObj.city].filter(Boolean).join(", ")
+  const locationObj = job["location"] as { city?: string; state?: string; address?: string } | undefined;
+  const location = locationObj
+    ? [locationObj.address, locationObj.city, locationObj.state].filter(Boolean).join(", ")
     : val(job, "location");
 
   // ── Budget / Financial ────────────────────────────────
-  const budgetObj  = job["budget"] as { amount?: number } | undefined;
-  const budget     = fmtMoney(budgetObj?.amount);
+  const budgetObj  = job["budget"] as { amount?: number; min?: number; max?: number } | undefined;
+  const budget = budgetObj
+    ? budgetObj.min != null && budgetObj.max != null
+      ? `₦${budgetObj.min.toLocaleString()} – ₦${budgetObj.max.toLocaleString()}`
+      : fmtMoney(budgetObj.amount)
+    : "—";
 
-  /* TODO-BACKEND: finalPrice not in API response — using placeholder */
-  const finalPrice      = fmtMoney((job["finalPrice"] as number | undefined) ?? null, "—");
-  const paymentAmount   = fmtMoney((job["paymentAmount"] as number | undefined) ?? budgetObj?.amount, "—");
-  const commissionPct   = (job["commissionPercent"] as number | undefined) ?? null;
+  // Split final amounts
+  const finalAmountBeforeInspection = fmtMoney(
+    job["finalAmountBeforeInspection"] as number | undefined,
+    fmtMoney(job["finalAmount"] as number | undefined),
+  );
+  const finalAmountAfterInspection = fmtMoney(
+    job["finalAmountAfterInspection"] as number | undefined,
+  );
+
   const commissionAmt   = fmtMoney(job["commissionAmount"] as number | undefined);
   const expertPayout    = fmtMoney(job["expertPayout"]    as number | undefined);
-  const paymentStatus   = val(job, "paymentStatus"); // e.g. "Paid on 16/03/2026"
+  const paymentStatus   = val(job, "paymentStatus");
+  const paymentMethod   = job["paymentMethod"] === "any" ? "Any" : val(job, "paymentMethod");
 
   // ── Client ────────────────────────────────────────────
-  /* TODO-BACKEND: postedBy is currently just an ID string ("client_1").
-     Needs to be an object: { name, phone, email, rating } */
-  const clientObj    = job["client"]  as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
-  const clientName   = clientObj?.name  ?? val(job, "postedBy");
-  const clientPhone  = clientObj?.phone ?? "—";
-  const clientEmail  = clientObj?.email ?? "—";
+  const clientObj   = job["client"] as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
+  const clientName  = clientObj?.name  ?? val(job, "postedBy");
+  const clientPhone = clientObj?.phone ?? "—";
+  const clientEmail = clientObj?.email ?? "—";
   const clientRating = clientObj?.rating ?? null;
 
   // ── Expert ────────────────────────────────────────────
-  /* TODO-BACKEND: No expert object in response at all.
-     Needs: { name, phone, email, rating } from the accepted bid's expert */
-  const expertObj    = job["expert"]  as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
-  const expertName   = expertObj?.name  ?? null;
-  const expertPhone  = expertObj?.phone ?? "—";
-  const expertEmail  = expertObj?.email ?? "—";
-  const expertRating = expertObj?.rating ?? null;
+  const bids = (job["bids"] as Array<{
+    status: string;
+    expert?: {
+      name?: string;
+      phone?: string;
+      email?: string;
+      rating?: number;
+      commission?: number;
+    };
+  }> | undefined) ?? [];
+  const acceptedBid = bids.find(b => b.status === "accepted");
+
+  const expertObj    = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number; commission?: number } | undefined;
+  const expertName   = expertObj?.name   ?? acceptedBid?.expert?.name   ?? null;
+  const expertPhone  = expertObj?.phone  ?? acceptedBid?.expert?.phone  ?? "—";
+  const expertEmail  = expertObj?.email  ?? acceptedBid?.expert?.email  ?? "—";
+  const expertRating = expertObj?.rating ?? acceptedBid?.expert?.rating ?? null;
+  const expertCommission = (
+    expertObj?.commission ??
+    acceptedBid?.expert?.commission ??
+    null
+  ) as number | null;
 
   // ── Status ────────────────────────────────────────────
   const status = deriveStatus(job);
+  const isCompleted = status.toLowerCase() === "completed";
+
+  // ── Dates ─────────────────────────────────────────────
+  const createdAt = fmt(job["createdAt"] as string);
+  const deadline  = fmt(job["deadline"]  as string);
 
   // ── Timeline ──────────────────────────────────────────
-  /* TODO-BACKEND: No timeline array in response.
-     Needs: [{ datetime: string, label: string }] */
-  const timeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
-
-  // ── Reviews ───────────────────────────────────────────
-  /* TODO-BACKEND: No reviews array in response.
-     Needs: [{ reviewerName: string, rating: number, comment: string }] */
-  const reviews = (job["reviews"] as { reviewerName: string; rating: number; comment: string }[] | undefined) ?? [];
-
-  // ── Payment method display ────────────────────────────
-  /* TODO-BACKEND: paymentMethod returns "any" — should return human-readable value
-     e.g. "Payment Protected (Escrow)" */
-  const paymentMethodDisplay =
-    job["paymentMethod"] === "any" ? "—" : val(job, "paymentMethod");
+  const allTimeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
+  const seen = new Set<string>();
+  const uniqueTimeline = allTimeline.filter(t => {
+    const key = `${t.label}||${t.datetime}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const TIMELINE_LIMIT = 10;
+  const visibleTimeline = timelineExpanded ? uniqueTimeline : uniqueTimeline.slice(0, TIMELINE_LIMIT);
+  const hasMoreTimeline = uniqueTimeline.length > TIMELINE_LIMIT;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
@@ -175,13 +222,18 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
           {/* ── Job Information ── */}
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Job Information" />
-            <InfoRow label="Job ID:"         value={val(job, "id", "_id")} />
-            <InfoRow label="Title"           value={val(job, "title")} />
-            <InfoRow label="Category"        value={val(job, "category")} />
-            <InfoRow label="Location:"       value={location} />
-            <InfoRow label="Budget:"         value={budget} />
-            <InfoRow label="Final Price:"    value={finalPrice} />
-            <InfoRow label="Created:"        value={fmt(job["createdAt"] as string)} />
+            <InfoRow label="Job ID:"                        value={val(job, "id", "_id")} />
+            <InfoRow label="Title:"                         value={val(job, "title")} />
+            <InfoRow label="Category:"                      value={val(job, "category")} />
+            <InfoRow label="Description:"                   value={val(job, "description")} />
+            <InfoRow label="Location:"                      value={location} />
+            <InfoRow label="Budget:"                        value={budget} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow label="Created:"                       value={createdAt} />
+            {isCompleted && (
+              <InfoRow label="Deadline:"                    value={deadline} />
+            )}
             <InfoRow label="Status:"
               value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
           </div>
@@ -214,61 +266,56 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
           {/* ── Payment Information ── */}
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Payment Information" />
-            <InfoRow label="Payment Method:"
-              value={paymentMethodDisplay} />
-            <InfoRow label="Amount"
-              value={paymentAmount} />
-            <InfoRow label={`Platform Commission${commissionPct != null ? ` (${commissionPct}%)` : ""}:`}
-              value={commissionAmt} />
-            <InfoRow label="Expert Payout:"
-              value={expertPayout} />
-            <InfoRow label="Payment Status:"
-              value={paymentStatus} />
+            <InfoRow label="Payment Method:"                value={paymentMethod} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow
+              label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
+              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"}
+            />
+            <InfoRow label="Expert Payout:"  value={expertPayout} />
+            <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
           </div>
 
           {/* ── Timeline ── */}
-          <div style={{ padding: "24px 32px", borderBottom: reviews.length > 0 ? "1px solid #E5E7EB" : undefined }}>
+          <div style={{ padding: "24px 32px" }}>
             <SectionLabel text="Timeline" />
-            {timeline.length === 0 ? (
+            {uniqueTimeline.length === 0 ? (
               <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No timeline events available.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {timeline.map((event, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#2563EB",
-                      flexShrink: 0, marginTop: "4px" }} />
-                    <p style={{ fontSize: "13px", margin: 0 }}>
-                      <span style={{ fontWeight: 500, color: "#111827" }}>{event.datetime} - </span>
-                      <span style={{ color: "#6B7280" }}>{event.label}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {visibleTimeline.map((event, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%",
+                        backgroundColor: "#2563EB", flexShrink: 0, marginTop: "4px" }} />
+                      <p style={{ fontSize: "13px", margin: 0 }}>
+                        <span style={{ fontWeight: 500, color: "#111827" }}>
+                          {fmtDateTime(event.datetime)}
+                        </span>
+                        <span style={{ color: "#6B7280" }}> — {event.label}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {hasMoreTimeline && (
+                  <button
+                    onClick={() => setTimelineExpanded(!timelineExpanded)}
+                    style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "6px",
+                      fontSize: "12.5px", fontWeight: 600, color: "#2563EB", background: "none",
+                      border: "none", cursor: "pointer", padding: "6px 0" }}>
+                    {timelineExpanded ? (
+                      <><ChevronUp size={14} /> Show less</>
+                    ) : (
+                      <><ChevronDown size={14} /> View {uniqueTimeline.length - TIMELINE_LIMIT} more events</>
+                    )}
+                  </button>
+                )}
+              </>
             )}
           </div>
 
-          {/* ── Reviews ── */}
-          <div style={{ padding: "24px 32px" }}>
-            <SectionLabel text="Reviews" />
-            {reviews.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No reviews found.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {reviews.map((review, i) => (
-                  <div key={i} style={{ padding: "14px 16px", borderRadius: "10px",
-                    border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                        {review.reviewerName}
-                      </span>
-                      <StarRating value={review.rating} />
-                    </div>
-                    <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>{review.comment}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </main>
     </div>
@@ -276,38 +323,217 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Main List Page  (follows Image 2)
+// Assign to Expert Modal
+// ─────────────────────────────────────────────────────────
+function AssignModal({ count, onClose, onConfirm }: {
+  count: number; onClose: () => void; onConfirm: (expertId: string) => void;
+}) {
+  const [expertId, setExpertId] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "28px 32px",
+        width: "420px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+        <p style={{ fontSize: "16px", fontWeight: 700, color: "#111827", marginBottom: "6px" }}>
+          Assign to Expert
+        </p>
+        <p style={{ fontSize: "13px", color: "#6B7280", marginBottom: "20px" }}>
+          Assign {count} selected job{count > 1 ? "s" : ""} to an expert.
+        </p>
+        <input
+          type="text"
+          placeholder="Enter Expert ID"
+          value={expertId}
+          onChange={e => setExpertId(e.target.value)}
+          style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+            border: "1px solid #E5E7EB", fontSize: "13px", outline: "none",
+            boxSizing: "border-box", marginBottom: "20px" }}
+        />
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose}
+            style={{ padding: "9px 18px", borderRadius: "10px", border: "1px solid #E5E7EB",
+              fontSize: "13px", fontWeight: 500, color: "#6B7280", background: "none", cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(expertId)} disabled={!expertId.trim()}
+            style={{ padding: "9px 18px", borderRadius: "10px", border: "none",
+              fontSize: "13px", fontWeight: 600, backgroundColor: "#2563EB", color: "#fff",
+              cursor: expertId.trim() ? "pointer" : "not-allowed", opacity: expertId.trim() ? 1 : 0.5 }}>
+            Assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Main List Page
 // ─────────────────────────────────────────────────────────
 export default function JobsPage() {
   const dispatch = useAppDispatch();
   const { list, listStatus, listError, selected, selectedStatus } =
     useAppSelector((s) => s.jobs);
 
+  // Basic filters
   const [categoryFilter, setCategoryFilter] = useState("All Jobs");
   const [statusFilter,   setStatusFilter]   = useState("All");
   const [monthFilter,    setMonthFilter]    = useState("All");
   const [search,         setSearch]         = useState("");
   const [downloading,    setDownloading]    = useState(false);
 
-  // Derive unique category options from live data
+  // Advanced filters
+  const [locationFilter, setLocationFilter] = useState("All");
+  const [dateFrom,       setDateFrom]       = useState("");
+  const [dateTo,         setDateTo]         = useState("");
+  const [amountMin,      setAmountMin]      = useState("");
+  const [amountMax,      setAmountMax]      = useState("");
+  const [showAdvanced,   setShowAdvanced]   = useState(false);
+
+  // Bulk selection
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const categoryOptions = [
     "All Jobs",
     ...Array.from(new Set(list.map((j: ApiJob) => val(j, "category")).filter((c) => c !== "—"))),
+  ];
+
+  const locationOptions = [
+    "All",
+    ...Array.from(new Set(
+      list.map((j: ApiJob) => {
+        const loc = j["location"] as { city?: string; state?: string } | undefined;
+        return loc?.city ?? loc?.state ?? null;
+      }).filter(Boolean) as string[]
+    )),
   ];
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchJobs());
   }, [dispatch, listStatus]);
 
-  // ── Export ────────────────────────────────────────────
+  // ── Filtering ─────────────────────────────────────────
+  const filtered = list.filter((j: ApiJob) => {
+    const status   = deriveStatus(j);
+    const category = val(j, "category");
+    const title    = val(j, "title", "description").toLowerCase();
+
+    const matchCategory = categoryFilter === "All Jobs" || category === categoryFilter;
+    const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
+    const matchSearch   = !search || title.includes(search.toLowerCase());
+
+    // Location filter
+    const locObj = j["location"] as { city?: string; state?: string } | undefined;
+    const locStr = locObj ? `${locObj.city ?? ""} ${locObj.state ?? ""}`.toLowerCase() : "";
+    const matchLocation = locationFilter === "All" || locStr.includes(locationFilter.toLowerCase());
+
+    // Month filter
+    let matchMonth = true;
+    if (monthFilter !== "All") {
+      const created = j["createdAt"] as string | undefined;
+      if (created) {
+        matchMonth = new Date(created).getMonth() === MONTH_MAP[monthFilter];
+      } else {
+        matchMonth = false;
+      }
+    }
+
+    // Date range filter
+    let matchDateRange = true;
+    if (dateFrom || dateTo) {
+      const created = j["createdAt"] as string | undefined;
+      if (created) {
+        const d = new Date(created).getTime();
+        if (dateFrom && d < new Date(dateFrom).getTime()) matchDateRange = false;
+        if (dateTo   && d > new Date(dateTo + "T23:59:59").getTime()) matchDateRange = false;
+      } else {
+        matchDateRange = false;
+      }
+    }
+
+    // Amount range filter
+    let matchAmount = true;
+    const amt = j["finalAmount"] as number | undefined;
+    if (amountMin && amt != null && amt < Number(amountMin)) matchAmount = false;
+    if (amountMax && amt != null && amt > Number(amountMax)) matchAmount = false;
+
+    return matchCategory && matchStatus && matchSearch && matchLocation && matchMonth && matchDateRange && matchAmount;
+  });
+
+  // ── Selection helpers ─────────────────────────────────
+  const filteredIds  = filtered.map((j: ApiJob) => String(j.id));
+  const allSelected  = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const someSelected = filteredIds.some(id => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => { const next = new Set(prev); filteredIds.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSelectedIds(prev => new Set([...prev, ...filteredIds]));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectedCount = [...selectedIds].filter(id => filteredIds.includes(id)).length;
+
+  // ── Advanced filter reset ─────────────────────────────
+  const resetAdvancedFilters = () => {
+    setLocationFilter("All");
+    setDateFrom("");
+    setDateTo("");
+    setAmountMin("");
+    setAmountMax("");
+  };
+
+  const hasActiveAdvancedFilters =
+    locationFilter !== "All" || dateFrom !== "" || dateTo !== "" || amountMin !== "" || amountMax !== "";
+
+  // ── Bulk actions ──────────────────────────────────────
+  const handleCancelSelected = () => {
+    toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} cancelled`);
+    setSelectedIds(new Set());
+  };
+
+  const handleExportSelected = async () => {
+    setDownloading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const url   = await downloadReport({ reportType: "jobs", type: "pdf", fromDate: "2024-01-01", toDate: today });
+      const a     = document.createElement("a");
+      a.href      = url;
+      a.download  = `jobs_export_${today}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${selectedCount} job${selectedCount > 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Failed to export");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleAssignConfirm = (expertId: string) => {
+    toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} assigned to ${expertId}`);
+    setShowAssignModal(false);
+    setSelectedIds(new Set());
+  };
+
   const handleExport = async () => {
     setDownloading(true);
     try {
-      const today    = new Date().toISOString().split("T")[0];
-      const url      = await downloadReport({ reportType: "jobs", type: "pdf", fromDate: "2024-01-01", toDate: today });
-      const a        = document.createElement("a");
-      a.href         = url;
-      a.download     = `jobs_report_${today}.pdf`;
+      const today = new Date().toISOString().split("T")[0];
+      const url   = await downloadReport({ reportType: "jobs", type: "pdf", fromDate: "2024-01-01", toDate: today });
+      const a     = document.createElement("a");
+      a.href      = url;
+      a.download  = `jobs_report_${today}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Jobs report downloaded");
@@ -318,7 +544,7 @@ export default function JobsPage() {
     }
   };
 
-  // ── Loading state for detail ──────────────────────────
+  // ── Detail loading ────────────────────────────────────
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -333,55 +559,33 @@ export default function JobsPage() {
   }
 
   if (selectedStatus === "succeeded" && selected) {
-    // API returns { user: {...}, jobs: [...] } — unwrap correctly
-    const raw      = selected as unknown as Record<string, unknown>;
-    const rawUser  = raw.user  as Record<string, unknown> | undefined;
-    const rawJobs  = raw.jobs  as Record<string, unknown>[] | undefined;
+    const raw     = selected as unknown as Record<string, unknown>;
+    const rawJob  = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
+    const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
 
-    // The actual job is the first item in jobs[], or fall back to selected itself
-    const rawJob   = (rawJobs && rawJobs.length > 0 ? rawJobs[0] : selected) as ApiJob;
-
-    // Inject client info from the user object into the job
     const enrichedJob: ApiJob = {
+      ...(listJob ?? {}),
       ...rawJob,
-      client: rawUser ? {
-        name:  rawUser.name  as string,
-        phone: rawUser.phone as string,
-        email: rawUser.email as string,
-      } : (rawJob as Record<string, unknown>).client,
+      client: (listJob?.["client"] ?? rawJob["client"]) as ApiJob[string],
+      expert: (listJob?.["expert"] ?? rawJob["expert"]) as ApiJob[string],
+      finalAmount: (listJob?.["finalAmount"] ?? rawJob["finalAmount"]) as ApiJob[string],
     } as ApiJob;
 
     return <JobDetailView job={enrichedJob} onBack={() => dispatch(clearSelectedJob())} />;
   }
 
-  // ── Filtering ─────────────────────────────────────────
-  const filtered = list.filter((j: ApiJob) => {
-    const status   = deriveStatus(j);
-    const category = val(j, "category");
-    const title    = val(j, "title", "description").toLowerCase();
-
-    const matchCategory = categoryFilter === "All Jobs" || category === categoryFilter;
-    const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
-    const matchSearch   = !search || title.includes(search.toLowerCase());
-
-    let matchMonth = true;
-    if (monthFilter !== "All") {
-      const created = j["createdAt"] as string | undefined;
-      if (created) {
-        const month = new Date(created).getMonth();
-        matchMonth  = month === MONTH_MAP[monthFilter];
-      } else {
-        matchMonth = false;
-      }
-    }
-
-    return matchCategory && matchStatus && matchSearch && matchMonth;
-  });
-
   // ─────────────────────────────────────────────────────
   return (
     <div className="flex flex-col flex-1" style={{ backgroundColor: "#F4F5F7" }}>
       <Topbar title="Jobs Management" />
+
+      {showAssignModal && (
+        <AssignModal
+          count={selectedCount}
+          onClose={() => setShowAssignModal(false)}
+          onConfirm={handleAssignConfirm}
+        />
+      )}
 
       <style>{`
         .jobs-header { padding: 16px !important; }
@@ -399,25 +603,71 @@ export default function JobsPage() {
           .jobs-cards  { display: none !important; }
           .jobs-pagination { flex-direction: row !important; align-items: center !important; }
         }
+        .bulk-btn {
+          display: flex; align-items: center; gap: 6px;
+          padding: 7px 14px; border-radius: 8px; font-size: 12.5px;
+          font-weight: 600; cursor: pointer; border: 1px solid transparent;
+          transition: opacity 0.15s;
+        }
+        .bulk-btn:hover { opacity: 0.85; }
+        .bulk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .row-cb { width: 16px; height: 16px; accent-color: #2563EB; cursor: pointer; }
+        .adv-input {
+          padding: 7px 10px; border-radius: 8px; border: 1px solid #E5E7EB;
+          font-size: 12px; outline: none; color: #111827; background: #fff;
+          transition: border-color 0.15s;
+        }
+        .adv-input:focus { border-color: #2563EB; }
       `}</style>
 
-      {/* ── Sub-header: "Jobs List" + Export button ── */}
-      <div className="jobs-header flex items-center justify-between">
-        <p style={{ fontSize: "16px", fontWeight: 600, color: "#111827" }}>Jobs List</p>
-        <button
-          onClick={handleExport}
-          disabled={downloading}
-          style={{
-            display: "flex", alignItems: "center", gap: "8px",
-            padding: "10px 20px", borderRadius: "10px", border: "none",
-            backgroundColor: "#2563EB", color: "#ffffff",
-            fontSize: "13px", fontWeight: 600, cursor: downloading ? "not-allowed" : "pointer",
-            opacity: downloading ? 0.7 : 1,
-          }}>
-          {downloading
-            ? <><Loader2 size={14} className="animate-spin" /> Exporting...</>
-            : <><Download size={15} /> Export</>}
-        </button>
+      {/* ── Sub-header ── */}
+      <div className="jobs-header flex items-center justify-between" style={{ gap: "12px", flexWrap: "wrap" }}>
+        <p style={{ fontSize: "16px", fontWeight: 600, color: "#111827", margin: 0 }}>Jobs List</p>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginLeft: "auto" }}>
+          {selectedCount > 0 && (
+            <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, marginRight: "4px" }}>
+              {selectedCount} selected
+            </span>
+          )}
+
+          <button
+            className="bulk-btn"
+            onClick={() => setShowAssignModal(true)}
+            disabled={selectedCount === 0}
+            style={{
+              backgroundColor: selectedCount > 0 ? "#2563EB" : "#E5E7EB",
+              color: selectedCount > 0 ? "#fff" : "#9CA3AF",
+              borderColor: selectedCount > 0 ? "#2563EB" : "#E5E7EB",
+            }}>
+            <UserPlus size={13} /> Assign to Expert
+          </button>
+
+          <button
+            className="bulk-btn"
+            onClick={handleCancelSelected}
+            disabled={selectedCount === 0}
+            style={{
+              backgroundColor: selectedCount > 0 ? "#FEF2F2" : "#F9FAFB",
+              color: selectedCount > 0 ? "#DC2626" : "#9CA3AF",
+              borderColor: selectedCount > 0 ? "#FECACA" : "#E5E7EB",
+            }}>
+            <XCircle size={13} /> Cancel Selected
+          </button>
+
+          <button
+            className="bulk-btn"
+            onClick={selectedCount > 0 ? handleExportSelected : handleExport}
+            disabled={downloading}
+            style={{
+              backgroundColor: "#2563EB", color: "#ffffff", borderColor: "#2563EB",
+              opacity: downloading ? 0.7 : 1,
+            }}>
+            {downloading
+              ? <><Loader2 size={13} className="animate-spin" /> Exporting...</>
+              : <><Download size={13} /> {selectedCount > 0 ? "Export Selected" : "Export"}</>}
+          </button>
+        </div>
       </div>
 
       <main className="jobs-main flex-1">
@@ -426,12 +676,34 @@ export default function JobsPage() {
 
           {/* ── Filter toolbar ── */}
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-              <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
+
+            {/* Toolbar title row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
+                {hasActiveAdvancedFilters && (
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#2563EB",
+                    color: "#fff", fontSize: "10px", fontWeight: 700 }}>
+                    ✓
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowAdvanced(p => !p)}
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px",
+                  fontWeight: 600, color: showAdvanced ? "#2563EB" : "#6B7280",
+                  background: "none", border: "none", cursor: "pointer", padding: "4px 8px",
+                  borderRadius: "8px", backgroundColor: showAdvanced ? "#EFF6FF" : "transparent",
+                  transition: "all 0.15s" }}>
+                {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                Advanced Filters
+              </button>
             </div>
+
+            {/* Basic filters */}
             <div className="jobs-filter-row flex" style={{ gap: "12px" }}>
-              {/* Search */}
               <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
                 <svg style={{ position: "absolute", left: "14px", top: "50%",
                   transform: "translateY(-50%)", color: "#9CA3AF" }}
@@ -446,24 +718,108 @@ export default function JobsPage() {
                     fontSize: "13px", outline: "none", border: "1px solid #E5E7EB",
                     backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
               </div>
-
               <div className="jobs-filter-dropdowns" style={{ gap: "12px" }}>
-                {/* Category (All Jobs) */}
                 <FilterDropdown value={categoryFilter} options={categoryOptions} onChange={setCategoryFilter} />
-
-                {/* Status */}
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Status:</span>
                   <FilterDropdown value={statusFilter} options={STATUS_OPTIONS} onChange={setStatusFilter} />
                 </div>
-
-                {/* Date / Month */}
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Date:</span>
                   <FilterDropdown value={monthFilter} options={MONTH_OPTIONS} onChange={setMonthFilter} />
                 </div>
               </div>
             </div>
+
+            {/* Advanced filters panel */}
+            {showAdvanced && (
+              <div style={{ marginTop: "16px", padding: "20px", borderRadius: "12px",
+                backgroundColor: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+                <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.07em", color: "#9CA3AF", margin: "0 0 16px" }}>
+                  Advanced Filters
+                </p>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-end" }}>
+
+                  {/* Location */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Location</span>
+                    <FilterDropdown value={locationFilter} options={locationOptions} onChange={setLocationFilter} />
+                  </div>
+
+                  {/* Date range */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Date Range</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="date"
+                        className="adv-input"
+                        value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input
+                        type="date"
+                        className="adv-input"
+                        value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Amount range */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Amount Range (₦)</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        className="adv-input"
+                        value={amountMin}
+                        onChange={e => setAmountMin(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        className="adv-input"
+                        value={amountMax}
+                        onChange={e => setAmountMax(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: "8px", marginLeft: "auto", alignSelf: "flex-end" }}>
+                    <button
+                      onClick={resetAdvancedFilters}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                        color: "#6B7280", cursor: "pointer", transition: "all 0.15s" }}>
+                      Reset
+                    </button>
+                    <button
+                      onClick={() => setShowAdvanced(false)}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 600, border: "none", backgroundColor: "#2563EB",
+                        color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}>
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Loading / Error ── */}
@@ -485,8 +841,17 @@ export default function JobsPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                      <th style={{ padding: "12px 16px 12px 24px", width: "40px" }}>
+                        <input
+                          type="checkbox"
+                          className="row-cb"
+                          checked={allSelected}
+                          ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                          onChange={toggleAll}
+                        />
+                      </th>
                       {["Job ID", "Client", "Expert", "Amount", "Status", "Actions"].map((h) => (
-                        <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "11px",
+                        <th key={h} style={{ textAlign: "left", padding: "12px 20px 12px 0", fontSize: "11px",
                           fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B7280" }}>
                           {h}
                         </th>
@@ -495,55 +860,56 @@ export default function JobsPage() {
                   </thead>
                   <tbody>
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={6} style={{ textAlign: "center", padding: "56px",
+                      <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px",
                         fontSize: "14px", color: "#9CA3AF" }}>
                         {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
                       </td></tr>
                     ) : filtered.map((job: ApiJob) => {
-                      const budgetObj = job["budget"] as { amount?: number } | undefined;
-
-                      /* TODO-BACKEND: "Amount" in the list should be the final/agreed amount,
-                         not the budget estimate. Fallback to budget for now. */
-                      const amountDisplay = fmtMoney(
-                        (job["finalPrice"] as number | undefined) ??
-                        (job["paymentAmount"] as number | undefined) ??
-                        budgetObj?.amount
-                      );
-
-                      /* TODO-BACKEND: "Client" should be a name. Currently postedBy = "client_1" */
+                      const jobId  = String(job.id);
+                      const finalAmountDisplay = fmtMoney(job["finalAmount"] as number | undefined);
                       const clientObj  = job["client"] as { name?: string } | undefined;
-                      const clientName = clientObj?.name ?? val(job, "postedBy");
-
-                      /* TODO-BACKEND: "Expert" not in response — should come from accepted bid or job object */
                       const expertObj  = job["expert"] as { name?: string } | undefined;
+                      const clientName = clientObj?.name ?? val(job, "postedBy");
                       const expertName = expertObj?.name ?? "—";
-
-                      const status = deriveStatus(job);
+                      const status     = deriveStatus(job);
+                      const isChecked  = selectedIds.has(jobId);
 
                       return (
-                        <tr key={String(job.id)}
-                          style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}
-                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
-                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                        <tr key={jobId}
+                          style={{
+                            borderBottom: "1px solid #F3F4F6",
+                            backgroundColor: isChecked ? "#EFF6FF" : "transparent",
+                            transition: "background 0.1s",
+                          }}
+                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.backgroundColor = "#F9FAFB"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = isChecked ? "#EFF6FF" : "transparent"; }}>
 
-                          <td style={{ padding: "16px 24px", fontSize: "12px", fontFamily: "monospace",
-                            color: "#6B7280" }}>
-                            {String(job.id).slice(0, 12)}
+                          <td style={{ padding: "14px 16px 14px 24px" }}>
+                            <input
+                              type="checkbox"
+                              className="row-cb"
+                              checked={isChecked}
+                              onChange={() => toggleOne(jobId)}
+                            />
                           </td>
-                          <td style={{ padding: "16px 24px", fontSize: "13px", color: "#111827" }}>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "12px",
+                            fontFamily: "monospace", color: "#6B7280" }}>
+                            {jobId.slice(0, 14)}
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", color: "#111827" }}>
                             {clientName}
                           </td>
-                          <td style={{ padding: "16px 24px", fontSize: "13px", color: "#111827" }}>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", color: "#111827" }}>
                             {expertName}
                           </td>
-                          <td style={{ padding: "16px 24px", fontSize: "13px", fontWeight: 500, color: "#111827" }}>
-                            {amountDisplay}
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
+                            {finalAmountDisplay}
                           </td>
-                          <td style={{ padding: "16px 24px" }}>
+                          <td style={{ padding: "14px 20px 14px 0" }}>
                             <StatusBadge label={status} variant={getStatusVariant(status)} />
                           </td>
-                          <td style={{ padding: "16px 24px" }}>
-                            <button onClick={() => dispatch(fetchJobById(String(job.id)))}
+                          <td style={{ padding: "14px 20px 14px 0" }}>
+                            <button onClick={() => dispatch(fetchJobById(jobId))}
                               style={{ padding: "6px", borderRadius: "8px", border: "none",
                                 background: "none", cursor: "pointer", color: "#9CA3AF",
                                 display: "flex", alignItems: "center" }}
@@ -565,22 +931,23 @@ export default function JobsPage() {
                     {list.length === 0 ? "No jobs posted yet." : "No jobs match your filter."}
                   </p>
                 ) : filtered.map((job: ApiJob) => {
-                  const budgetObj  = job["budget"] as { amount?: number } | undefined;
+                  const jobId      = String(job.id);
                   const clientObj  = job["client"] as { name?: string } | undefined;
                   const expertObj  = job["expert"] as { name?: string } | undefined;
-                  const amount     = fmtMoney(
-                    (job["finalPrice"] as number | undefined) ??
-                    (job["paymentAmount"] as number | undefined) ??
-                    budgetObj?.amount
-                  );
+                  const finalAmt   = fmtMoney(job["finalAmount"] as number | undefined);
                   const clientName = clientObj?.name ?? val(job, "postedBy");
                   const expertName = expertObj?.name ?? "—";
                   const status     = deriveStatus(job);
+                  const isChecked  = selectedIds.has(jobId);
 
                   return (
-                    <div key={String(job.id)}
-                      style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB",
-                        backgroundColor: "#ffffff", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div key={jobId}
+                      style={{ padding: "14px 16px", borderRadius: "12px",
+                        border: `1px solid ${isChecked ? "#BFDBFE" : "#E5E7EB"}`,
+                        backgroundColor: isChecked ? "#EFF6FF" : "#ffffff",
+                        display: "flex", alignItems: "center", gap: "12px" }}>
+                      <input type="checkbox" className="row-cb"
+                        checked={isChecked} onChange={() => toggleOne(jobId)} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827",
                           marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -591,10 +958,10 @@ export default function JobsPage() {
                         </p>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <StatusBadge label={status} variant={getStatusVariant(status)} />
-                          <span style={{ fontSize: "12px", fontWeight: 500, color: "#111827" }}>{amount}</span>
+                          <span style={{ fontSize: "12px", fontWeight: 600, color: "#111827" }}>{finalAmt}</span>
                         </div>
                       </div>
-                      <button onClick={() => dispatch(fetchJobById(String(job.id)))}
+                      <button onClick={() => dispatch(fetchJobById(jobId))}
                         style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB",
                           background: "none", cursor: "pointer", color: "#9CA3AF",
                           flexShrink: 0, display: "flex", alignItems: "center" }}>

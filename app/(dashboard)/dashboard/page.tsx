@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Users, ShieldCheck, DollarSign, TrendingUp, Activity, AlertTriangle } from "lucide-react";
+import { Users, Briefcase, DollarSign, TrendingUp, Activity, AlertTriangle } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import DashboardLineChart from "@/components/dashboard/DashboardLineChart";
 import DonutChart from "@/components/report/DonutChart";
@@ -39,22 +39,11 @@ const today      = new Date().toISOString().split("T")[0];
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const query      = { fromDate: oneYearAgo, toDate: today };
 
-// ── Mock fallbacks ─────────────────────────────────────────────────────────────
-
-const RECENT_ACTIVITY: { dot: string; time: string; text: string }[] = [
-  { dot: "#16a34a", time: "10:30 AM", text: "New expert registered: Adebayo S." },
-  { dot: "#F9A826", time: "10:15 AM", text: "Job completed: Plumbing in Ikeja – ₦25,000" },
-  { dot: "#EF4444", time: "09:45 AM", text: "Dispute opened: CASE-2026-03-21" },
-  { dot: "#16a34a", time: "09:30 AM", text: "TAS payout processed: Chidi E. – ₦245,000" },
-  { dot: "#F9A826", time: "09:15 AM", text: "New TAS application: Bola A." },
-  { dot: "#2563eb", time: "08:45 AM", text: "Payment received: ₦50,000 from client Funke" },
-];
-
 const PENDING_ALERTS: { label: string; value: string; sub: string; color: string; bg: string }[] = [
-  { label: "Pending verifications", value: "156", sub: "45 Tier 1 · 32 Tier 2 · 12 Tier 3",          color: "#7c3aed", bg: "#F5F3FF" },
-  { label: "Open disputes",         value: "25",  sub: "12 new · 8 in progress · 5 in mediation",     color: "#EF4444", bg: "#FEF2F2" },
-  { label: "TAS applications",      value: "8",   sub: "Pending review",                              color: "#F9A826", bg: "#FFFBEB" },
-  { label: "Pending payouts",       value: "3",   sub: "₦125,000 total",                              color: "#16a34a", bg: "#F0FDF4" },
+  { label: "Pending verifications", value: "156", sub: "45 Tier 1 · 32 Tier 2 · 12 Tier 3",      color: "#7c3aed", bg: "#F5F3FF" },
+  { label: "Open disputes",         value: "25",  sub: "12 new · 8 in progress · 5 in mediation", color: "#EF4444", bg: "#FEF2F2" },
+  { label: "TAS applications",      value: "8",   sub: "Pending review",                          color: "#F9A826", bg: "#FFFBEB" },
+  { label: "Pending payouts",       value: "3",   sub: "₦125,000 total",                          color: "#16a34a", bg: "#F0FDF4" },
 ];
 
 const DOT_COLORS: Record<string, string> = {
@@ -97,8 +86,8 @@ export default function DashboardPage() {
     topCitiesData, topCitiesStatus,
   } = useAppSelector((s) => s.report);
   const {
-    recentActivity,     recentActivityStatus,
-    pendingAlerts,      pendingAlertsStatus,
+    recentActivity,  recentActivityStatus,
+    pendingAlerts,   pendingAlertsStatus,
   } = useAppSelector((s) => s.dashboard);
 
   useEffect(() => {
@@ -117,15 +106,15 @@ export default function DashboardPage() {
   // ── Stat cards ────────────────────────────────────────────────────────────
   const isStatsLoading = statsStatus === "loading" || statsStatus === "idle";
   const s = adminStats as {
-    totalUsers?: number; verifiedExperts?: number;
+    totalUsers?: number; jobs?: number;
     revenue?: number; growthRate?: number;
   } | null;
 
   const stats = [
-    { label: "Total Users",      value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                    icon: Users,       iconColor: "#2563eb", iconBg: "#EFF6FF" },
-    { label: "Verified Experts", value: isStatsLoading ? "—" : String(s?.verifiedExperts ?? "—"),               icon: ShieldCheck, iconColor: "#16a34a", iconBg: "#F0FDF4" },
-    { label: "Revenue",          value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,  icon: DollarSign,  iconColor: "#d97706", iconBg: "#FFFBEB" },
-    { label: "Growth",           value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                       icon: TrendingUp,  iconColor: "#7c3aed", iconBg: "#F5F3FF" },
+    { label: "Total Users", value: isStatsLoading ? "—" : String(s?.totalUsers ?? "—"),                    icon: Users,     iconColor: "#2563eb", iconBg: "#EFF6FF" },
+    { label: "Total Jobs",  value: isStatsLoading ? "—" : String(s?.jobs ?? "—"),                          icon: Briefcase, iconColor: "#16a34a", iconBg: "#F0FDF4" },
+    { label: "Revenue",     value: isStatsLoading ? "—" : `₦${Number(s?.revenue ?? 0).toLocaleString()}`,  icon: DollarSign, iconColor: "#d97706", iconBg: "#FFFBEB" },
+    { label: "Growth",      value: isStatsLoading ? "—" : `+${s?.growthRate ?? 0}%`,                       icon: TrendingUp, iconColor: "#7c3aed", iconBg: "#F5F3FF" },
   ];
 
   // ── User growth chart ─────────────────────────────────────────────────────
@@ -185,17 +174,17 @@ export default function DashboardPage() {
       }))
     : FALLBACK_CITIES;
 
-  // ── Recent Activity — live or mock ────────────────────────────────────────
+  // ── Recent Activity — live only, max 10 ───────────────────────────────────
   const activityRows: { dot: string; time: string; text: string }[] =
     recentActivityStatus === "succeeded" && recentActivity.length > 0
-      ? recentActivity.map((item) => ({
+      ? recentActivity.slice(0, 10).map((item) => ({
           dot:  DOT_COLORS[item.type] ?? "#9CA3AF",
           time: new Date(item.createdAt).toLocaleTimeString("en-GB", {
             hour: "2-digit", minute: "2-digit",
           }),
           text: item.text,
         }))
-      : RECENT_ACTIVITY;
+      : [];
 
   // ── Pending Alerts — live or mock ─────────────────────────────────────────
   const pa = pendingAlerts;
@@ -332,21 +321,26 @@ export default function DashboardPage() {
                 <Activity size={15} color="#374151" />
                 Recent Activity
               </p>
-              <button className="view-all">View all</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              {activityRows.map((item: { dot: string; time: string; text: string }, i: number) => (
-                <div key={i} className="activity-row"
-                  style={{ display: "flex", alignItems: "flex-start", gap: "10px",
-                    padding: "9px 8px", borderRadius: "8px", transition: "background 0.15s" }}>
-                  <span style={{ width: "10px", height: "10px", borderRadius: "50%",
-                    backgroundColor: item.dot, flexShrink: 0, marginTop: "3px" }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.5 }}>{item.text}</p>
+              {recentActivityStatus === "loading" || recentActivityStatus === "idle" ? (
+                <div className="db-skeleton" style={{ height: 160 }}><div className="db-spin" /> Loading activity…</div>
+              ) : activityRows.length === 0 ? (
+                <p style={{ fontSize: "13px", color: "#9CA3AF", textAlign: "center", padding: "32px 0" }}>No recent activity</p>
+              ) : (
+                activityRows.map((item, i) => (
+                  <div key={i} className="activity-row"
+                    style={{ display: "flex", alignItems: "flex-start", gap: "10px",
+                      padding: "9px 8px", borderRadius: "8px", transition: "background 0.15s" }}>
+                    <span style={{ width: "10px", height: "10px", borderRadius: "50%",
+                      backgroundColor: item.dot, flexShrink: 0, marginTop: "3px" }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.5 }}>{item.text}</p>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "#9CA3AF", flexShrink: 0 }}>{item.time}</span>
                   </div>
-                  <span style={{ fontSize: "11px", color: "#9CA3AF", flexShrink: 0 }}>{item.time}</span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -358,7 +352,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {alertRows.map((alert: { label: string; value: string; sub: string; color: string; bg: string }) => (
+              {alertRows.map((alert) => (
                 <div key={alert.label} className="alert-pill" style={{ backgroundColor: alert.bg }}>
                   <div style={{ width: "36px", height: "36px", borderRadius: "10px",
                     backgroundColor: alert.color, display: "flex", alignItems: "center",
