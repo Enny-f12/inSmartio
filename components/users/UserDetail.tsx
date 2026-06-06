@@ -18,6 +18,13 @@ export interface UserJob {
   payment:  number;
   notes:    string;
   review?:  string;
+  tas?: {
+    id?:         string;
+    name?:       string;
+    phone?:      string;
+    tier?:       number;
+    commission?: number | null;
+  };
 }
 
 export interface User {
@@ -335,12 +342,13 @@ function JobsTable({ jobs, userType }: { jobs?: UserJob[]; userType: User["type"
               <th style={TH}>Payment</th>
               <th style={TH}>Notes</th>
               <th style={TH}>Review</th>
+              <th style={TH}>TAS Info</th>
             </tr>
           </thead>
           <tbody>
             {!jobs || jobs.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", padding: "48px",
+                <td colSpan={6} style={{ textAlign: "center", padding: "48px",
                   fontSize: "13px", color: "#9CA3AF" }}>
                   No jobs found for this user.
                 </td>
@@ -349,11 +357,37 @@ function JobsTable({ jobs, userType }: { jobs?: UserJob[]; userType: User["type"
               <tr key={job.id} style={{ borderBottom: "1px solid #F3F4F6" }}
                 onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
-                <td style={{ ...TD, fontWeight: 500, color: "#111827", fontFamily: "monospace", fontSize: "12px" }}>{job.id}</td>
+                <td style={{ ...TD, fontWeight: 500, color: "#111827", fontFamily: "monospace", fontSize: "12px" }}>
+                  {job.id}
+                </td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.info}</td>
                 <td style={{ ...TD, fontWeight: 500, color: "#111827" }}>{fmtMoney(job.payment)}</td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.notes}</td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.review ?? "—"}</td>
+                <td style={{ ...TD }}>
+                  {job.tas?.name ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "#111827" }}>
+                        {job.tas.name}
+                      </span>
+                      {job.tas.phone && (
+                        <span style={{ fontSize: "11.5px", color: "#6B7280" }}>{job.tas.phone}</span>
+                      )}
+                      {job.tas.tier != null && (
+                        <span style={{
+                          display: "inline-flex", alignSelf: "flex-start",
+                          fontSize: "10.5px", fontWeight: 600, color: "#7c3aed",
+                          backgroundColor: "#F3E8FF", borderRadius: "5px",
+                          padding: "1px 7px", marginTop: "2px",
+                        }}>
+                          Tier {job.tas.tier}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span style={{ color: "#9CA3AF", fontSize: "13px" }}>—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -382,7 +416,7 @@ function AddNoteModal({ userName, onClose }: { userName: string; onClose: () => 
     if (!note.trim()) return;
     setSaving(true);
     // TODO: wire to API — POST /admin/users/:id/notes
-    await new Promise(r => setTimeout(r, 600)); // placeholder delay
+    await new Promise(r => setTimeout(r, 600));
     setSaving(false);
     onClose();
   };
@@ -470,7 +504,6 @@ function ActionBar({ user, onDelete, onSuspend, onAddNote }: {
     backgroundColor: "#EFF6FF",
   };
 
-  // ── Expert: Verify Tier 2 | Suspend | Delete | Add Note
   if (user.type === "Expert") return (
     <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
       <button style={baseBtn}><ShieldCheck size={14} /> Verify Tier 2</button>
@@ -483,8 +516,7 @@ function ActionBar({ user, onDelete, onSuspend, onAddNote }: {
     </div>
   );
 
-  // ── Client: Suspend | Delete | Add Note  (no Verify)
-   if (user.type === "Client") return (
+  if (user.type === "Client") return (
     <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
       <button style={baseBtn}><ShieldCheck size={14} /> Verify</button>
       <button onClick={onSuspend} style={warnBtn}>
@@ -494,8 +526,6 @@ function ActionBar({ user, onDelete, onSuspend, onAddNote }: {
     </div>
   );
 
-
-  // ── TAS: Suspend | Delete | Add Note  (no Verify / no Adjust Tier)
   return (
     <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
       <button style={baseBtn}><ShieldCheck size={14} /> Adjust Tier</button>
@@ -506,7 +536,6 @@ function ActionBar({ user, onDelete, onSuspend, onAddNote }: {
     </div>
   );
 }
-
 
 // ─────────────────────────────────────────────────────────
 // Main component

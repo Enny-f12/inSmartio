@@ -66,7 +66,6 @@ const fmt = (iso?: string | null) => {
   catch { return String(iso); }
 };
 
-// Formats date + time e.g. "04 Jun 2026, 10:08 PM"
 const fmtDateTime = (iso?: string | null) => {
   if (!iso) return "—";
   try {
@@ -101,7 +100,7 @@ function SectionLabel({ text }: { text: string }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
-      <span style={{ minWidth: "160px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
+      <span style={{ minWidth: "220px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
       <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
     </div>
   );
@@ -137,7 +136,14 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
       : fmtMoney(budgetObj.amount)
     : "—";
 
-  const finalAmount = fmtMoney(job["finalAmount"] as number | undefined);
+  // Split final amounts
+  const finalAmountBeforeInspection = fmtMoney(
+    job["finalAmountBeforeInspection"] as number | undefined,
+    fmtMoney(job["finalAmount"] as number | undefined),
+  );
+  const finalAmountAfterInspection = fmtMoney(
+    job["finalAmountAfterInspection"] as number | undefined,
+  );
 
   const commissionAmt   = fmtMoney(job["commissionAmount"] as number | undefined);
   const expertPayout    = fmtMoney(job["expertPayout"]    as number | undefined);
@@ -151,7 +157,7 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
   const clientEmail = clientObj?.email ?? "—";
   const clientRating = clientObj?.rating ?? null;
 
-  // ── Expert — prefer list data, fall back to accepted bid ─
+  // ── Expert ────────────────────────────────────────────
   const bids = (job["bids"] as Array<{
     status: string;
     expert?: {
@@ -185,7 +191,6 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
 
   // ── Timeline ──────────────────────────────────────────
   const allTimeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
-  // Deduplicate: keep only unique label+datetime combos
   const seen = new Set<string>();
   const uniqueTimeline = allTimeline.filter(t => {
     const key = `${t.label}||${t.datetime}`;
@@ -217,16 +222,17 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
           {/* ── Job Information ── */}
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Job Information" />
-            <InfoRow label="Job ID:"         value={val(job, "id", "_id")} />
-            <InfoRow label="Title:"          value={val(job, "title")} />
-            <InfoRow label="Category:"       value={val(job, "category")} />
-            <InfoRow label="Description:"    value={val(job, "description")} />
-            <InfoRow label="Location:"       value={location} />
-            <InfoRow label="Budget:"         value={budget} />
-            <InfoRow label="Final Amount:"   value={finalAmount} />
-            <InfoRow label="Created:"        value={createdAt} />
+            <InfoRow label="Job ID:"                        value={val(job, "id", "_id")} />
+            <InfoRow label="Title:"                         value={val(job, "title")} />
+            <InfoRow label="Category:"                      value={val(job, "category")} />
+            <InfoRow label="Description:"                   value={val(job, "description")} />
+            <InfoRow label="Location:"                      value={location} />
+            <InfoRow label="Budget:"                        value={budget} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow label="Created:"                       value={createdAt} />
             {isCompleted && (
-              <InfoRow label="Deadline:"     value={deadline} />
+              <InfoRow label="Deadline:"                    value={deadline} />
             )}
             <InfoRow label="Status:"
               value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
@@ -260,10 +266,13 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
           {/* ── Payment Information ── */}
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Payment Information" />
-            <InfoRow label="Payment Method:" value={paymentMethod} />
-            <InfoRow label="Final Amount:"   value={finalAmount} />
-            <InfoRow label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
-              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"} />
+            <InfoRow label="Payment Method:"                value={paymentMethod} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow
+              label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
+              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"}
+            />
             <InfoRow label="Expert Payout:"  value={expertPayout} />
             <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
           </div>
@@ -314,7 +323,7 @@ function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Assign to Expert Modal (simple)
+// Assign to Expert Modal
 // ─────────────────────────────────────────────────────────
 function AssignModal({ count, onClose, onConfirm }: {
   count: number; onClose: () => void; onConfirm: (expertId: string) => void;
@@ -366,19 +375,38 @@ export default function JobsPage() {
   const { list, listStatus, listError, selected, selectedStatus } =
     useAppSelector((s) => s.jobs);
 
+  // Basic filters
   const [categoryFilter, setCategoryFilter] = useState("All Jobs");
   const [statusFilter,   setStatusFilter]   = useState("All");
   const [monthFilter,    setMonthFilter]    = useState("All");
   const [search,         setSearch]         = useState("");
   const [downloading,    setDownloading]    = useState(false);
 
-  // Bulk selection state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Advanced filters
+  const [locationFilter, setLocationFilter] = useState("All");
+  const [dateFrom,       setDateFrom]       = useState("");
+  const [dateTo,         setDateTo]         = useState("");
+  const [amountMin,      setAmountMin]      = useState("");
+  const [amountMax,      setAmountMax]      = useState("");
+  const [showAdvanced,   setShowAdvanced]   = useState(false);
+
+  // Bulk selection
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [showAssignModal, setShowAssignModal] = useState(false);
 
   const categoryOptions = [
     "All Jobs",
     ...Array.from(new Set(list.map((j: ApiJob) => val(j, "category")).filter((c) => c !== "—"))),
+  ];
+
+  const locationOptions = [
+    "All",
+    ...Array.from(new Set(
+      list.map((j: ApiJob) => {
+        const loc = j["location"] as { city?: string; state?: string } | undefined;
+        return loc?.city ?? loc?.state ?? null;
+      }).filter(Boolean) as string[]
+    )),
   ];
 
   useEffect(() => {
@@ -395,6 +423,12 @@ export default function JobsPage() {
     const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
     const matchSearch   = !search || title.includes(search.toLowerCase());
 
+    // Location filter
+    const locObj = j["location"] as { city?: string; state?: string } | undefined;
+    const locStr = locObj ? `${locObj.city ?? ""} ${locObj.state ?? ""}`.toLowerCase() : "";
+    const matchLocation = locationFilter === "All" || locStr.includes(locationFilter.toLowerCase());
+
+    // Month filter
     let matchMonth = true;
     if (monthFilter !== "All") {
       const created = j["createdAt"] as string | undefined;
@@ -404,12 +438,32 @@ export default function JobsPage() {
         matchMonth = false;
       }
     }
-    return matchCategory && matchStatus && matchSearch && matchMonth;
+
+    // Date range filter
+    let matchDateRange = true;
+    if (dateFrom || dateTo) {
+      const created = j["createdAt"] as string | undefined;
+      if (created) {
+        const d = new Date(created).getTime();
+        if (dateFrom && d < new Date(dateFrom).getTime()) matchDateRange = false;
+        if (dateTo   && d > new Date(dateTo + "T23:59:59").getTime()) matchDateRange = false;
+      } else {
+        matchDateRange = false;
+      }
+    }
+
+    // Amount range filter
+    let matchAmount = true;
+    const amt = j["finalAmount"] as number | undefined;
+    if (amountMin && amt != null && amt < Number(amountMin)) matchAmount = false;
+    if (amountMax && amt != null && amt > Number(amountMax)) matchAmount = false;
+
+    return matchCategory && matchStatus && matchSearch && matchLocation && matchMonth && matchDateRange && matchAmount;
   });
 
   // ── Selection helpers ─────────────────────────────────
-  const filteredIds = filtered.map((j: ApiJob) => String(j.id));
-  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const filteredIds  = filtered.map((j: ApiJob) => String(j.id));
+  const allSelected  = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
   const someSelected = filteredIds.some(id => selectedIds.has(id));
 
   const toggleAll = () => {
@@ -429,6 +483,18 @@ export default function JobsPage() {
   };
 
   const selectedCount = [...selectedIds].filter(id => filteredIds.includes(id)).length;
+
+  // ── Advanced filter reset ─────────────────────────────
+  const resetAdvancedFilters = () => {
+    setLocationFilter("All");
+    setDateFrom("");
+    setDateTo("");
+    setAmountMin("");
+    setAmountMax("");
+  };
+
+  const hasActiveAdvancedFilters =
+    locationFilter !== "All" || dateFrom !== "" || dateTo !== "" || amountMin !== "" || amountMax !== "";
 
   // ── Bulk actions ──────────────────────────────────────
   const handleCancelSelected = () => {
@@ -495,7 +561,6 @@ export default function JobsPage() {
   if (selectedStatus === "succeeded" && selected) {
     const raw     = selected as unknown as Record<string, unknown>;
     const rawJob  = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
-
     const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
 
     const enrichedJob: ApiJob = {
@@ -547,6 +612,12 @@ export default function JobsPage() {
         .bulk-btn:hover { opacity: 0.85; }
         .bulk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .row-cb { width: 16px; height: 16px; accent-color: #2563EB; cursor: pointer; }
+        .adv-input {
+          padding: 7px 10px; border-radius: 8px; border: 1px solid #E5E7EB;
+          font-size: 12px; outline: none; color: #111827; background: #fff;
+          transition: border-color 0.15s;
+        }
+        .adv-input:focus { border-color: #2563EB; }
       `}</style>
 
       {/* ── Sub-header ── */}
@@ -605,10 +676,33 @@ export default function JobsPage() {
 
           {/* ── Filter toolbar ── */}
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-              <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
+
+            {/* Toolbar title row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
+                {hasActiveAdvancedFilters && (
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#2563EB",
+                    color: "#fff", fontSize: "10px", fontWeight: 700 }}>
+                    ✓
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowAdvanced(p => !p)}
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px",
+                  fontWeight: 600, color: showAdvanced ? "#2563EB" : "#6B7280",
+                  background: "none", border: "none", cursor: "pointer", padding: "4px 8px",
+                  borderRadius: "8px", backgroundColor: showAdvanced ? "#EFF6FF" : "transparent",
+                  transition: "all 0.15s" }}>
+                {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                Advanced Filters
+              </button>
             </div>
+
+            {/* Basic filters */}
             <div className="jobs-filter-row flex" style={{ gap: "12px" }}>
               <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
                 <svg style={{ position: "absolute", left: "14px", top: "50%",
@@ -636,6 +730,96 @@ export default function JobsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Advanced filters panel */}
+            {showAdvanced && (
+              <div style={{ marginTop: "16px", padding: "20px", borderRadius: "12px",
+                backgroundColor: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+                <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.07em", color: "#9CA3AF", margin: "0 0 16px" }}>
+                  Advanced Filters
+                </p>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-end" }}>
+
+                  {/* Location */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Location</span>
+                    <FilterDropdown value={locationFilter} options={locationOptions} onChange={setLocationFilter} />
+                  </div>
+
+                  {/* Date range */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Date Range</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="date"
+                        className="adv-input"
+                        value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input
+                        type="date"
+                        className="adv-input"
+                        value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Amount range */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Amount Range (₦)</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        className="adv-input"
+                        value={amountMin}
+                        onChange={e => setAmountMin(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        className="adv-input"
+                        value={amountMax}
+                        onChange={e => setAmountMax(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: "8px", marginLeft: "auto", alignSelf: "flex-end" }}>
+                    <button
+                      onClick={resetAdvancedFilters}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                        color: "#6B7280", cursor: "pointer", transition: "all 0.15s" }}>
+                      Reset
+                    </button>
+                    <button
+                      onClick={() => setShowAdvanced(false)}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 600, border: "none", backgroundColor: "#2563EB",
+                        color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}>
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Loading / Error ── */}
