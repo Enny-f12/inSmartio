@@ -21,9 +21,10 @@ const navItems = [
   { label: "TAS Management", href: "/tas",           icon: Crown },
   { label: "Payments",       href: "/payments",      icon: CreditCard },
   { label: "Disputes",       href: "/dispute",       icon: Scale },
+  { label: "Audit Logs",    href: "/audit-log",      icon: BarChart2 },
   { label: "Reports",        href: "/report",        icon: BarChart2 },
   { label: "Settings",       href: "/settings",      icon: Settings },
-   { label: "Audit Logs",    href: "/audit-log",      icon: BarChart2 },
+   
 ];
 
 interface SidebarContentProps {

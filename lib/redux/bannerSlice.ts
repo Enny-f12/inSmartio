@@ -33,8 +33,9 @@ export const fetchBanners = createAsyncThunk(
 
 export const addBanner = createAsyncThunk(
   "banners/add",
-  async (payload: CreateBannerPayload, { rejectWithValue }) => {
-    try { return await createBanner(payload); }
+  // Allow Blob in image so the file passes through to the API untouched
+  async (payload: Omit<CreateBannerPayload, "image"> & { image: string | Blob }, { rejectWithValue }) => {
+    try { return await createBanner(payload as CreateBannerPayload); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to create banner")); }
   }
 );
@@ -97,7 +98,6 @@ const bannerSlice = createSlice({
       })
       .addCase(removeBanner.rejected,  (state) => { state.mutateStatus = "failed"; });
 
-    // click — update click count from real response
     builder
       .addCase(clickBanner.fulfilled, (state, action) => {
         const idx = state.list.findIndex((b) => b.id === action.payload.id);

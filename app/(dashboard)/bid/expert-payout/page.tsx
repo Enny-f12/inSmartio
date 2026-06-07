@@ -11,21 +11,21 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MOCK_REFUNDS, type RefundRecord } from "@/components/bid/MockData";
+import { MOCK_PAYOUTS, type PayoutRecord } from "@/components/bid/MockData";
 import Topbar from "@/components/layout/Navbar";
 
 const fmt = (n: number) => `₦${n.toLocaleString()}`;
 
 const STATUS_MAP = {
-  processed: { label: "Processed", icon: CheckCircle, cls: "bg-green-100 text-green-700", iconCls: "text-green-500" },
-  pending:   { label: "Pending",   icon: Clock,        cls: "bg-amber-100 text-amber-700", iconCls: "text-amber-500" },
-  failed:    { label: "Failed",    icon: XCircle,      cls: "bg-red-100 text-red-700",     iconCls: "text-red-500"   },
+  paid:    { label: "Paid",    icon: CheckCircle, cls: "bg-green-100 text-green-700", iconCls: "text-green-500" },
+  pending: { label: "Pending", icon: Clock,       cls: "bg-amber-100 text-amber-700", iconCls: "text-amber-500" },
+  failed:  { label: "Failed",  icon: XCircle,     cls: "bg-red-100 text-red-700",     iconCls: "text-red-500"   },
 };
 
-// ─── Refund Detail Modal ──────────────────────────────────────────────────────
+// ─── Payout Detail Modal ──────────────────────────────────────────────────────
 
-function RefundDetailModal({ record, onClose }: { record: RefundRecord; onClose: () => void }) {
-  const s = STATUS_MAP[record.refundStatus];
+function PayoutDetailModal({ record, onClose }: { record: PayoutRecord; onClose: () => void }) {
+  const s = STATUS_MAP[record.payoutStatus];
   const Icon = s.icon;
 
   return (
@@ -35,7 +35,7 @@ function RefundDetailModal({ record, onClose }: { record: RefundRecord; onClose:
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h2 className="text-base font-semibold text-text-main">
-            Refund Tracking – {record.jobId}
+            Expert Cancellation Fee Payout
           </h2>
           <button
             onClick={onClose}
@@ -46,75 +46,73 @@ function RefundDetailModal({ record, onClose }: { record: RefundRecord; onClose:
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Details grid — matches spec layout */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+
+          {/* Details grid — matches spec layout exactly */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div>
+              <p className="text-text-muted text-xs">Expert</p>
+              <p className="font-medium">{record.expertName} ({record.expertId})</p>
+            </div>
+            <div>
+              <p className="text-text-muted text-xs">Cancellation Fee</p>
+              <p className="font-bold text-blue-700">{fmt(record.cancellationFee)}</p>
+            </div>
             <div>
               <p className="text-text-muted text-xs">Job ID</p>
               <p className="font-medium">{record.jobId}</p>
             </div>
             <div>
-              <p className="text-text-muted text-xs">Cancellation Fee</p>
-              <p className="font-medium text-red-600">{fmt(record.cancellationFee)}</p>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs">Original Escrow</p>
-              <p className="font-medium">{fmt(record.originalEscrow)}</p>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs">Client Refund</p>
-              <p className="font-medium text-green-700">{fmt(record.clientRefund)}</p>
+              <p className="text-text-muted text-xs">Date</p>
+              <p className="font-medium">{record.payoutDate ?? "—"}</p>
             </div>
           </div>
 
-          {/* Refund status row */}
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-text-muted text-xs">Refund Status:</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
-              <Icon className="w-3 h-3" /> {s.label}
-            </span>
+          <div className="border-t border-border pt-3 space-y-2 text-sm">
+            {/* Payout status */}
+            <div className="flex items-center gap-2">
+              <span className="text-text-muted text-xs w-28 shrink-0">Payout Status</span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
+                <Icon className="w-3 h-3" /> {s.label}
+              </span>
+            </div>
+
+            {/* Payout date + method */}
+            <div className="flex items-start gap-2">
+              <span className="text-text-muted text-xs w-28 shrink-0">Payout Date</span>
+              <span className="font-medium">{record.payoutDate ?? "—"}</span>
+              {record.payoutMethod && (
+                <>
+                  <span className="text-text-muted text-xs ml-4 shrink-0">Payout Method</span>
+                  <span className="font-medium">{record.payoutMethod}</span>
+                </>
+              )}
+            </div>
+
+            {/* Transaction ID */}
+            {record.transactionId && (
+              <div className="flex items-center gap-2">
+                <span className="text-text-muted text-xs w-28 shrink-0">Transaction ID</span>
+                <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">
+                  {record.transactionId}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Date + method row */}
-          <div className="grid grid-cols-2 gap-x-4 text-sm">
-            <div>
-              <p className="text-text-muted text-xs">Refund Date</p>
-              <p className="font-medium">{record.refundDate ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs">Refund Method</p>
-              <p className="font-medium">{record.refundMethod}</p>
-            </div>
-          </div>
-
-          {/* Transaction ID */}
-          {record.transactionId && (
-            <div className="text-sm">
-              <p className="text-text-muted text-xs">Transaction ID</p>
-              <p className="font-mono text-xs bg-gray-100 px-2 py-1 rounded mt-0.5 inline-block">
-                {record.transactionId}
-              </p>
-            </div>
-          )}
-
-          {/* ── All 3 action buttons always visible per spec ── */}
+          {/* ── Action buttons — all visible per spec ── */}
           <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-border">
             <button
-              disabled={record.refundStatus !== "processed"}
+              disabled={record.payoutStatus !== "paid"}
               className="flex-1 py-2 bg-primary/10 text-primary border border-primary/20 rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors disabled:opacity-40"
             >
-              View Refund Receipt
+              View Payout Receipt
             </button>
             <button
-              disabled={record.refundStatus !== "failed"}
+              disabled={record.payoutStatus === "paid"}
               className="flex-1 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors disabled:opacity-40 flex items-center justify-center gap-1"
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Resend Refund
-            </button>
-            <button
-              disabled={record.refundStatus !== "pending"}
-              className="flex-1 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-40"
-            >
-              Issue Manual Refund
+              <RefreshCw className="w-3.5 h-3.5" />
+              {record.payoutStatus === "pending" ? "Process Now" : "Reprocess Payout"}
             </button>
           </div>
         </div>
@@ -125,25 +123,25 @@ function RefundDetailModal({ record, onClose }: { record: RefundRecord; onClose:
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function ClientRefundTrackingPage() {
+export default function ExpertPayoutTrackingPage() {
   const router = useRouter();
-  const [selected, setSelected]     = useState<RefundRecord | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "processed" | "failed">("all");
+  const [selected,     setSelected]     = useState<PayoutRecord | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "pending" | "failed">("all");
 
   const filtered = statusFilter === "all"
-    ? MOCK_REFUNDS
-    : MOCK_REFUNDS.filter((r) => r.refundStatus === statusFilter);
+    ? MOCK_PAYOUTS
+    : MOCK_PAYOUTS.filter((p) => p.payoutStatus === statusFilter);
 
   const totals = {
-    total:     MOCK_REFUNDS.reduce((s, r) => s + r.clientRefund, 0),
-    processed: MOCK_REFUNDS.filter((r) => r.refundStatus === "processed").length,
-    pending:   MOCK_REFUNDS.filter((r) => r.refundStatus === "pending").length,
-    failed:    MOCK_REFUNDS.filter((r) => r.refundStatus === "failed").length,
+    total:   MOCK_PAYOUTS.reduce((s, p) => s + p.cancellationFee, 0),
+    paid:    MOCK_PAYOUTS.filter((p) => p.payoutStatus === "paid").length,
+    pending: MOCK_PAYOUTS.filter((p) => p.payoutStatus === "pending").length,
+    failed:  MOCK_PAYOUTS.filter((p) => p.payoutStatus === "failed").length,
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <Topbar title="Client Refund Tracking" />
+      <Topbar title="Expert Payout Tracking" />
 
       <div className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 space-y-4 sm:space-y-5">
 
@@ -159,10 +157,10 @@ export default function ClientRefundTrackingPage() {
             </button>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-text-main">
-                Client Refund Tracking
+                Expert Payout Tracking
               </h1>
               <p className="text-sm text-text-muted mt-0.5">
-                Refunds issued after cancellation fee deduction (Situation B2)
+                Cancellation fee payouts to experts (Situation B2)
               </p>
             </div>
           </div>
@@ -175,12 +173,12 @@ export default function ClientRefundTrackingPage() {
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-surface rounded-xl border border-border p-4">
-            <p className="text-xs text-text-muted uppercase tracking-wide font-medium">Total Refunded</p>
+            <p className="text-xs text-text-muted uppercase tracking-wide font-medium">Total Paid Out</p>
             <p className="text-xl sm:text-2xl font-bold text-text-main mt-1">{fmt(totals.total)}</p>
           </div>
           <div className="bg-surface rounded-xl border border-green-200 p-4">
-            <p className="text-xs text-green-600 uppercase tracking-wide font-medium">Processed</p>
-            <p className="text-xl sm:text-2xl font-bold text-green-700 mt-1">{totals.processed}</p>
+            <p className="text-xs text-green-600 uppercase tracking-wide font-medium">Paid</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-700 mt-1">{totals.paid}</p>
           </div>
           <div className="bg-surface rounded-xl border border-amber-200 p-4">
             <p className="text-xs text-amber-600 uppercase tracking-wide font-medium">Pending</p>
@@ -195,7 +193,7 @@ export default function ClientRefundTrackingPage() {
         {/* ── Filter ── */}
         <div className="bg-surface rounded-xl border border-border p-4 flex items-center gap-2 flex-wrap">
           <span className="text-sm text-text-muted font-medium shrink-0">Filter:</span>
-          {(["all", "processed", "pending", "failed"] as const).map((f) => (
+          {(["all", "paid", "pending", "failed"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
@@ -217,40 +215,43 @@ export default function ClientRefundTrackingPage() {
               <thead>
                 <tr className="border-b border-border bg-gray-50 text-xs">
                   <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Job ID</th>
-                  <th className="text-right px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Original Escrow</th>
-                  <th className="text-right px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Cancel Fee</th>
-                  <th className="text-right px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Client Refund</th>
+                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Expert</th>
+                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden md:table-cell">Expert ID</th>
+                  <th className="text-right px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Fee Amount</th>
                   <th className="text-center px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Status</th>
-                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden sm:table-cell">Refund Date</th>
-                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden md:table-cell">Method</th>
+                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden sm:table-cell">Payout Date</th>
+                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden lg:table-cell">Method</th>
+                  <th className="text-left px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium hidden lg:table-cell">Transaction ID</th>
                   <th className="text-center px-3 py-2 sm:px-4 sm:py-3 text-text-muted font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-text-muted">
-                      No refund records found
+                    <td colSpan={9} className="text-center py-12 text-text-muted">
+                      No payout records found
                     </td>
                   </tr>
                 ) : (
                   filtered.map((record) => {
-                    const s = STATUS_MAP[record.refundStatus];
+                    const s = STATUS_MAP[record.payoutStatus];
                     const Icon = s.icon;
                     return (
                       <tr
                         key={record.jobId}
                         className="border-b border-border hover:bg-gray-50 transition-colors"
                       >
-                        <td className="px-3 py-2 sm:px-4 sm:py-3 font-medium">{record.jobId}</td>
-                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs sm:text-sm">
-                          {fmt(record.originalEscrow)}
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 font-medium text-xs sm:text-sm">
+                          {record.jobId}
                         </td>
-                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-right text-red-600 font-medium text-xs sm:text-sm">
-                          – {fmt(record.cancellationFee)}
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm">
+                          {record.expertName}
                         </td>
-                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-bold text-green-700 text-xs sm:text-sm">
-                          {fmt(record.clientRefund)}
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 font-mono text-xs text-text-muted hidden md:table-cell">
+                          {record.expertId}
+                        </td>
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-bold text-blue-700 text-xs sm:text-sm">
+                          {fmt(record.cancellationFee)}
                         </td>
                         <td className="px-3 py-2 sm:px-4 sm:py-3 text-center">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
@@ -259,10 +260,13 @@ export default function ClientRefundTrackingPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 sm:px-4 sm:py-3 text-text-muted text-xs hidden sm:table-cell">
-                          {record.refundDate ?? "—"}
+                          {record.payoutDate ?? "—"}
                         </td>
-                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-text-muted text-xs hidden md:table-cell">
-                          {record.refundMethod}
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 text-text-muted text-xs hidden lg:table-cell">
+                          {record.payoutMethod}
+                        </td>
+                        <td className="px-3 py-2 sm:px-4 sm:py-3 font-mono text-xs text-text-muted hidden lg:table-cell">
+                          {record.transactionId ?? "—"}
                         </td>
                         <td className="px-3 py-2 sm:px-4 sm:py-3 text-center">
                           <button
@@ -285,7 +289,7 @@ export default function ClientRefundTrackingPage() {
       </div>
 
       {selected && (
-        <RefundDetailModal record={selected} onClose={() => setSelected(null)} />
+        <PayoutDetailModal record={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );

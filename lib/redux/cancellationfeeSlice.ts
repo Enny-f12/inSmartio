@@ -11,7 +11,7 @@ import {
   MOCK_CLIENT_DISPUTES,
   MOCK_NOTIFICATIONS,
   MOCK_CANCELLATION_FEES,
-} from "@/components/bid/MockData"; 
+} from "@/components/bid/MockData"; // adjust path to where you put mockData.ts
 import type {
   CancellationFeeRecord,
   CancellationFeeFilters,
@@ -98,7 +98,25 @@ export const fetchCancellationFees = createAsyncThunk(
     try {
       return await cancellationFeeService.getCancellationFees(filters);
     } catch {
-      return MOCK_CANCELLATION_FEES_RESPONSE;
+      // Client-side filter mock data
+      let data = [...MOCK_CANCELLATION_FEES_RESPONSE.data];
+
+      if (filters.expertId) {
+        const q = filters.expertId.toLowerCase();
+        data = data.filter((f) => f.expert.name.toLowerCase().includes(q));
+      }
+      if (filters.clientId) {
+        const q = filters.clientId.toLowerCase();
+        data = data.filter((f) => f.client.name.toLowerCase().includes(q));
+      }
+
+      const page       = filters.page  ?? 1;
+      const limit      = filters.limit ?? 20;
+      const total      = data.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const paginated  = data.slice((page - 1) * limit, page * limit);
+
+      return { data: paginated, total, page, limit, totalPages };
     }
   }
 );
