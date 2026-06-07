@@ -3,13 +3,45 @@ import { bidService } from "@/lib/api/bidApi";
 import {
   MOCK_BIDS_RESPONSE,
   MOCK_KPI,
-} from "@/components/bid/MockData"; 
+} from "@/components/bid/MockData";
 import type {
   Bid,
   BidFilters,
   BidKPISummary,
   PaginatedResponse,
 } from "@/components/bid/types";
+
+// ─── Client-side filter helper (used when API is not ready) ───────────────────
+
+function applyFilters(filters: BidFilters): PaginatedResponse<Bid> {
+  let data = [...MOCK_BIDS_RESPONSE.data];
+
+  // Step filter
+  if (filters.step && filters.step !== "all") {
+    data = data.filter((b) => String(b.step) === String(filters.step));
+  }
+
+  // Search — ID, jobId, expert name, client name
+  if (filters.search && filters.search.trim() !== "") {
+    const q = filters.search.toLowerCase();
+    data = data.filter(
+      (b) =>
+        b.id.toLowerCase().includes(q) ||
+        b.jobId.toLowerCase().includes(q) ||
+        b.expert.name.toLowerCase().includes(q) ||
+        b.client.name.toLowerCase().includes(q)
+    );
+  }
+
+  // Pagination
+  const page       = filters.page  ?? 1;
+  const limit      = filters.limit ?? 20;
+  const total      = data.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const paginated  = data.slice((page - 1) * limit, page * limit);
+
+  return { data: paginated, total, page, limit, totalPages };
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -63,8 +95,7 @@ export const fetchBids = createAsyncThunk(
     try {
       return await bidService.getBids(filters);
     } catch {
-      // API not ready — return mock data so UI renders
-      return MOCK_BIDS_RESPONSE;
+      return applyFilters(filters);
     }
   }
 );
@@ -86,7 +117,6 @@ export const fetchBidDetail = createAsyncThunk(
     try {
       return await bidService.getBidDetail(bidId);
     } catch {
-      // Find in mock data
       const found = MOCK_BIDS_RESPONSE.data.find((b) => b.id === bidId);
       if (found) return found;
       return rejectWithValue("Bid not found");
@@ -138,9 +168,9 @@ const bidsSlice = createSlice({
       .addCase(fetchBids.pending, (state) => { state.listLoading = true; state.listError = null; })
       .addCase(fetchBids.fulfilled, (state, action: PayloadAction<PaginatedResponse<Bid>>) => {
         state.listLoading = false;
-        state.bids = action.payload.data;
-        state.total = action.payload.total;
-        state.page = action.payload.page;
+        state.bids       = action.payload.data;
+        state.total      = action.payload.total;
+        state.page       = action.payload.page;
         state.totalPages = action.payload.totalPages;
       })
       .addCase(fetchBids.rejected, (state, action) => {

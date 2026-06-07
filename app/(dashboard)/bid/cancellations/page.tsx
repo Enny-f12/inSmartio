@@ -25,6 +25,7 @@ import DisputeFlaggingPanel from "@/components/bid/DisputeFlaggingPanel";
 import type { AppDispatch, RootState } from "@/lib/redux/store";
 import type { CancellationFeeRecord } from "@/components/bid/types";
 import Topbar from "@/components/layout/Navbar";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
@@ -108,64 +109,65 @@ export default function CancellationFeeMonitoringPage() {
   return (
     <div>
       <Topbar title="Cancellation Fee Monitoring" />
-    <div className="min-h-screen bg-background p-6 space-y-5">
-      {/* Header */}
-     
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/bid")}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-text-muted" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-text-main">
-              Cancellation Fee Monitoring
-            </h1>
-            <p className="text-sm text-text-muted mt-0.5">
-              Track and manage all Situation B2 cancellation fees
-            </p>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <div className="flex-1 overflow-y-auto bg-background p-4 sm:p-6 space-y-4 sm:space-y-5">
+
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {/* Back button — hidden on mobile, visible on sm+ */}
+            <button
+              onClick={() => router.push("/bid")}
+              className="hidden sm:flex p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 text-text-muted" />
+            </button>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-text-main">
+                Cancellation Fee Monitoring
+              </h1>
+              <p className="text-sm text-text-muted mt-0.5">
+                Track and manage all Situation B2 cancellation fees
+              </p>
+            </div>
+          </div>
+
+          {/* Action buttons — icon only on mobile, full on sm+ */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => router.push("/bid/client-refund")}
+              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm text-text-main hover:bg-gray-50 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4 text-green-600" />
+              <span className="hidden sm:inline">Client Refunds</span>
+            </button>
+
+            <button
+              onClick={() => router.push("/bid/expert-payout")}
+              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm text-text-main hover:bg-gray-50 transition-colors"
+            >
+              <Banknote className="w-4 h-4 text-blue-600" />
+              <span className="hidden sm:inline">Expert Payouts</span>
+            </button>
+
+            <button
+              onClick={load}
+              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${listLoading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+
+            <button
+              onClick={() => setShowExport(true)}
+              className="btn-primary flex items-center gap-2 text-sm px-3 py-2"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export Report</span>
+              <span className="sm:hidden">Export</span>
+            </button>
           </div>
         </div>
-
-        {/* ── Action buttons ── */}
-        <div className="flex items-center gap-2">
-          {/* 9.5.8 Client Refund Tracking */}
-          <button
-            onClick={() => router.push("/bid/client-refund")}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm text-text-main hover:bg-gray-50 transition-colors"
-          >
-            <RotateCcw className="w-4 h-4 text-green-600" />
-            Client Refunds
-          </button>
-
-          {/* 9.5.9 Expert Payout Tracking */}
-          <button
-            onClick={() => router.push("/bid/expert-payout")}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm text-text-main hover:bg-gray-50 transition-colors"
-          >
-            <Banknote className="w-4 h-4 text-blue-600" />
-            Expert Payouts
-          </button>
-
-          <button
-            onClick={load}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${listLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
-
-          <button
-            onClick={() => setShowExport(true)}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <Download className="w-4 h-4" />
-            Export Report
-          </button>
-        </div>
-      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -233,22 +235,54 @@ export default function CancellationFeeMonitoringPage() {
         <DisputeFlaggingPanel />
       ) : (
         <>
-          {/* Filters */}
+          {/* Filters — matches spec: [Date Range ▼] [Expert ▼] [Client ▼] */}
           <div className="bg-surface rounded-xl border border-border p-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-text-muted font-medium">Date Range:</span>
-            {DATE_FILTERS.map((f) => (
+            <span className="text-sm text-text-muted font-medium shrink-0">Filter:</span>
+
+            {/* Date Range dropdown */}
+            <select
+              value={filters.dateRange ?? "last_30"}
+              onChange={(e) => dispatch(setFeeFilters({ dateRange: e.target.value as "last_30" | "last_90" | "all" }))}
+              className="px-3 py-1.5 border border-border rounded-lg text-sm text-text-main bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
+            >
+              {DATE_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+
+            {/* Expert dropdown */}
+            <select
+              value={filters.expertId ?? ""}
+              onChange={(e) => dispatch(setFeeFilters({ expertId: e.target.value || undefined }))}
+              className="px-3 py-1.5 border border-border rounded-lg text-sm text-text-main bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
+            >
+              <option value="">Expert</option>
+              {Array.from(new Set(fees.map((f) => f.expert.name))).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
+            {/* Client dropdown */}
+            <select
+              value={filters.clientId ?? ""}
+              onChange={(e) => dispatch(setFeeFilters({ clientId: e.target.value || undefined }))}
+              className="px-3 py-1.5 border border-border rounded-lg text-sm text-text-main bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
+            >
+              <option value="">Client</option>
+              {Array.from(new Set(fees.map((f) => f.client.name))).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
+            {/* Clear filters */}
+            {(filters.expertId || filters.clientId || filters.dateRange !== "last_30") && (
               <button
-                key={f.value}
-                onClick={() => dispatch(setFeeFilters({ dateRange: f.value }))}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filters.dateRange === f.value
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-text-muted hover:bg-gray-200"
-                }`}
+                onClick={() => dispatch(setFeeFilters({ expertId: undefined, clientId: undefined, dateRange: "last_30" }))}
+                className="text-xs text-primary hover:underline"
               >
-                {f.label}
+                Clear filters
               </button>
-            ))}
+            )}
           </div>
 
           {/* Table */}
@@ -367,6 +401,7 @@ export default function CancellationFeeMonitoringPage() {
         />
       )}
       {showExport && <ExportModal onClose={() => setShowExport(false)} />}
+      </div>
     </div>
     </div>
   );
