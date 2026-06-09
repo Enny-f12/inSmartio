@@ -20,49 +20,6 @@ interface Props {
 
 const FORMAT_OPTIONS: FormatType[] = ["PDF", "CSV"];
 
-function SelectBox({
-  label, value, options, onChange,
-}: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-      <span style={{ fontSize: "13px", fontWeight: 500, color: "#374151", whiteSpace: "nowrap" }}>
-        {label}
-      </span>
-      <div style={{ position: "relative" }}>
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ padding: "8px 36px 8px 14px", borderRadius: "10px",
-            border: "1px solid #E5E7EB", backgroundColor: "#fff",
-            fontSize: "13px", color: "#374151", outline: "none",
-            appearance: "none", cursor: "pointer", minWidth: "160px" }}>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <ChevronDown size={13} style={{ position: "absolute", right: "10px", top: "50%",
-          transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
-      </div>
-    </div>
-  );
-}
-
-function DateBox({
-  value, onChange,
-}: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div style={{ position: "relative" }}>
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ padding: "8px 36px 8px 14px", borderRadius: "10px",
-          border: "1px solid #E5E7EB", backgroundColor: "#fff",
-          fontSize: "13px", color: "#374151", outline: "none",
-          cursor: "pointer", minWidth: "140px" }} />
-      <ChevronDown size={13} style={{ position: "absolute", right: "10px", top: "50%",
-        transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
-    </div>
-  );
-}
 
 export default function ReportControls({
   reportType, format, dateFrom, dateTo,
@@ -81,58 +38,84 @@ export default function ReportControls({
   ];
 
   return (
-    <div style={{ backgroundColor: "#F4F5F7", padding: "0" }}>
+    <div style={{ backgroundColor: "#ffffff", padding: 0 }}>
       <style>{`
-        .rc-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
-        @media(min-width:640px){ .rc-row { flex-wrap: nowrap; } }
+        .rc-field { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-bottom: 14px; }
+        .rc-field:last-child { margin-bottom: 0; }
+        .rc-field label { font-size: 12px; font-weight: 600; color: #6B7280; }
+        .rc-field select, .rc-field input[type="date"] {
+          width: 100%; padding: 9px 36px 9px 14px; border-radius: 10px;
+          border: 1px solid #E5E7EB; background-color: #fff;
+          font-size: 13px; color: #374151; outline: none;
+          appearance: none; cursor: pointer; box-sizing: border-box;
+        }
+        .rc-field select:focus, .rc-field input[type="date"]:focus {
+          border-color: #2563EB;
+        }
+        .rc-date-row { display: flex; align-items: center; gap: 8px; }
+        .rc-date-row > div { flex: 1; }
+        .rc-date-row input[type="date"] { width: 100%; padding: 9px 14px; border-radius: 10px;
+          border: 1px solid #E5E7EB !important; background: #fff !important; font-size: 13px; color: #374151;
+          outline: none; cursor: pointer; box-sizing: border-box; display: block; }
+        .rc-date-row input[type="date"]:focus { border-color: #2563EB !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+        .rc-btn-row { display: flex; gap: 10px; margin-top: 18px; }
+        .rc-btn-row button { flex: 1; padding: 11px 0; border-radius: 12px; border: none;
+          font-size: 13px; font-weight: 600; cursor: pointer; }
+        @media(min-width:640px){
+          .rc-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+          .rc-btn-row button { flex: unset; padding: 11px 28px; }
+          .rc-btn-row { justify-content: flex-end; }
+        }
       `}</style>
 
-      {/* Row 1: Report Type | Format | Export */}
-      <div className="rc-row" style={{ justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
-          <SelectBox
-            label="Report Type:"
-            value={reportType}
-            options={types}
-            onChange={onReportType}
-          />
-          <SelectBox
-            label="Format:"
-            value={format}
-            options={FORMAT_OPTIONS}
-            onChange={(v) => onFormat(v as FormatType)}
-          />
+      {/* Report Type + Format */}
+      <div className="rc-two-col">
+        <div className="rc-field">
+          <label>Report Type</label>
+          <div style={{ position: "relative" }}>
+            <select value={reportType} onChange={(e) => onReportType(e.target.value)}>
+              {types.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <ChevronDown size={13} style={{ position: "absolute", right: 12, top: "50%",
+              transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+          </div>
         </div>
 
-        {/* Export — top right, blue button */}
-        <button onClick={onExport}
-          style={{ display: "flex", alignItems: "center", gap: "8px",
-            padding: "10px 24px", borderRadius: "12px", border: "none",
-            backgroundColor: "#2563EB", color: "#fff",
-            fontSize: "13px", fontWeight: 600, cursor: "pointer",
-            flexShrink: 0 }}>
-          <Download size={14} /> Export
-        </button>
+        <div className="rc-field">
+          <label>Format</label>
+          <div style={{ position: "relative" }}>
+            <select value={format} onChange={(e) => onFormat(e.target.value as FormatType)}>
+              {FORMAT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <ChevronDown size={13} style={{ position: "absolute", right: 12, top: "50%",
+              transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }} />
+          </div>
+        </div>
       </div>
 
-      {/* Row 2: Date Range | Generate */}
-      <div className="rc-row">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "13px", fontWeight: 500, color: "#374151", whiteSpace: "nowrap" }}>
-            Date Range:
-          </span>
-          <DateBox value={dateFrom} onChange={onDateFrom} />
-          <span style={{ fontSize: "13px", color: "#6B7280" }}>to</span>
-          <DateBox value={dateTo} onChange={onDateTo} />
+      {/* Date Range */}
+      <div className="rc-field" style={{ marginTop: 4 }}>
+        <label>Date Range</label>
+        <div className="rc-date-row">
+          <div>
+            <input type="date" value={dateFrom} onChange={(e) => onDateFrom(e.target.value)} />
+          </div>
+          <span style={{ fontSize: 13, color: "#9CA3AF", flexShrink: 0 }}>to</span>
+          <div>
+            <input type="date" value={dateTo} onChange={(e) => onDateTo(e.target.value)} />
+          </div>
         </div>
+      </div>
 
-        {/* Generate — orange/amber button */}
+      {/* Buttons */}
+      <div className="rc-btn-row">
         <button onClick={onGenerate}
-          style={{ padding: "10px 32px", borderRadius: "12px", border: "none",
-            backgroundColor: "#F59E0B", color: "#fff",
-            fontSize: "13px", fontWeight: 600, cursor: "pointer",
-            flexShrink: 0 }}>
+          style={{ backgroundColor: "#F59E0B", color: "#fff" }}>
           Generate
+        </button>
+        <button onClick={onExport}
+          style={{ backgroundColor: "#2563EB", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Download size={14} /> Export
         </button>
       </div>
     </div>

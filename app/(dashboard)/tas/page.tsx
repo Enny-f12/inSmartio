@@ -54,7 +54,7 @@ export default function TASPage() {
       <Topbar title="TAS Management" />
 
       <main style={{
-        flex: 1, padding: "24px 32px",
+        flex: 1, padding: "16px 16px",
         display: "flex", flexDirection: "column", gap: 20,
       }}>
 

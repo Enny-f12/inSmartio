@@ -46,10 +46,8 @@ export const ALL_REPORT_TYPES: ReportType[] = [
   "TAS Performance Report",
   "Dispute Analysis Report",
   "Verification Report",
-  
 ];
 
-// Have a chart endpoint — show chart + summary
 const LIVE_REPORT_TYPES: ReportType[] = [
   "User Growth Report",
   "Revenue Report",
@@ -61,7 +59,6 @@ const LIVE_REPORT_TYPES: ReportType[] = [
   "Verification Report",
 ];
 
-// No chart — clicking Generate triggers PDF download immediately
 const DOWNLOAD_ONLY_TYPES: ReportType[] = [
   "Users Report",
   "Jobs Report",
@@ -142,7 +139,6 @@ const buildConfig = (
   const range = `${fmtDisplay(dateFrom)} – ${fmtDisplay(dateTo)}`;
 
   switch (reportType) {
-
     case "User Growth Report": {
       if (!userGrowth.length) return mock;
       const total = userGrowth.reduce((s, d) => s + d.count, 0);
@@ -154,7 +150,6 @@ const buildConfig = (
         summary:    [{ label: "Total New Users:", value: total.toLocaleString() }],
       };
     }
-
     case "Revenue Report": {
       if (!revenueTrend.length) return mock;
       const total = revenueTrend.reduce((s, d) => s + d.revenue, 0);
@@ -166,7 +161,6 @@ const buildConfig = (
         summary:    [{ label: "Total Revenue:", value: `₦${total.toLocaleString()}` }],
       };
     }
-
     case "Top Service Category": {
       if (!topCategories?.categories.length) return mock;
       return {
@@ -183,7 +177,6 @@ const buildConfig = (
         })),
       };
     }
-
     case "Top Cities": {
       const cities  = topCitiesData?.cities ?? [];
       const overall = topCitiesData?.overall;
@@ -207,7 +200,6 @@ const buildConfig = (
         ],
       };
     }
-
     case "Job Completion Report": {
       if (!jobCompletion) return mock;
       const { summary, monthly } = jobCompletion;
@@ -224,7 +216,6 @@ const buildConfig = (
         ],
       };
     }
-
     case "Dispute Analysis Report": {
       if (!disputeAnalysis) return mock;
       const { summary, monthly, topReasons } = disputeAnalysis;
@@ -245,7 +236,6 @@ const buildConfig = (
         ],
       };
     }
-
     case "TAS Performance Report": {
       if (!tasPerformance.length) return { ...mock, weeks: [0], weekLabels: ["No data"], summary: [{ label: "Total TAS:", value: "0" }] };
       return {
@@ -259,7 +249,6 @@ const buildConfig = (
         })),
       };
     }
-
     case "Verification Report": {
       if (!expertPerformance.length) return { ...mock, weeks: [0], weekLabels: ["No data"], summary: [{ label: "Total Verifications:", value: "0" }] };
       return {
@@ -273,7 +262,6 @@ const buildConfig = (
         })),
       };
     }
-
     default:
       return mock;
   }
@@ -362,10 +350,7 @@ export default function ReportsPage() {
 
   const handleGenerate = () => {
     setGenerated(true);
-    if (isDownloadOnly) {
-      handleDownloadPdf();
-      return;
-    }
+    if (isDownloadOnly) { handleDownloadPdf(); return; }
     switch (reportType) {
       case "User Growth Report":      dispatch(fetchUserGrowthThunk(query));      break;
       case "Revenue Report":          dispatch(fetchRevenueTrendThunk(query));     break;
@@ -431,24 +416,40 @@ export default function ReportsPage() {
         .report-main { padding: 12px; gap: 16px; }
         @media(min-width:640px){ .report-main { padding: 24px 32px; gap: 20px; } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .report-controls-card {
+          background: #fff;
+          border: 1px solid #E5E7EB;
+          border-radius: 16px;
+          padding: 20px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
       `}</style>
 
-      <main className="report-main" style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", backgroundColor: "#F4F5F7" }}>
+      <main className="report-main" style={{
+        flex: 1, display: "flex", flexDirection: "column",
+        overflowY: "auto", backgroundColor: "#F4F5F7",
+      }}>
 
-        <ReportControls
-          reportType={reportType} format={format} dateFrom={dateFrom} dateTo={dateTo}
-          reportTypes={ALL_REPORT_TYPES}
-          onReportType={(v: string) => { setReportType(v as ReportType); setGenerated(false); }}
-          onFormat={setFormat}
-          onDateFrom={(v: string) => { setDateFrom(v); setGenerated(false); }}
-          onDateTo={(v: string)   => { setDateTo(v);   setGenerated(false); }}
-          onGenerate={handleGenerate}
-          onExport={handleExport}
-        />
+        {/* ── Controls card ── */}
+        <div className="report-controls-card">
+          <ReportControls
+            reportType={reportType} format={format} dateFrom={dateFrom} dateTo={dateTo}
+            reportTypes={ALL_REPORT_TYPES}
+            onReportType={(v: string) => { setReportType(v as ReportType); setGenerated(false); }}
+            onFormat={setFormat}
+            onDateFrom={(v: string) => { setDateFrom(v); setGenerated(false); }}
+            onDateTo={(v: string)   => { setDateTo(v);   setGenerated(false); }}
+            onGenerate={handleGenerate}
+            onExport={handleExport}
+          />
+        </div>
 
-        {/* Empty state */}
+        {/* ── Empty state ── */}
         {!generated && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "12px", color: "#9CA3AF" }}>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", paddingTop: "60px", gap: "12px", color: "#9CA3AF",
+          }}>
             <TrendingUp size={40} strokeWidth={1.2} />
             <p style={{ fontSize: "14px", textAlign: "center" }}>
               Select a report type and date range, then click <strong style={{ color: "#111827" }}>Generate</strong>.
@@ -456,28 +457,43 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Download-only confirmation */}
+        {/* ── Download-only confirmation ── */}
         {generated && isDownloadOnly && (
-          <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", padding: "32px 28px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+          <div style={{
+            backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px",
+            padding: "32px 28px", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: "12px",
+          }}>
             <Download size={32} strokeWidth={1.4} color="#2563eb" />
             <p style={{ fontSize: "15px", fontWeight: 600, color: "#111827", margin: 0 }}>{reportType}</p>
             <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Your PDF download has started.</p>
             <button onClick={handleDownloadPdf} disabled={report.downloadStatus === "loading"}
-              style={{ marginTop: "8px", padding: "10px 24px", borderRadius: "10px", border: "none", backgroundColor: "#2563EB", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+              style={{
+                marginTop: "8px", padding: "10px 24px", borderRadius: "10px",
+                border: "none", backgroundColor: "#2563EB", color: "#fff",
+                fontSize: "13px", fontWeight: 600, cursor: "pointer",
+              }}>
               {report.downloadStatus === "loading" ? "Downloading…" : "Download Again"}
             </button>
           </div>
         )}
 
-        {/* Loading */}
+        {/* ── Loading ── */}
         {showLoading && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "60px", gap: "10px", color: "#9CA3AF", fontSize: "14px" }}>
-            <span style={{ display: "inline-block", width: 20, height: 20, border: "2px solid #E5E7EB", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            paddingTop: "60px", gap: "10px", color: "#9CA3AF", fontSize: "14px",
+          }}>
+            <span style={{
+              display: "inline-block", width: 20, height: 20,
+              border: "2px solid #E5E7EB", borderTopColor: "#2563eb",
+              borderRadius: "50%", animation: "spin 0.8s linear infinite",
+            }} />
             Generating report...
           </div>
         )}
 
-        {/* Chart card */}
+        {/* ── Chart card ── */}
         {showCard && (
           <InlineReportCard
             config={config} isDonut={isDonut}

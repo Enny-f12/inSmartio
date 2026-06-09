@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  Download, Eye, SlidersHorizontal, Loader2, ArrowLeft, Star,
+  Download, Eye, SlidersHorizontal, Loader2,
   UserPlus, XCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
@@ -15,6 +15,7 @@ import { fetchJobs, fetchJobById, clearSelectedJob } from "@/lib/redux/jobSlice"
 import { downloadReport } from "@/lib/api/reportApi";
 import { toast } from "sonner";
 import type { ApiJob } from "@/lib/api/jobApi";
+import JobDetailView, { deriveStatus } from "@/components/jobs/Jobdetails";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -40,16 +41,8 @@ const getStatusVariant = (status: string): StatusVariant => {
   return map[status?.toLowerCase()] ?? "gray";
 };
 
-const deriveStatus = (job: ApiJob): string => {
-  const explicit = val(job, "status");
-  if (explicit !== "—") return explicit;
-  const closed   = job["closed"]   as boolean | undefined;
-  const verified = job["verified"] as boolean | undefined;
-  return closed ? "closed" : verified ? "active" : "biding";
-};
-
-const STATUS_OPTIONS   = ["All", "completed", "inprogress", "biding", "disputed", "cancelled"] as const;
-const MONTH_OPTIONS    = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const STATUS_OPTIONS = ["All", "completed", "inprogress", "biding", "disputed", "cancelled"] as const;
+const MONTH_OPTIONS  = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 const MONTH_MAP: Record<string, number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
 const val = (job: ApiJob, ...keys: string[]): string => {
@@ -60,267 +53,8 @@ const val = (job: ApiJob, ...keys: string[]): string => {
   return "—";
 };
 
-const fmt = (iso?: string | null) => {
-  if (!iso) return "—";
-  try { return new Date(iso).toLocaleDateString("en-GB"); }
-  catch { return String(iso); }
-};
-
-const fmtDateTime = (iso?: string | null) => {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return String(iso);
-  }
-};
-
 const fmtMoney = (amount?: number | null, fallback = "—") =>
   amount != null ? `₦${amount.toLocaleString()}` : fallback;
-
-// ─────────────────────────────────────────────────────────
-// Small shared components
-// ─────────────────────────────────────────────────────────
-function SectionLabel({ text }: { text: string }) {
-  return (
-    <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase",
-      letterSpacing: "0.08em", color: "#6B7280", margin: "0 0 16px" }}>
-      {text}
-    </p>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
-      <span style={{ minWidth: "220px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
-      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
-    </div>
-  );
-}
-
-function StarRating({ value }: { value?: number | null }) {
-  if (value == null) return <span style={{ color: "#9CA3AF", fontSize: "13px" }}>—</span>;
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#111827" }}>
-      <Star size={13} fill="#F9A826" color="#F9A826" style={{ flexShrink: 0 }} />
-      {value}
-    </span>
-  );
-}
-
-// ─────────────────────────────────────────────────────────
-// Job Detail View
-// ─────────────────────────────────────────────────────────
-function JobDetailView({ job, onBack }: { job: ApiJob; onBack: () => void }) {
-  const [timelineExpanded, setTimelineExpanded] = useState(false);
-
-  // ── Location ──────────────────────────────────────────
-  const locationObj = job["location"] as { city?: string; state?: string; address?: string } | undefined;
-  const location = locationObj
-    ? [locationObj.address, locationObj.city, locationObj.state].filter(Boolean).join(", ")
-    : val(job, "location");
-
-  // ── Budget / Financial ────────────────────────────────
-  const budgetObj  = job["budget"] as { amount?: number; min?: number; max?: number } | undefined;
-  const budget = budgetObj
-    ? budgetObj.min != null && budgetObj.max != null
-      ? `₦${budgetObj.min.toLocaleString()} – ₦${budgetObj.max.toLocaleString()}`
-      : fmtMoney(budgetObj.amount)
-    : "—";
-
-  // Split final amounts
-  const finalAmountBeforeInspection = fmtMoney(
-    job["finalAmountBeforeInspection"] as number | undefined,
-    fmtMoney(job["finalAmount"] as number | undefined),
-  );
-  const finalAmountAfterInspection = fmtMoney(
-    job["finalAmountAfterInspection"] as number | undefined,
-  );
-
-  const commissionAmt   = fmtMoney(job["commissionAmount"] as number | undefined);
-  const expertPayout    = fmtMoney(job["expertPayout"]    as number | undefined);
-  const paymentStatus   = val(job, "paymentStatus");
-  const paymentMethod   = job["paymentMethod"] === "any" ? "Any" : val(job, "paymentMethod");
-
-  // ── Client ────────────────────────────────────────────
-  const clientObj   = job["client"] as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
-  const clientName  = clientObj?.name  ?? val(job, "postedBy");
-  const clientPhone = clientObj?.phone ?? "—";
-  const clientEmail = clientObj?.email ?? "—";
-  const clientRating = clientObj?.rating ?? null;
-
-  // ── Expert ────────────────────────────────────────────
-  const bids = (job["bids"] as Array<{
-    status: string;
-    expert?: {
-      name?: string;
-      phone?: string;
-      email?: string;
-      rating?: number;
-      commission?: number;
-    };
-  }> | undefined) ?? [];
-  const acceptedBid = bids.find(b => b.status === "accepted");
-
-  const expertObj    = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number; commission?: number } | undefined;
-  const expertName   = expertObj?.name   ?? acceptedBid?.expert?.name   ?? null;
-  const expertPhone  = expertObj?.phone  ?? acceptedBid?.expert?.phone  ?? "—";
-  const expertEmail  = expertObj?.email  ?? acceptedBid?.expert?.email  ?? "—";
-  const expertRating = expertObj?.rating ?? acceptedBid?.expert?.rating ?? null;
-  const expertCommission = (
-    expertObj?.commission ??
-    acceptedBid?.expert?.commission ??
-    null
-  ) as number | null;
-
-  // ── Status ────────────────────────────────────────────
-  const status = deriveStatus(job);
-  const isCompleted = status.toLowerCase() === "completed";
-
-  // ── Dates ─────────────────────────────────────────────
-  const createdAt = fmt(job["createdAt"] as string);
-  const deadline  = fmt(job["deadline"]  as string);
-
-  // ── Timeline ──────────────────────────────────────────
-  const allTimeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
-  const seen = new Set<string>();
-  const uniqueTimeline = allTimeline.filter(t => {
-    const key = `${t.label}||${t.datetime}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  const TIMELINE_LIMIT = 10;
-  const visibleTimeline = timelineExpanded ? uniqueTimeline : uniqueTimeline.slice(0, TIMELINE_LIMIT);
-  const hasMoreTimeline = uniqueTimeline.length > TIMELINE_LIMIT;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
-      <Topbar title="Jobs Management" />
-      <main style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
-        <style>{`@media(min-width:640px){ .jd-main{ padding: 24px 32px !important; } }`}</style>
-
-        {/* Back button */}
-        <button onClick={onBack}
-          style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
-            fontWeight: 500, color: "#111827", background: "none", border: "none",
-            cursor: "pointer", marginBottom: "24px" }}>
-          <ArrowLeft size={16} /> Jobs
-        </button>
-
-        <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #E5E7EB",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>
-
-          {/* ── Job Information ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Job Information" />
-            <InfoRow label="Job ID:"                        value={val(job, "id", "_id")} />
-            <InfoRow label="Title:"                         value={val(job, "title")} />
-            <InfoRow label="Category:"                      value={val(job, "category")} />
-            <InfoRow label="Description:"                   value={val(job, "description")} />
-            <InfoRow label="Location:"                      value={location} />
-            <InfoRow label="Budget:"                        value={budget} />
-            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
-            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
-            <InfoRow label="Created:"                       value={createdAt} />
-            {isCompleted && (
-              <InfoRow label="Deadline:"                    value={deadline} />
-            )}
-            <InfoRow label="Status:"
-              value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
-          </div>
-
-          {/* ── Client + Expert ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB",
-            display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
-            <div>
-              <SectionLabel text="Client" />
-              <InfoRow label="Name:"   value={clientName} />
-              <InfoRow label="Phone:"  value={clientPhone} />
-              <InfoRow label="Email:"  value={clientEmail} />
-              <InfoRow label="Rating:" value={<StarRating value={clientRating} />} />
-            </div>
-            <div>
-              <SectionLabel text="Expert" />
-              {expertName ? (
-                <>
-                  <InfoRow label="Name:"   value={expertName} />
-                  <InfoRow label="Phone:"  value={expertPhone} />
-                  <InfoRow label="Email:"  value={expertEmail} />
-                  <InfoRow label="Rating:" value={<StarRating value={expertRating} />} />
-                </>
-              ) : (
-                <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No expert assigned yet.</p>
-              )}
-            </div>
-          </div>
-
-          {/* ── Payment Information ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Payment Information" />
-            <InfoRow label="Payment Method:"                value={paymentMethod} />
-            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
-            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
-            <InfoRow
-              label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
-              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"}
-            />
-            <InfoRow label="Expert Payout:"  value={expertPayout} />
-            <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
-          </div>
-
-          {/* ── Timeline ── */}
-          <div style={{ padding: "24px 32px" }}>
-            <SectionLabel text="Timeline" />
-            {uniqueTimeline.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No timeline events available.</p>
-            ) : (
-              <>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {visibleTimeline.map((event, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                      <div style={{ width: "8px", height: "8px", borderRadius: "50%",
-                        backgroundColor: "#2563EB", flexShrink: 0, marginTop: "4px" }} />
-                      <p style={{ fontSize: "13px", margin: 0 }}>
-                        <span style={{ fontWeight: 500, color: "#111827" }}>
-                          {fmtDateTime(event.datetime)}
-                        </span>
-                        <span style={{ color: "#6B7280" }}> — {event.label}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {hasMoreTimeline && (
-                  <button
-                    onClick={() => setTimelineExpanded(!timelineExpanded)}
-                    style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "6px",
-                      fontSize: "12.5px", fontWeight: 600, color: "#2563EB", background: "none",
-                      border: "none", cursor: "pointer", padding: "6px 0" }}>
-                    {timelineExpanded ? (
-                      <><ChevronUp size={14} /> Show less</>
-                    ) : (
-                      <><ChevronDown size={14} /> View {uniqueTimeline.length - TIMELINE_LIMIT} more events</>
-                    )}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-        </div>
-      </main>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────
 // Assign to Expert Modal
@@ -423,12 +157,10 @@ export default function JobsPage() {
     const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
     const matchSearch   = !search || title.includes(search.toLowerCase());
 
-    // Location filter
     const locObj = j["location"] as { city?: string; state?: string } | undefined;
     const locStr = locObj ? `${locObj.city ?? ""} ${locObj.state ?? ""}`.toLowerCase() : "";
     const matchLocation = locationFilter === "All" || locStr.includes(locationFilter.toLowerCase());
 
-    // Month filter
     let matchMonth = true;
     if (monthFilter !== "All") {
       const created = j["createdAt"] as string | undefined;
@@ -439,7 +171,6 @@ export default function JobsPage() {
       }
     }
 
-    // Date range filter
     let matchDateRange = true;
     if (dateFrom || dateTo) {
       const created = j["createdAt"] as string | undefined;
@@ -452,7 +183,6 @@ export default function JobsPage() {
       }
     }
 
-    // Amount range filter
     let matchAmount = true;
     const amt = j["finalAmount"] as number | undefined;
     if (amountMin && amt != null && amt < Number(amountMin)) matchAmount = false;
@@ -544,7 +274,7 @@ export default function JobsPage() {
     }
   };
 
-  // ── Detail loading ────────────────────────────────────
+  // ── Detail view ───────────────────────────────────────
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -559,15 +289,15 @@ export default function JobsPage() {
   }
 
   if (selectedStatus === "succeeded" && selected) {
-    const raw     = selected as unknown as Record<string, unknown>;
-    const rawJob  = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
+    const raw    = selected as unknown as Record<string, unknown>;
+    const rawJob = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
     const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
 
     const enrichedJob: ApiJob = {
       ...(listJob ?? {}),
       ...rawJob,
-      client: (listJob?.["client"] ?? rawJob["client"]) as ApiJob[string],
-      expert: (listJob?.["expert"] ?? rawJob["expert"]) as ApiJob[string],
+      client:      (listJob?.["client"]      ?? rawJob["client"])      as ApiJob[string],
+      expert:      (listJob?.["expert"]      ?? rawJob["expert"])      as ApiJob[string],
       finalAmount: (listJob?.["finalAmount"] ?? rawJob["finalAmount"]) as ApiJob[string],
     } as ApiJob;
 
@@ -677,7 +407,6 @@ export default function JobsPage() {
           {/* ── Filter toolbar ── */}
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
 
-            {/* Toolbar title row */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
@@ -741,76 +470,51 @@ export default function JobsPage() {
                 </p>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-end" }}>
-
-                  {/* Location */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Location</span>
                     <FilterDropdown value={locationFilter} options={locationOptions} onChange={setLocationFilter} />
                   </div>
 
-                  {/* Date range */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Date Range</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <input
-                        type="date"
-                        className="adv-input"
-                        value={dateFrom}
+                      <input type="date" className="adv-input" value={dateFrom}
                         onChange={e => setDateFrom(e.target.value)}
                         style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
-                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
-                      />
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
                       <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
-                      <input
-                        type="date"
-                        className="adv-input"
-                        value={dateTo}
+                      <input type="date" className="adv-input" value={dateTo}
                         onChange={e => setDateTo(e.target.value)}
                         style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
-                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }}
-                      />
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
                     </div>
                   </div>
 
-                  {/* Amount range */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Amount Range (₦)</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <input
-                        type="number"
-                        placeholder="Min"
-                        className="adv-input"
-                        value={amountMin}
+                      <input type="number" placeholder="Min" className="adv-input" value={amountMin}
                         onChange={e => setAmountMin(e.target.value)}
                         style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
                           border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
-                          color: "#111827", backgroundColor: "#ffffff" }}
-                      />
+                          color: "#111827", backgroundColor: "#ffffff" }} />
                       <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
-                      <input
-                        type="number"
-                        placeholder="Max"
-                        className="adv-input"
-                        value={amountMax}
+                      <input type="number" placeholder="Max" className="adv-input" value={amountMax}
                         onChange={e => setAmountMax(e.target.value)}
                         style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
                           border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
-                          color: "#111827", backgroundColor: "#ffffff" }}
-                      />
+                          color: "#111827", backgroundColor: "#ffffff" }} />
                     </div>
                   </div>
 
-                  {/* Action buttons */}
                   <div style={{ display: "flex", gap: "8px", marginLeft: "auto", alignSelf: "flex-end" }}>
-                    <button
-                      onClick={resetAdvancedFilters}
+                    <button onClick={resetAdvancedFilters}
                       style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
                         fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
                         color: "#6B7280", cursor: "pointer", transition: "all 0.15s" }}>
                       Reset
                     </button>
-                    <button
-                      onClick={() => setShowAdvanced(false)}
+                    <button onClick={() => setShowAdvanced(false)}
                       style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
                         fontWeight: 600, border: "none", backgroundColor: "#2563EB",
                         color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}>
@@ -865,14 +569,14 @@ export default function JobsPage() {
                         {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
                       </td></tr>
                     ) : filtered.map((job: ApiJob) => {
-                      const jobId  = String(job.id);
+                      const jobId              = String(job.id);
                       const finalAmountDisplay = fmtMoney(job["finalAmount"] as number | undefined);
-                      const clientObj  = job["client"] as { name?: string } | undefined;
-                      const expertObj  = job["expert"] as { name?: string } | undefined;
-                      const clientName = clientObj?.name ?? val(job, "postedBy");
-                      const expertName = expertObj?.name ?? "—";
-                      const status     = deriveStatus(job);
-                      const isChecked  = selectedIds.has(jobId);
+                      const clientObj          = job["client"] as { name?: string } | undefined;
+                      const expertObj          = job["expert"] as { name?: string } | undefined;
+                      const clientName         = clientObj?.name ?? val(job, "postedBy");
+                      const expertName         = expertObj?.name ?? "—";
+                      const status             = deriveStatus(job);
+                      const isChecked          = selectedIds.has(jobId);
 
                       return (
                         <tr key={jobId}
@@ -885,12 +589,8 @@ export default function JobsPage() {
                           onMouseLeave={e => { e.currentTarget.style.backgroundColor = isChecked ? "#EFF6FF" : "transparent"; }}>
 
                           <td style={{ padding: "14px 16px 14px 24px" }}>
-                            <input
-                              type="checkbox"
-                              className="row-cb"
-                              checked={isChecked}
-                              onChange={() => toggleOne(jobId)}
-                            />
+                            <input type="checkbox" className="row-cb"
+                              checked={isChecked} onChange={() => toggleOne(jobId)} />
                           </td>
                           <td style={{ padding: "14px 20px 14px 0", fontSize: "12px",
                             fontFamily: "monospace", color: "#6B7280" }}>
