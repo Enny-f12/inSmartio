@@ -1,11 +1,11 @@
 // components/tas/ApplicationDetailPage.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, CheckCircle2, X, Loader2, Eye, Download } from "lucide-react";
 import { toast } from "sonner";
 import type { ApiTas } from "@/lib/api/tasApi";
-import { card, sectionLabel, InfoRow, statusBadge, getType, type AppTab } from "./shared";
+import { card, sectionLabel, statusBadge, getType, type AppTab } from "./shared";
 
 interface Props {
   agent:     ApiTas;
@@ -13,6 +13,40 @@ interface Props {
   onBack:    () => void;
   onApprove: (id: string, documentKey: string) => Promise<void>;
   onReject:  (id: string, reason: string, documentKey: string) => Promise<void>;
+}
+
+// ── Mobile-aware InfoRow ──────────────────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: isMobile ? "2px" : "8px",
+      fontSize: 13,
+      marginBottom: 10,
+    }}>
+      <span style={{
+        minWidth: isMobile ? "unset" : "200px",
+        flexShrink: 0,
+        fontWeight: 500,
+        color: "#6B7280",
+      }}>
+        {label}
+      </span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>
+        {value ?? "—"}
+      </span>
+    </div>
+  );
 }
 
 // ── Document helpers ──────────────────────────────────────────────────────────
@@ -29,7 +63,6 @@ interface DocEntry {
 function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: string } {
   if (!rawDoc || typeof rawDoc !== "object") return { list: [], documentKey: "" };
 
-  // Object shape: { ninSlip: { url, type, verify, reject, ... }, ... }
   if (!Array.isArray(rawDoc)) {
     const obj = rawDoc as Record<string, { url?: string; type?: string; verify?: boolean; reject?: boolean }>;
     const list = Object.values(obj)
@@ -46,7 +79,6 @@ function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: strin
     return { list, documentKey };
   }
 
-  // Array shape: [{ type, url, verify, reject, publicId? }, ...]
   const arr = rawDoc as { type?: string; url?: string; secureUrl?: string; verify?: boolean; reject?: boolean; publicId?: string }[];
   const list = arr
     .filter((d) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
@@ -80,19 +112,29 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
   const [rejectOpen,   setRejectOpen]   = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [loading,      setLoading]      = useState(false);
-  const [docChecks,    setDocChecks]    = useState<Record<string, boolean>>({});
+  const [isMobile,     setIsMobile]     = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  const rawAgent = ((agent as Record<string, unknown>).user as ApiTas | undefined) ?? agent;
+  const ext      = rawAgent as Record<string, unknown>;
+
+  const { list: docList, documentKey } = parseDocuments(ext.document);
+
+  // Initialise doc checks from actual verified status on the document
+  const [docChecks, setDocChecks] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(docList.map((d) => [d.label, d.verified]))
+  );
 
   const toggleDoc = (key: string) =>
     setDocChecks((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  // Unwrap nested user if present
-  const rawAgent = ((agent as Record<string, unknown>).user as ApiTas | undefined) ?? agent;
-  const ext      = rawAgent as Record<string, unknown>;
-
-  // ── Parse documents ───────────────────────────────────────────────────────
-  const { list: docList, documentKey } = parseDocuments(ext.document);
-
-  // ── Applicant info ────────────────────────────────────────────────────────
   const name       = (ext.name     as string) ?? "—";
   const phone      = (ext.phone    as string) ?? "—";
   const email      = (ext.email    as string) ?? "—";
@@ -103,19 +145,15 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
   const submitted  = new Date(ext.createdAt as string).toLocaleDateString("en-GB");
   const referral   = (ext.referral   as string) ?? null;
   const parentTas  = (ext.parentTasId as string) ?? null;
-  // Type: same logic as applications table
-  const tasType = getType(ext);
+  const tasType    = getType(ext);
 
-  // ── Location ──────────────────────────────────────────────────────────────
   const loc = ext.location as { city?: string; state?: string; country?: string } | null;
   const locationStr = loc
     ? [loc.city, loc.state, loc.country].filter(Boolean).join(", ")
     : null;
 
-  // ── Category ──────────────────────────────────────────────────────────────
   const categoryStr = parseCategory(ext.category);
 
-  // ── Recruit Expectations ──────────────────────────────────────────────────
   const re                = ext.recruitExpectations as Record<string, unknown> | null;
   const whyTas            = re?.whyTas            ? String(re.whyTas)            : null;
   const area              = re?.area              ? String(re.area)              : null;
@@ -127,18 +165,15 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
                               ? String(re.recruitmentExperienceDescription)      : null;
   const note              = re?.note              ? String(re.note)              : null;
 
-  // ── Expert-specific fields ────────────────────────────────────────────────
-  const expertInfo         = ext.expertInfo as { rating?: number; jobsCompleted?: number; id?: string } | null;
-  const expertRating       = expertInfo?.rating       ?? (ext.expertRating       as number | undefined) ?? null;
+  const expertInfo          = ext.expertInfo as { rating?: number; jobsCompleted?: number; id?: string } | null;
+  const expertRating        = expertInfo?.rating       ?? (ext.expertRating       as number | undefined) ?? null;
   const expertJobsCompleted = expertInfo?.jobsCompleted ?? (ext.expertJobsCompleted as number | undefined) ?? null;
-  const expertId           = expertInfo?.id           ?? (ext.expertId           as string | undefined) ?? null;
+  const expertId            = expertInfo?.id           ?? (ext.expertId           as string | undefined) ?? null;
 
-  // ── Bank ──────────────────────────────────────────────────────────────────
   const bank = (ext.bankDetails ?? ext.account) as {
     bankName?: string; accountNumber?: string; accountName?: string;
   } | null;
 
-  // ── mailto ────────────────────────────────────────────────────────────────
   const mailHref = `mailto:${email}?subject=${encodeURIComponent("TAS Application – More Information Needed")}&body=${encodeURIComponent(`Dear ${name},\n\nWe need more information regarding your TAS application.\n\nThank you.`)}`;
 
   const handleApprove = async () => {
@@ -157,8 +192,12 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
 
       {/* ── Page header ── */}
       <div style={{
-        padding: "20px 32px 0",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: isMobile ? "16px 16px 0" : "20px 32px 0",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        flexWrap: "wrap",
       }}>
         <button onClick={onBack}
           style={{
@@ -167,11 +206,12 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
           }}>
           <ArrowLeft size={16} /> TAS Applications
         </button>
-        <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{name}</span>
+        <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#111827" }}>{name}</span>
         {appStatus === "pending" ? (
           <button onClick={handleApprove} disabled={loading}
             style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "9px 20px",
+              display: "flex", alignItems: "center", gap: 6,
+              padding: isMobile ? "8px 14px" : "9px 20px",
               borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
               fontSize: 13, fontWeight: 600,
               cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
@@ -182,61 +222,59 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
             Approve
           </button>
         ) : (
-          <div style={{ width: 80 }} />
+          <div style={{ width: isMobile ? 0 : 80 }} />
         )}
       </div>
 
       {/* ── Scrollable body ── */}
       <div style={{
-        padding: "20px 32px 100px", flex: 1, overflowY: "auto",
+        padding: isMobile ? "16px 12px 100px" : "20px 32px 100px",
+        flex: 1, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
 
         {/* ── Applicant Information ── */}
         <div style={card}>
-          <div style={{ padding: "20px 24px" }}>
+          <div style={{ padding: isMobile ? "16px" : "20px 24px" }}>
             <p style={sectionLabel}>Applicant Information</p>
             <InfoRow label="Name:"           value={name} />
             <InfoRow label="Phone:"          value={phone} />
             <InfoRow label="Email:"          value={email} />
-            {gender    && <InfoRow label="Gender:"        value={gender.charAt(0).toUpperCase() + gender.slice(1)} />}
-            {dob       && <InfoRow label="Date of Birth:" value={dob} />}
+            {gender      && <InfoRow label="Gender:"          value={gender.charAt(0).toUpperCase() + gender.slice(1)} />}
+            {dob         && <InfoRow label="Date of Birth:"   value={dob} />}
             <InfoRow label="Type:"           value={tasType} />
             <InfoRow label="TAS ID:"         value={tasId} />
-            {referral  && <InfoRow label="Referral Code:" value={referral} />}
-            {parentTas && <InfoRow label="Parent TAS:"    value={parentTas} />}
-            {locationStr && <InfoRow label="Location:"    value={locationStr} />}
+            {referral    && <InfoRow label="Referral Code:"   value={referral} />}
+            {parentTas   && <InfoRow label="Parent TAS:"      value={parentTas} />}
+            {locationStr && <InfoRow label="Location:"        value={locationStr} />}
             <InfoRow label="Submitted:"      value={submitted} />
             <InfoRow label="Status:"         value={statusBadge(ext.status ?? "inactive")} />
-            {/* Expert-specific — only shown when present */}
-            {expertId           && <InfoRow label="Existing Expert ID:"     value={expertId} />}
-            {expertRating       != null && <InfoRow label="Expert Rating:"          value={`${expertRating} ⭐`} />}
-            {expertJobsCompleted != null && <InfoRow label="Expert Jobs Completed:" value={String(expertJobsCompleted)} />}
+            {expertId            && <InfoRow label="Existing Expert ID:"     value={expertId} />}
+            {expertRating       != null && <InfoRow label="Expert Rating:"           value={`${expertRating} ⭐`} />}
+            {expertJobsCompleted != null && <InfoRow label="Expert Jobs Completed:"  value={String(expertJobsCompleted)} />}
           </div>
         </div>
 
         {/* ── Application Details ── */}
         <div style={card}>
-          <div style={{ padding: "20px 24px" }}>
+          <div style={{ padding: isMobile ? "16px" : "20px 24px" }}>
             <p style={sectionLabel}>Application Details</p>
-            {/* Always shown — even if empty */}
-            <InfoRow label="Categories:"            value={categoryStr} />
-            <InfoRow label="Network Size:"          value={networkSize ?? "—"} />
-            <InfoRow label="Recruitment Experience:" value={experience ?? "—"} />
-            <InfoRow label="Why TAS:"               value={whyTas ?? "—"} />
-            {/* Shown when present */}
-            {area            && <InfoRow label="Area:"                   value={area} />}
-            {years           && <InfoRow label="Years Experience:"       value={years} />}
-            {monthlyRecruits && <InfoRow label="Monthly Recruits:"       value={monthlyRecruits} />}
-            {referralsTarget && <InfoRow label="Referrals Target:"       value={referralsTarget} />}
-            {note            && <InfoRow label="Note:"                   value={note} />}
+            <InfoRow label="Categories:"              value={categoryStr} />
+            <InfoRow label="Network Size:"            value={networkSize ?? "—"} />
+            <InfoRow label="Recruitment Experience:"  value={experience ?? "—"} />
+            <InfoRow label="Why TAS:"                 value={whyTas ?? "—"} />
+            {area            && <InfoRow label="Area:"               value={area} />}
+            {years           && <InfoRow label="Years Experience:"   value={years} />}
+            {monthlyRecruits && <InfoRow label="Monthly Recruits:"   value={monthlyRecruits} />}
+            {referralsTarget && <InfoRow label="Referrals Target:"   value={referralsTarget} />}
+            {note            && <InfoRow label="Note:"               value={note} />}
           </div>
         </div>
 
         {/* ── Bank Details ── */}
         {bank?.bankName && (
           <div style={card}>
-            <div style={{ padding: "20px 24px" }}>
+            <div style={{ padding: isMobile ? "16px" : "20px 24px" }}>
               <p style={sectionLabel}>Bank Details</p>
               <InfoRow label="Bank Name:"      value={bank.bankName} />
               <InfoRow label="Account Name:"   value={bank.accountName} />
@@ -247,24 +285,28 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
 
         {/* ── Documents ── */}
         <div style={card}>
-          <div style={{ padding: "20px 24px" }}>
+          <div style={{ padding: isMobile ? "16px" : "20px 24px" }}>
             <p style={sectionLabel}>Documents</p>
             {docList.length === 0 ? (
               <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic", margin: 0 }}>
                 No documents uploaded.
               </p>
             ) : docList.map((doc) => {
-              const isChecked = !!docChecks[doc.label]; // always starts unchecked — admin verifies
+              const isChecked = !!docChecks[doc.label];
               return (
                 <div key={doc.label} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "12px 0", borderBottom: "1px solid #F3F4F6",
+                  display: "flex",
+                  flexDirection: isMobile ? "column" : "row",
+                  alignItems: isMobile ? "flex-start" : "center",
+                  gap: isMobile ? 8 : 10,
+                  padding: "12px 0",
+                  borderBottom: "1px solid #F3F4F6",
                 }}>
                   <span style={{ flex: 1, fontSize: 13, color: "#111827", fontWeight: 500 }}>
                     📄 {doc.label}
                   </span>
                   {doc.url ? (
-                    <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <a href={doc.url} target="_blank" rel="noreferrer"
                         style={{
                           fontSize: 12, color: "#2563eb", fontWeight: 500, textDecoration: "none",
@@ -279,19 +321,45 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
                         }}>
                         <Download size={13} /> Download
                       </a>
-                      <label style={{
-                        display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
-                        fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                        color: isChecked ? "#16a34a" : "#6B7280",
-                      }}>
-                        <input
-                          type="checkbox" checked={isChecked}
-                          onChange={() => toggleDoc(doc.label)}
-                          style={{ accentColor: "#16a34a", width: 14, height: 14 }}
-                        />
-                        {isChecked ? "✅ Verified" : "Mark as Verified"}
-                      </label>
-                    </>
+                      {appStatus === "pending" ? (
+                        <label style={{
+                          display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
+                          fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                          color: isChecked ? "#16a34a" : "#6B7280",
+                        }}>
+                          <input
+                            type="checkbox" checked={isChecked}
+                            onChange={() => toggleDoc(doc.label)}
+                            style={{ accentColor: "#16a34a", width: 14, height: 14 }}
+                          />
+                          {isChecked ? "✅ Verified" : "Mark as Verified"}
+                        </label>
+                      ) : appStatus === "approved" ? (
+                        <label style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                          color: "#16a34a", cursor: "default",
+                        }}>
+                          <input
+                            type="checkbox" checked readOnly
+                            style={{ accentColor: "#16a34a", width: 14, height: 14 }}
+                          />
+                          ✅ Verified
+                        </label>
+                      ) : (
+                        <label style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                          color: "#6B7280", cursor: "default",
+                        }}>
+                          <input
+                            type="checkbox" checked={false} readOnly
+                            style={{ width: 14, height: 14 }}
+                          />
+                          Mark as Verified
+                        </label>
+                      )}
+                    </div>
                   ) : (
                     <span style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>No URL</span>
                   )}
@@ -303,7 +371,7 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
 
         {/* ── Actions ── */}
         {appStatus === "pending" && (
-          <div style={{ ...card, padding: "20px 24px" }}>
+          <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px" }}>
             <p style={sectionLabel}>Actions</p>
             {rejectOpen ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

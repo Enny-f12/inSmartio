@@ -73,7 +73,7 @@ export default function PaymentsPage() {
       <Topbar title="Payments & Payouts" />
 
       <style>{`
-        .pay-main { padding: 12px; gap: 20px; }
+        .pay-main { padding: 12px 16px; gap: 20px; }
         .pay-stat-cards { display: flex; flex-wrap: wrap; gap: 12px; }
         .pay-overview-header { flex-direction: column; align-items: flex-start; gap: 10px; }
         .pay-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin-top: 4px; }

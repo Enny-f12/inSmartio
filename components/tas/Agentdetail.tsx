@@ -10,7 +10,7 @@ import {
 } from "@/lib/redux/tasSlice";
 import type { ApiTas } from "@/lib/api/tasApi";
 import AdjustTierModal from "./Adjusttiermodal";
-import { sectionLabel, InfoRow, statusBadge, fmtMoney, getTierLabel, getTierBonus } from "./shared";
+import { sectionLabel, statusBadge, fmtMoney, getTierLabel, getTierBonus } from "./shared";
 
 interface Props {
   agentId:  string;
@@ -18,16 +18,59 @@ interface Props {
   onBack:   () => void;
 }
 
+// ── Mobile-aware InfoRow ──────────────────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: isMobile ? "2px" : "8px",
+      fontSize: 13,
+      marginBottom: 10,
+    }}>
+      <span style={{
+        minWidth: isMobile ? "unset" : "200px",
+        flexShrink: 0,
+        fontWeight: 500,
+        color: "#6B7280",
+      }}>
+        {label}
+      </span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
+
 export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   const dispatch = useAppDispatch();
   const { selected, selectedStatus, mutateStatus } = useAppSelector((s) => s.tas);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
   const isMutating = mutateStatus === "loading";
 
   useEffect(() => {
     dispatch(fetchTasById({ id: agentId, fallback }));
     return () => { dispatch(clearSelectedTas()); };
   }, [agentId, dispatch, fallback]);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const agent     = selected ?? fallback;
   const isLoading = selectedStatus === "loading";
@@ -41,16 +84,13 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   const availableBalance = fmtMoney(ext.availableBalance as number | undefined);
   const pendingBalance   = fmtMoney(ext.pendingBalance   as number | undefined);
 
-  // Bank
   const bank = (ext.bankDetails ?? ext.account) as {
     bankName?: string; accountNumber?: string; accountName?: string;
   } | null;
 
-  // Location
   const loc = ext.location as { city?: string; state?: string; country?: string } | null;
   const locationStr = loc ? [loc.city, loc.state, loc.country].filter(Boolean).join(", ") : null;
 
-  // Commissions from API — shape: commissions[]
   const commissions = (ext.commissions ?? ext.commissionsGiven ?? []) as {
     id?: string;
     expertId?: string;
@@ -63,7 +103,6 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
     createdAt?: string;
   }[];
 
-  // Recruited experts from expertCount.experts[]
   const recruitedExperts = (expertsObj as { experts?: { id?: string; name?: string; email?: string; status?: string }[] } | null)?.experts ?? [];
 
   const handleSuspend = () => {
@@ -75,16 +114,25 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   };
 
   const actionBtn: React.CSSProperties = {
-    flex: 1, padding: "13px 8px", borderRadius: 10, border: "1px solid #E5E7EB",
-    backgroundColor: "#fff", color: "#374151", fontSize: 13, fontWeight: 500,
-    cursor: "pointer", textAlign: "center",
+    flex: "1 1 auto",
+    padding: "13px 8px",
+    borderRadius: 10,
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#fff",
+    color: "#374151",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    textAlign: "center",
   };
+
+  const sectionPad = isMobile ? "16px" : "24px 28px";
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, backgroundColor: "#F4F5F7" }}>
 
       {/* Back */}
-      <div style={{ padding: "20px 32px 0" }}>
+      <div style={{ padding: isMobile ? "16px 16px 0" : "20px 32px 0" }}>
         <button onClick={onBack}
           style={{
             display: "flex", alignItems: "center", gap: 8, border: "none",
@@ -102,11 +150,15 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
           <Loader2 size={18} className="animate-spin" /> Loading agent…
         </div>
       ) : (
-        <div style={{ padding: "20px 32px 120px", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{
+          padding: isMobile ? "16px 12px 120px" : "20px 32px 120px",
+          flex: 1, overflowY: "auto",
+          display: "flex", flexDirection: "column", gap: 16,
+        }}>
 
           {/* ── Agent Info ── */}
           <div style={{ backgroundColor: "#fff", borderRadius: 16, border: "1px solid #E5E7EB", overflow: "hidden" }}>
-            <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Agent Information</p>
               <InfoRow label="Name:"   value={agent.name} />
               <InfoRow label="TAS ID:" value={(ext.applicationCode as string) ?? agent.id} />
@@ -117,15 +169,21 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
               <InfoRow label="Bonus:"  value={getTierBonus(tierNum)} />
               {locationStr && <InfoRow label="Location:" value={locationStr} />}
               <InfoRow label="Joined:" value={new Date(agent.createdAt).toLocaleDateString("en-GB")} />
-              <div style={{ display: "flex", gap: 8, fontSize: 13, alignItems: "center" }}>
-                <span style={{ minWidth: 190, color: "#6B7280" }}>Status:</span>
+              <div style={{
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                gap: isMobile ? "2px" : "8px",
+                fontSize: 13,
+                alignItems: isMobile ? "flex-start" : "center",
+              }}>
+                <span style={{ minWidth: isMobile ? "unset" : 200, color: "#6B7280", fontWeight: 500 }}>Status:</span>
                 {statusBadge(agent.status ?? "active")}
               </div>
             </div>
 
             {/* ── Bank Details ── */}
             {bank?.bankName && (
-              <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
+              <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
                 <p style={sectionLabel}>Bank Details</p>
                 <InfoRow label="Bank Name:"      value={bank.bankName} />
                 <InfoRow label="Account Name:"   value={bank.accountName} />
@@ -134,7 +192,7 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
             )}
 
             {/* ── Performance ── */}
-            <div style={{ padding: "24px 28px", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Performance Metrics</p>
               <InfoRow label="Total Experts Recruited:" value={expertsObj?.total  != null ? String(expertsObj.total)  : "—"} />
               <InfoRow label="Active Experts:"          value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
@@ -147,14 +205,16 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
             {/* ── Recruited Experts ── */}
             {recruitedExperts.length > 0 && (
               <div style={{ overflowX: "auto" }}>
-                <p style={{ ...sectionLabel, padding: "20px 28px 0" }}>Recruited Experts</p>
+                <p style={{ ...sectionLabel, padding: isMobile ? "16px 16px 0" : "20px 28px 0" }}>
+                  Recruited Experts
+                </p>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
                       {["Expert ID", "Name", "Email", "Status"].map((h) => (
                         <th key={h} style={{
                           textAlign: "left", padding: "12px 20px", fontSize: 12,
-                          fontWeight: 600, color: "#6B7280",
+                          fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap",
                         }}>
                           {h}
                         </th>
@@ -164,9 +224,9 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
                   <tbody>
                     {recruitedExperts.map((e, i) => (
                       <tr key={e.id ?? i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", fontFamily: "monospace" }}>{e.id ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", fontWeight: 500 }}>{e.name ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280" }}>{e.email ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.id ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>{e.name ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{e.email ?? "—"}</td>
                         <td style={{ padding: "13px 20px" }}>{statusBadge(e.status ?? "active")}</td>
                       </tr>
                     ))}
@@ -178,7 +238,9 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
             {/* ── Commissions ── */}
             {commissions.length > 0 && (
               <div style={{ overflowX: "auto" }}>
-                <p style={{ ...sectionLabel, padding: "20px 28px 0" }}>Commission History</p>
+                <p style={{ ...sectionLabel, padding: isMobile ? "16px 16px 0" : "20px 28px 0" }}>
+                  Commission History
+                </p>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
@@ -196,12 +258,12 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
                     {commissions.map((c, i) => (
                       <tr key={c.id ?? i} style={{ borderBottom: "1px solid #F3F4F6" }}>
                         <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>{c.expertId ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151" }}>{c.modelType ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>{c.modelType ?? "—"}</td>
                         <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>{fmtMoney(c.contractValue)}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280" }}>{c.commissionRate != null ? `${c.commissionRate}%` : "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{c.commissionRate != null ? `${c.commissionRate}%` : "—"}</td>
                         <td style={{ padding: "13px 20px", fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>{fmtMoney(c.commissionAmount)}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", textAlign: "center" }}>{c.successfulReferrals ?? "—"}</td>
-                        <td style={{ padding: "13px 20px" }}>{statusBadge(c.status ?? "—")}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{c.successfulReferrals ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", whiteSpace: "nowrap" }}>{statusBadge(c.status ?? "—")}</td>
                         <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
                           {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB") : "—"}
                         </td>
@@ -224,19 +286,20 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
       {/* ── Action bar ── */}
       <div style={{
         position: "sticky", bottom: 0, backgroundColor: "#F4F5F7",
-        borderTop: "1px solid #E5E7EB", padding: "16px 32px",
-        display: "flex", gap: 12, flexWrap: "wrap",
+        borderTop: "1px solid #E5E7EB",
+        padding: isMobile ? "12px" : "16px 32px",
+        display: "flex", gap: isMobile ? 8 : 12, flexWrap: "wrap",
       }}>
         <button onClick={() => setShowAdjust(true)}
-          style={{ ...actionBtn, backgroundColor: "#2563eb", color: "#fff", border: "none", fontWeight: 600, flex: "1 1 auto" }}>
+          style={{ ...actionBtn, backgroundColor: "#2563eb", color: "#fff", border: "none", fontWeight: 600 }}>
           Adjust Tier
         </button>
         <button onClick={handleSuspend} disabled={isMutating}
-          style={{ ...actionBtn, flex: "1 1 auto", opacity: isMutating ? 0.6 : 1 }}>
+          style={{ ...actionBtn, opacity: isMutating ? 0.6 : 1 }}>
           {String(agent.status ?? "").toLowerCase() === "suspended" ? "Reinstate TAS" : "Suspend TAS"}
         </button>
-        <button style={{ ...actionBtn, flex: "1 1 auto" }}>Force Payout</button>
-        <button style={{ ...actionBtn, flex: "1 1 auto" }}>Add Note</button>
+        <button style={actionBtn}>Force Payout</button>
+        <button style={actionBtn}>Add Note</button>
       </div>
 
       {showAdjust && <AdjustTierModal agent={agent} onClose={() => setShowAdjust(false)} />}
