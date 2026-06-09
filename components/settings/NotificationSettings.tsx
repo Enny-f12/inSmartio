@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable react-hooks/set-state-in-effect */
 // components/settings/NotificationSettings.tsx
 "use client";
 
@@ -16,39 +14,57 @@ import type { NotificationSettingsPayload } from "@/lib/api/notificationSettings
 
 // ── Static config ─────────────────────────────────────────
 interface NotifSetting {
-  id:          keyof NotificationSettingsPayload;
+  id:          string;               // e.g. "disputes.opened"
   label:       string;
   description: string;
   category:    string;
 }
 
 const SETTINGS: NotifSetting[] = [
-  { id: "dispute_opened",         label: "New Dispute Opened",               description: "Get notified when a client or expert opens a new dispute.",        category: "Disputes"      },
-  { id: "dispute_resolved",       label: "Dispute Resolved",                 description: "Get notified when a dispute decision is submitted.",                category: "Disputes"      },
-  { id: "verification_submitted", label: "Verification Submitted",           description: "Get notified when an expert submits a new verification request.",  category: "Verifications" },
-  { id: "verification_approved",  label: "Verification Approved / Rejected", description: "Get notified when a verification is approved or rejected.",        category: "Verifications" },
-  { id: "new_user",               label: "New User Registration",            description: "Get notified when a new client, expert, or TAS registers.",        category: "Users"         },
-  { id: "user_suspended",         label: "User Suspended / Reinstated",      description: "Get notified when an admin suspends or reinstates a user.",        category: "Users"         },
-  { id: "payment_received",       label: "Payment Received",                 description: "Get notified when a payment is made on the platform.",             category: "Payments"      },
-  { id: "payout_processed",       label: "Payout Processed",                 description: "Get notified when a TAS or expert payout is processed.",          category: "Payments"      },
-  { id: "tas_application",        label: "New TAS Application",              description: "Get notified when a new TAS application is submitted.",            category: "TAS"           },
-  { id: "tas_tier_adjusted",      label: "TAS Tier Adjusted",                description: "Get notified when an admin adjusts a TAS agent's tier.",          category: "TAS"           },
+  { id: "disputes.opened",        label: "New Dispute Opened",               description: "Get notified when a client or expert opens a new dispute.",       category: "Disputes"      },
+  { id: "disputes.approved",      label: "Dispute Resolved",                 description: "Get notified when a dispute decision is submitted.",               category: "Disputes"      },
+  { id: "verifications.submitted",label: "Verification Submitted",           description: "Get notified when an expert submits a new verification request.", category: "Verifications" },
+  { id: "verifications.approved", label: "Verification Approved / Rejected", description: "Get notified when a verification is approved or rejected.",       category: "Verifications" },
+  { id: "users.registration",     label: "New User Registration",            description: "Get notified when a new client, expert, or TAS registers.",       category: "Users"         },
+  { id: "users.status",           label: "User Suspended / Reinstated",      description: "Get notified when an admin suspends or reinstates a user.",       category: "Users"         },
+  { id: "payments.received",      label: "Payment Received",                 description: "Get notified when a payment is made on the platform.",            category: "Payments"      },
+  { id: "payments.processed",     label: "Payout Processed",                 description: "Get notified when a TAS or expert payout is processed.",         category: "Payments"      },
+  { id: "tas.applied",            label: "New TAS Application",              description: "Get notified when a new TAS application is submitted.",           category: "TAS"           },
+  { id: "tas.adjust",             label: "TAS Tier Adjusted",                description: "Get notified when an admin adjusts a TAS agent's tier.",         category: "TAS"           },
 ];
 
 const CATEGORIES = Array.from(new Set(SETTINGS.map((s) => s.category)));
 
-const DEFAULT_STATE: NotificationSettingsPayload = {
-  dispute_opened:         true,
-  dispute_resolved:       true,
-  verification_submitted: true,
-  verification_approved:  true,
-  new_user:               true,
-  user_suspended:         true,
-  payment_received:       true,
-  payout_processed:       true,
-  tas_application:        true,
-  tas_tier_adjusted:      true,
+const DEFAULT_FORM: NotificationSettingsPayload = {
+  disputes:      { opened: true,   approved: true  },
+  verifications: { submitted: true, approved: true  },
+  users:         { registration: true, status: true },
+  payments:      { received: true, processed: true  },
+  tas:           { applied: true,  adjust: true     },
 };
+
+// ── Helpers to get/set nested values ─────────────────────
+function getNestedValue(form: NotificationSettingsPayload, dotKey: string): boolean {
+  const [section, key] = dotKey.split(".") as [keyof NotificationSettingsPayload, string];
+  const sec = form[section];
+  if (sec && typeof sec === "object") return (sec as Record<string, boolean>)[key] ?? false;
+  return false;
+}
+
+function setNestedValue(
+  form: NotificationSettingsPayload,
+  dotKey: string,
+  value: boolean
+): NotificationSettingsPayload {
+  const [section, key] = dotKey.split(".") as [keyof NotificationSettingsPayload, string];
+  return {
+    ...form,
+    [section]: {
+      ...(form[section] as Record<string, boolean>),
+      [key]: value,
+    },
+  };
+}
 
 // ── Toggle ────────────────────────────────────────────────
 function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
@@ -68,39 +84,47 @@ function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
 export default function NotificationSettings({ onBack }: { onBack: () => void }) {
   const dispatch = useAppDispatch();
   const { settings, loading, saving, error } = useAppSelector((s) => s.notificationSettings);
+  const admin   = useAppSelector((s) => s.auth.admin) as Record<string, string> | null;
+  const adminId = admin?.id ?? "";
 
-  // Local toggle state — seeded from redux once loaded
-  const [form, setForm] = useState<NotificationSettingsPayload>(DEFAULT_STATE);
+  const [form, setForm] = useState<NotificationSettingsPayload>(DEFAULT_FORM);
 
-  // Fetch on mount
+  // Fetch on mount using adminId
   useEffect(() => {
-    dispatch(fetchNotificationSettings());
-  }, [dispatch]);
+    if (adminId) dispatch(fetchNotificationSettings(adminId));
+  }, [dispatch, adminId]);
 
-  // Sync redux → local form when settings load
+  // Seed form from settings — runs only when settings.id changes (i.e. first load)
+  const settingsId = settings?.id;
   useEffect(() => {
-    if (settings) {
-      const { id: _id, createdAt: _c, updatedAt: _u, ...payload } = settings;
-      setForm(payload as NotificationSettingsPayload);
-    }
-  }, [settings]);
+    if (!settings) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm({
+      disputes:      settings.disputes,
+      verifications: settings.verifications,
+      users:         settings.users,
+      payments:      settings.payments,
+      tas:           settings.tas,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsId]);
 
-  // Show error toast if fetch/save fails
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
 
   // ── Handlers ──────────────────────────────────────────────
-  const toggle = (id: keyof NotificationSettingsPayload) =>
-    setForm((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggle = (dotKey: string) =>
+    setForm((prev) => setNestedValue(prev, dotKey, !getNestedValue(prev, dotKey)));
 
   const toggleAll = (category: string, value: boolean) => {
     const ids = SETTINGS.filter((s) => s.category === category).map((s) => s.id);
-    setForm((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, value])) }));
+    setForm((prev) => ids.reduce((acc, id) => setNestedValue(acc, id, value), prev));
   };
 
   const handleSave = () => {
-    dispatch(saveNotificationSettings({ id: settings?.id ?? null, payload: form }))
+    const payload: NotificationSettingsPayload = { ...form, adminId };
+    dispatch(saveNotificationSettings({ id: settings?.id ?? null, payload }))
       .unwrap()
       .then(() => toast.success("Notification settings saved"))
       .catch((err: string) => toast.error("Failed to save", { description: err }));
@@ -121,8 +145,9 @@ export default function NotificationSettings({ onBack }: { onBack: () => void })
 
           {CATEGORIES.map((cat) => {
             const catSettings = SETTINGS.filter((s) => s.category === cat);
-            const allOn  = catSettings.every((s) => form[s.id]);
-            const allOff = catSettings.every((s) => !form[s.id]);
+            const allOn  = catSettings.every((s) => getNestedValue(form, s.id));
+            const allOff = catSettings.every((s) => !getNestedValue(form, s.id));
+
             return (
               <div key={cat}>
                 <div style={{ display: "flex", alignItems: "center",
@@ -159,7 +184,10 @@ export default function NotificationSettings({ onBack }: { onBack: () => void })
                         <p style={{ fontSize: "12px", color: "#6B7280", margin: 0,
                           lineHeight: 1.5 }}>{s.description}</p>
                       </div>
-                      <Toggle value={form[s.id]} onChange={() => toggle(s.id)} />
+                      <Toggle
+                        value={getNestedValue(form, s.id)}
+                        onChange={() => toggle(s.id)}
+                      />
                     </div>
                   ))}
                 </div>

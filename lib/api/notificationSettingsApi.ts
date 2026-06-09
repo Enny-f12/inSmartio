@@ -1,35 +1,55 @@
 // lib/api/notificationSettingsApi.ts
 import axiosInstance from "./axiosInstance";
 
-// ── TYPES ────────────────────────────────────────────────────────────────────
+// ── TYPES ─────────────────────────────────────────────────────────────────────
+
 export interface NotificationSettingsPayload {
-  dispute_opened:         boolean;
-  dispute_resolved:       boolean;
-  verification_submitted: boolean;
-  verification_approved:  boolean;
-  new_user:               boolean;
-  user_suspended:         boolean;
-  payment_received:       boolean;
-  payout_processed:       boolean;
-  tas_application:        boolean;
-  tas_tier_adjusted:      boolean;
+  adminId?: string;
+  disputes: {
+    opened:   boolean;
+    approved: boolean;
+  };
+  verifications: {
+    submitted: boolean;
+    approved:  boolean;
+  };
+  users: {
+    registration: boolean;
+    status:       boolean;
+  };
+  payments: {
+    received:  boolean;
+    processed: boolean;
+  };
+  tas: {
+    applied: boolean;
+    adjust:  boolean;
+  };
 }
 
-export interface NotificationSettingsResponse extends NotificationSettingsPayload {
-  id:         string;
-  createdAt?: string;
-  updatedAt?: string;
+export interface NotificationSettingsResponse {
+  id:            string;
+  adminId?:      string;
+  disputes:      NotificationSettingsPayload["disputes"];
+  verifications: NotificationSettingsPayload["verifications"];
+  users:         NotificationSettingsPayload["users"];
+  payments:      NotificationSettingsPayload["payments"];
+  tas:           NotificationSettingsPayload["tas"];
+  createdAt?:    string;
+  updatedAt?:    string;
 }
 
 interface Envelope<T> { status: boolean; message: string; data: T; }
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
-// GET /api/settings/notification-settings
-export const getNotificationSettings = async (): Promise<NotificationSettingsResponse | null> => {
+// GET /api/notification-settings/admin/{adminId}
+export const getNotificationSettings = async (
+  adminId: string
+): Promise<NotificationSettingsResponse | null> => {
   try {
     const { data } = await axiosInstance.get<Envelope<NotificationSettingsResponse>>(
-      "/settings/notification-settings"
+      `/notification-settings/admin/${adminId}`
     );
     return data.data ?? null;
   } catch {
@@ -37,24 +57,24 @@ export const getNotificationSettings = async (): Promise<NotificationSettingsRes
   }
 };
 
-// POST /api/settings/notification-settings/create
+// POST /api/notification-settings
 export const createNotificationSettings = async (
   payload: NotificationSettingsPayload
 ): Promise<NotificationSettingsResponse> => {
   const { data } = await axiosInstance.post<Envelope<NotificationSettingsResponse>>(
-    "/settings/notification-settings/create",
+    "/notification-settings",
     payload
   );
   return data.data;
 };
 
-// PUT /api/settings/notification-settings/{id}
+// PATCH /api/notification-settings/{id}
 export const updateNotificationSettings = async (
   id: string,
   payload: NotificationSettingsPayload
 ): Promise<NotificationSettingsResponse> => {
-  const { data } = await axiosInstance.put<Envelope<NotificationSettingsResponse>>(
-    `/settings/notification-settings/${id}`,
+  const { data } = await axiosInstance.patch<Envelope<NotificationSettingsResponse>>(
+    `/notification-settings/${id}`,
     payload
   );
   return data.data;

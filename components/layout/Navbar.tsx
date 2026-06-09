@@ -386,7 +386,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ── Profile Dropdown ──────────────────────────────────────
-function ProfileDropdown({ name, email, role, initials, avatarUrl, onProfile, onPassword, onClose, onLogout }: {
+function ProfileDropdown({ name, role, initials, avatarUrl, onProfile, onPassword, onClose, onLogout }: {
   name: string; email: string; role: string; initials: string; avatarUrl?: string;
   onProfile: () => void; onPassword: () => void; onClose: () => void; onLogout: () => void;
 }) {
