@@ -86,43 +86,131 @@ export interface NotificationLog {
 }
 
 export interface Bid {
+  // ── Core (existing) ────────────────────────────────────────────────────────
   id: string;
   jobId: string;
   expert: BidExpert;
-  client: BidClient;
-  originalBid: number;
+  /** Legacy flat client — kept for backward compat; prefer bid.job.client */
+  client?: BidClient;
+  /** Legacy field — kept for backward compat; prefer bid.bidAmount */
+  originalBid?: number;
   requestedIncrease?: number;
   requestedIncreasePercent?: number;
   finalAmount?: number;
   step: BidStep;
   status: BidStatus;
-  hasPriceRequest: boolean;
+  /** Legacy derived field — kept for backward compat; prefer bid.negotiationData != null */
+  hasPriceRequest?: boolean;
+  /** Legacy flat field — kept for backward compat; prefer bid.cancellationData?.feeAmount */
   cancellationFee?: number;
-  flags: BidFlag[];
+  /** Legacy flags array — kept for backward compat; prefer bid.flagData */
+  flags?: BidFlag[];
   createdAt: string;
   step4ResponseAt?: string;
   step5DecisionAt?: string;
   siteArrivalAt?: string;
   siteArrivalDetails?: SiteArrivalDetails;
   notifications?: NotificationLog[];
+  _jobTitle?: string;
+  _jobDescription?: string;
+  _jobBudget?: { min: number; max: number };
+  _jobTimeline?: { label: string; datetime: string }[];
+  proposalText?: string;
+  completion?: string;
+  startDate?: string;
+  currency?: string;
+
+  // ── Actual API fields ──────────────────────────────────────────────────────
+  /** Bid amount as sent by the API */
+  bidAmount?: number;
+  expertId?: string;
+  offerCashPayment?: boolean;
+  updatedAt?: string;
+
+  /** Full job object (includes nested client) */
+  job?: BidJob;
+
+  /**
+   * Negotiation data — non-null means a price request exists.
+   * Replaces the legacy hasPriceRequest boolean.
+   */
+  negotiationData?: {
+    message?: string;
+    requestedBy?: string;
+    rejectedBy?: string;
+    rejectedAt?: string;
+    counterAmount?: number;
+    originalAmount?: number;
+  } | null;
+
+  /**
+   * Flag data object — replaces the legacy flags array.
+   * Top-level status/priority reflect the most recent open flag.
+   */
+  flagData?: {
+    status?: string;
+    priority?: "HIGH" | "MEDIUM" | "LOW";
+    reason?: string;
+    flaggedAt?: string;
+    flags?: Array<{
+      id: string;
+      reason: string;
+      status: string;
+      priority?: "HIGH" | "MEDIUM" | "LOW";
+      createdAt: string;
+    }>;
+    notes?: Array<{
+      note: string;
+      adminId: string;
+      createdAt: string;
+    }>;
+  } | null;
+
+  /**
+   * Cancellation data — replaces the legacy cancellationFee number.
+   */
+  cancellationData?: {
+    reason?: string;
+    feeAmount?: number;
+    feeApplied?: boolean;
+    cancelledAt?: string;
+    cancelledBy?: string;
+  } | null;
+
+  offerExtension?: unknown | null;
+  feeWaived?: unknown | null;
+}
+
+// ── Supporting types ──────────────────────────────────────────────────────────
+
+export interface BidJob {
+  id: string;
+  title: string;
+  status: string;
+  budget?: { amount?: number; min?: number; max?: number };
+  category?: string;
+  subCategory?: string;
+  postedBy?: string;
+  location?: { city?: string; address?: string };
+  createdAt?: string;
+  client: BidClient;
 }
 
 // ─── KPI Summary ──────────────────────────────────────────────────────────────
 
 export interface BidKPISummary {
   totalBids: number;
-  totalBidsDelta: number;
+  totalBidsDelta: number;       // not from API — defaults to 0
   activeBids: number;
-  activeBidsDelta: number;
-  priceRequests: number;
-  priceRequestsDelta: number;
-  rejected: number;
-  rejectedDelta: number;
-  cancellationFees: number;
-  cancellationFeesDelta: number;
-  cancellationFeeRate: number; // % of site arrivals — alert if >10%
+  activeBidsDelta: number;      // not from API — defaults to 0
+  priceRequests: number;        // mapped from priceRequestBids
+  priceRequestsDelta: number;   // not from API — defaults to 0
+  rejected: number;             // mapped from rejectedBids
+  rejectedDelta: number;        // not from API — defaults to 0
+  cancellationFees: number;     // mapped from totalCancellationFees
+  cancellationFeesDelta: number;// not from API — defaults to 0
+  cancellationFeeRate: number;  // parsed from cancellationFeeRatio ("0.0%" -> 0.0)
 }
-
 // ─── Cancellation Fee Models ──────────────────────────────────────────────────
 
 export interface CancellationFeeRecord {

@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2, Download, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
@@ -11,22 +11,6 @@ import {
   setFilters, setPage, resetExportStatus,
 } from "@/lib/redux/auditlogSlice";
 import type { AuditAction, AuditLog, AuditLogsParams } from "@/lib/api/auditlogApi";
-
-// ── Mock data (flip USE_MOCK=false once backend is ready) ─
-const MOCK_LOGS: AuditLog[] = [
-  { id:"LOG-001", timestamp:"2026-03-25T10:30:00.000Z", adminId:"admin",        adminName:"John Smith",    adminEmail:"john@adm.com",  action:"USER_SUSPENDED",    details:"User: EXP-001",                              targetId:"EXP-001",  targetType:"user",    ipAddress:"1.2.3.4" },
-  { id:"LOG-002", timestamp:"2026-03-25T09:15:00.000Z", adminId:"verification", adminName:"Mary Johnson",  adminEmail:"mary@adm.com",  action:"TAS_TIER_ADJUSTED", details:"TAS: TAS-001",                               targetId:"TAS-001",  targetType:"tas",     ipAddress:"1.2.4.5" },
-  { id:"LOG-003", timestamp:"2026-03-24T14:00:00.000Z", adminId:"finance",      adminName:"David Okafor",  adminEmail:"david@adm.com", action:"PAYOUT_PROCESSED",  details:"Amount: ₦1.2M",                              targetId:"PAY-009",  targetType:"payout",  ipAddress:"1.2.5.6" },
-  { id:"LOG-004", timestamp:"2026-03-24T11:20:00.000Z", adminId:"admin",        adminName:"John Smith",    adminEmail:"john@adm.com",  action:"USER_CREATED",      details:"User: CLT-045 created",                      targetId:"CLT-045",  targetType:"user",    ipAddress:"1.2.3.4" },
-  { id:"LOG-005", timestamp:"2026-03-23T16:45:00.000Z", adminId:"verification", adminName:"Mary Johnson",  adminEmail:"mary@adm.com",  action:"EXPERT_VERIFIED",   details:"Expert EXP-022 verified (Tier 2)",           targetId:"EXP-022",  targetType:"user",    ipAddress:"1.2.4.5" },
-  { id:"LOG-006", timestamp:"2026-03-23T09:00:00.000Z", adminId:"support",      adminName:"Tunde Balogun", adminEmail:"tunde@adm.com", action:"ADMIN_LOGIN",       details:"Admin logged in",                            targetId:undefined,  targetType:undefined, ipAddress:"1.2.5.6" },
-  { id:"LOG-007", timestamp:"2026-03-22T13:30:00.000Z", adminId:"admin",        adminName:"John Smith",    adminEmail:"john@adm.com",  action:"USER_DELETED",      details:"User CLT-012 deleted",                       targetId:"CLT-012",  targetType:"user",    ipAddress:"1.2.3.4" },
-  { id:"LOG-008", timestamp:"2026-03-22T10:10:00.000Z", adminId:"admin",        adminName:"John Smith",    adminEmail:"john@adm.com",  action:"ROLE_UPDATED",      details:"Role updated for ADM-004",                   targetId:"ADM-004",  targetType:"admin",   ipAddress:"1.2.4.5" },
-  { id:"LOG-009", timestamp:"2026-03-21T15:00:00.000Z", adminId:"support",      adminName:"Tunde Balogun", adminEmail:"tunde@adm.com", action:"DISPUTE_RESOLVED",  details:"Dispute DSP-007 resolved in favour of client",targetId:"DSP-007", targetType:"dispute", ipAddress:"1.2.3.4" },
-  { id:"LOG-010", timestamp:"2026-03-21T08:55:00.000Z", adminId:"finance",      adminName:"David Okafor",  adminEmail:"david@adm.com", action:"PAYOUT_REJECTED",   details:"Payout PAY-010 rejected — insufficient docs",targetId:"PAY-010",  targetType:"payout",  ipAddress:"1.2.5.6" },
-];
-
-const USE_MOCK = true;
 
 // ── Constants ─────────────────────────────────────────────
 
@@ -53,7 +37,6 @@ const ACTION_OPTIONS: { label: string; value: AuditAction | "" }[] = [
   { label: "Dispute Resolved",  value: "DISPUTE_RESOLVED" },
 ];
 
-// ── Admin roles matching your role map ────────────────────
 const ADMIN_OPTIONS = [
   { label: "All Admins",           value: ""             },
   { label: "Super Admin",          value: "admin"        },
@@ -69,8 +52,6 @@ const DATE_OPTIONS = [
   { label: "Last 7 days",  days: 7  },
   { label: "Last 90 days", days: 90 },
 ];
-
-const PAGE_SIZE = 10;
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -152,70 +133,81 @@ function NativeSelect({ value, onChange, options }: {
 
 export default function AuditLogsPage() {
   const dispatch   = useAppDispatch();
-  const reduxState = useAppSelector((s) => s.auditLogs);
+  const {
+    logs, pagination, listStatus, listError,
+    exportStatus, activeFilters,
+  } = useAppSelector((s) => s.auditLogs);
 
-  const [actionFilter,  setActionFilter]  = useState<AuditAction | "">("");
-  const [adminFilter,   setAdminFilter]   = useState("");
-  const [datePresetIdx, setDatePresetIdx] = useState(0);
+  const [search,        setSearch]        = useState(activeFilters.search ?? "");
   const [exporting,     setExporting]     = useState(false);
-  const [page,          setLocalPage]     = useState(1);
 
-  const useMock    = USE_MOCK;
-  const rawLogs    = useMock ? MOCK_LOGS : reduxState.logs;
-  const listStatus = useMock ? "succeeded" as const : reduxState.listStatus;
-  const listError  = useMock ? null                 : reduxState.listError;
-  const expStatus  = useMock ? "idle"    as const   : reduxState.exportStatus;
-
+  // ── FIX 1: Fetch whenever activeFilters changes, not just when status is "idle"
+  // Using activeFilters as the dependency means filter/page changes always trigger a fetch.
   useEffect(() => {
-    if (!useMock && reduxState.listStatus === "idle")
-      dispatch(fetchAuditLogs(reduxState.activeFilters));
-  }, [dispatch, useMock, reduxState.listStatus, reduxState.activeFilters]);
+    dispatch(fetchAuditLogs(activeFilters));
+  }, [dispatch, activeFilters]);
 
+  // ── FIX 2: Export status side-effects
   useEffect(() => {
-    if (expStatus === "succeeded") { toast.success("Audit logs exported"); dispatch(resetExportStatus()); setExporting(false); }
-    if (expStatus === "failed")    { toast.error("Export failed");         dispatch(resetExportStatus()); setExporting(false); }
-  }, [expStatus, dispatch]);
-
-  // Client-side filter on mock data
-  const filtered = rawLogs.filter((log) => {
-    if (actionFilter && log.action  !== actionFilter) return false;
-    if (adminFilter  && log.adminId !== adminFilter)  return false;
-    return true;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to         = Math.min(page * PAGE_SIZE, filtered.length);
-
-  useEffect(() => { setLocalPage(1); }, [actionFilter, adminFilter, datePresetIdx]);
-
-  const handleActionChange = (v: string) => {
-    setActionFilter(v as AuditAction | "");
-    if (!useMock) dispatch(setFilters({ action: v as AuditAction | "" } as AuditLogsParams));
-  };
-  const handleAdminChange = (v: string) => {
-    setAdminFilter(v);
-    if (!useMock) dispatch(setFilters({ adminId: v } as AuditLogsParams));
-  };
-  const handleDateChange = (idx: number) => {
-    setDatePresetIdx(idx);
-    if (!useMock) {
-      const days = DATE_OPTIONS[idx].days;
-      dispatch(setFilters({ fromDate: isoDate(days), toDate: isoDate(0) } as AuditLogsParams));
+    if (exportStatus === "succeeded") {
+      toast.success("Audit logs exported");
+      dispatch(resetExportStatus());
+      setExporting(false);
     }
-  };
+    if (exportStatus === "failed") {
+      toast.error("Export failed");
+      dispatch(resetExportStatus());
+      setExporting(false);
+    }
+  }, [exportStatus, dispatch]);
+
+  // ── Debounced search: dispatch after 400 ms of no typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      dispatch(setFilters({ search } as AuditLogsParams));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, dispatch]);
+
+  const handleActionChange = useCallback((v: string) => {
+    dispatch(setFilters({ action: v as AuditAction | "" } as AuditLogsParams));
+  }, [dispatch]);
+
+  const handleAdminChange = useCallback((v: string) => {
+    dispatch(setFilters({ adminId: v } as AuditLogsParams));
+  }, [dispatch]);
+
+  const handleDateChange = useCallback((idx: number) => {
+    const days = DATE_OPTIONS[idx].days;
+    dispatch(setFilters({
+      fromDate: isoDate(days),
+      toDate:   isoDate(0),
+    } as AuditLogsParams));
+  }, [dispatch]);
+
+  const handlePageChange = useCallback((p: number) => {
+    dispatch(setPage(p));
+  }, [dispatch]);
+
   const handleExport = async (format: "csv" | "pdf") => {
-    if (useMock) { toast.success(`Mock export as ${format.toUpperCase()}`); return; }
     setExporting(true);
-    const result = await dispatch(exportAuditLogsThunk({ ...reduxState.activeFilters, format }));
+    const result = await dispatch(exportAuditLogsThunk({ ...activeFilters, format }));
     if (exportAuditLogsThunk.fulfilled.match(result)) {
       const a = document.createElement("a");
-      a.href = result.payload; a.download = `audit-logs-${isoDate(0)}.${format}`; a.click();
+      a.href = result.payload;
+      a.download = `audit-logs-${isoDate(0)}.${format}`;
+      a.click();
       URL.revokeObjectURL(result.payload);
     }
   };
-  const handlePageChange = (p: number) => { setLocalPage(p); if (!useMock) dispatch(setPage(p)); };
+
+  // Pagination info from server
+  const page       = activeFilters.page ?? 1;
+  const totalPages = pagination?.totalPages ?? 1;
+  const total      = pagination?.total ?? 0;
+  const limit      = activeFilters.limit ?? 20;
+  const from       = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to         = Math.min(page * limit, total);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", flex:1, backgroundColor:"#F9FAFB" }}>
@@ -253,7 +245,7 @@ export default function AuditLogsPage() {
               <span style={{ fontSize:"13px", fontWeight:600, color:"#374151" }}>Filter</span>
             </div>
 
-            {/* Search box — stretches */}
+            {/* FIX 3: Controlled search input with debounced dispatch */}
             <div style={{ position:"relative", flex:1, minWidth:"180px" }}>
               <svg style={{ position:"absolute", left:"13px", top:"50%",
                 transform:"translateY(-50%)", color:"#9CA3AF" }}
@@ -261,35 +253,40 @@ export default function AuditLogsPage() {
                 stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
-              <input type="text" placeholder="Search name..."
+              <input
+                type="text"
+                placeholder="Search name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 style={{ width:"100%", paddingLeft:"36px", paddingRight:"14px",
                   paddingTop:"9px", paddingBottom:"9px", borderRadius:"10px",
                   fontSize:"13px", border:"1px solid #E5E7EB", backgroundColor:"#F9FAFB",
-                  outline:"none", color:"#111827", boxSizing:"border-box" }} />
+                  outline:"none", color:"#111827", boxSizing:"border-box" }}
+              />
             </div>
 
             {/* Action dropdown */}
             <NativeSelect
-              value={actionFilter}
+              value={activeFilters.action ?? ""}
               onChange={handleActionChange}
               options={ACTION_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
             />
 
             {/* Admin role dropdown */}
             <NativeSelect
-              value={adminFilter}
+              value={activeFilters.adminId ?? ""}
               onChange={handleAdminChange}
               options={ADMIN_OPTIONS}
             />
 
             {/* Date dropdown */}
             <NativeSelect
-              value={String(datePresetIdx)}
+              value="0"
               onChange={(v) => handleDateChange(Number(v))}
               options={DATE_OPTIONS.map((o, i) => ({ label: o.label, value: String(i) }))}
             />
 
-            {/* Export button — right-most, matches users page style */}
+            {/* Export button */}
             <button onClick={() => handleExport("csv")} disabled={exporting}
               style={{ display:"flex", alignItems:"center", gap:"6px",
                 padding:"9px 16px", borderRadius:"10px", fontSize:"13px", fontWeight:500,
@@ -310,12 +307,22 @@ export default function AuditLogsPage() {
             </div>
           )}
           {listStatus === "failed" && (
-            <p style={{ textAlign:"center", padding:"48px", fontSize:"13px", color:"#ef4444" }}>
-              {listError ?? "Failed to load audit logs."}
-            </p>
+            <div style={{ textAlign:"center", padding:"48px" }}>
+              <p style={{ fontSize:"13px", color:"#ef4444", marginBottom:"12px" }}>
+                {listError ?? "Failed to load audit logs."}
+              </p>
+              {/* FIX 4: Retry button — old code had no recovery path from "failed" */}
+              <button
+                onClick={() => dispatch(fetchAuditLogs(activeFilters))}
+                style={{ padding:"8px 18px", borderRadius:"8px", fontSize:"13px",
+                  border:"1px solid #E5E7EB", backgroundColor:"#fff",
+                  color:"#374151", cursor:"pointer" }}>
+                Retry
+              </button>
+            </div>
           )}
 
-          {listStatus === "succeeded" && (
+          {(listStatus === "succeeded" || listStatus === "idle") && (
             <>
               {/* Desktop table */}
               <div className="al-desktop" style={{ overflowX:"auto" }}>
@@ -330,10 +337,10 @@ export default function AuditLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginated.length === 0 ? (
+                    {logs.length === 0 ? (
                       <tr><td colSpan={5} style={{ textAlign:"center", padding:"56px",
                         fontSize:"14px", color:"#9CA3AF" }}>No audit logs found.</td></tr>
-                    ) : paginated.map((log) => (
+                    ) : logs.map((log: AuditLog) => (
                       <tr key={log.id}
                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FAFAFA")}
                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}>
@@ -368,10 +375,10 @@ export default function AuditLogsPage() {
 
               {/* Mobile cards */}
               <div className="al-mobile" style={{ padding:"12px", backgroundColor:"#F9FAFB" }}>
-                {paginated.length === 0 ? (
+                {logs.length === 0 ? (
                   <p style={{ textAlign:"center", padding:"40px",
                     fontSize:"13px", color:"#9CA3AF" }}>No audit logs found.</p>
-                ) : paginated.map((log) => (
+                ) : logs.map((log: AuditLog) => (
                   <div key={log.id} style={{ padding:"14px 16px", borderRadius:"12px",
                     border:"1px solid #E5E7EB", backgroundColor:"#fff" }}>
                     <div style={{ display:"flex", justifyContent:"space-between",
@@ -404,7 +411,6 @@ export default function AuditLogsPage() {
                 display:"flex", flexWrap:"wrap", alignItems:"center",
                 justifyContent:"space-between", gap:"10px" }}>
 
-                {/* Spec footer links */}
                 <div style={{ display:"flex", gap:"16px" }}>
                   {(["Export Logs","Filter by User","Filter by Action"] as const).map((lbl) => (
                     <button key={lbl}
@@ -416,10 +422,10 @@ export default function AuditLogsPage() {
                   ))}
                 </div>
 
-                {/* Pagination */}
+                {/* Server-driven pagination */}
                 <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
                   <span style={{ fontSize:"12px", color:"#6B7280" }}>
-                    {filtered.length === 0 ? "No results" : `${from}–${to} of ${filtered.length}`}
+                    {total === 0 ? "No results" : `${from}–${to} of ${total}`}
                   </span>
                   <button onClick={() => handlePageChange(page - 1)} disabled={page === 1}
                     style={{ padding:"5px 12px", borderRadius:"7px", fontSize:"12px",

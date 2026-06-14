@@ -25,6 +25,10 @@ import notificationSettingsReducer from "./notificationSettingsSlice"
 import auditLogsReducer from "./auditlogSlice"; 
 import bidReducer from "./bidSlice";  
 import cancellationfeeReducer from "./cancellationfeeSlice"
+import appVersionReducer from "./appversionSlice";
+import clientRefundReducer from "./clientrefundSlice";
+import expertPayoutReducer from "./expertpayoutSlice";
+
 export const store = configureStore({
   reducer: {
     counter:               counterReducer,
@@ -53,6 +57,9 @@ export const store = configureStore({
     auditLogs:             auditLogsReducer,
     bids:                  bidReducer,                
     cancellationFees:      cancellationfeeReducer,
+    appVersion:            appVersionReducer,
+    clientRefund:          clientRefundReducer,
+    expertPayout:          expertPayoutReducer,
   },
 });
 
