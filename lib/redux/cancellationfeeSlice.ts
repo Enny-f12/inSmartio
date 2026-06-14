@@ -96,18 +96,6 @@ const initialState: CancellationFeesState = {
 
 /** Map API CancellationFeeRecord shape → UI CancellationFeeRecord shape */
 function normaliseApiRecord(raw: Record<string, unknown>): CancellationFeeRecord {
-  // The API returns the shape from the Swagger sample (image 3 / detail JSON):
-  //   { id, bidAmount, currency, status, step, cancelledAt, createdAt,
-  //     expert: { id, name, email }, client: { id, name, email, phone },
-  //     job: { id, title, originalAmount: 100000 },
-  //     cancellationFeeDetails: { jobOriginalAmount, bidAmount, cancellationFee,
-  //                               feeCap, feeCapApplied, finalCancellationFee,
-  //                               clientRefund, expertPayout },
-  //     feeWaived: { waived, reason, waivedAt },
-  //     adminVerification: { isCorrect, adjustedAmount, reason },
-  //     siteInspectionDetails: { expertNotes, evidenceUploaded: [{ type, url }] }
-  //   }
-
   const feeDetails = (raw.cancellationFeeDetails ?? raw.cancellationFeeCalculation ?? {}) as Record<string, unknown>;
   const expertRaw  = (raw.expert  ?? {}) as Record<string, unknown>;
   const clientRaw  = (raw.client  ?? {}) as Record<string, unknown>;
@@ -117,7 +105,6 @@ function normaliseApiRecord(raw: Record<string, unknown>): CancellationFeeRecord
   const evidenceUploaded = (inspection.evidenceUploaded ?? []) as Array<Record<string, unknown>>;
 
   return {
-    // Use bid id as jobId key (UI table uses fee.jobId as the row key)
     jobId: (raw.id ?? raw.jobId ?? jobRaw.id ?? "") as string,
 
     expert: {
@@ -138,7 +125,6 @@ function normaliseApiRecord(raw: Record<string, unknown>): CancellationFeeRecord
       cancellationFeesPaid:(feeDetails.finalCancellationFee ?? 0) as number,
     },
 
-    // The table shows: originalAmount / requestedAmount / increasePercent / feeApplied
     originalAmount:  (feeDetails.jobOriginalAmount ?? jobRaw.originalAmount ?? raw.bidAmount ?? 0) as number,
     requestedAmount: (feeDetails.bidAmount ?? raw.bidAmount ?? 0) as number,
     increasePercent: (() => {
@@ -149,23 +135,19 @@ function normaliseApiRecord(raw: Record<string, unknown>): CancellationFeeRecord
     })(),
     feeApplied: (feeDetails.finalCancellationFee ?? feeDetails.cancellationFee ?? 0) as number,
 
-    // Date shown in table
     date: raw.cancelledAt
       ? new Date(raw.cancelledAt as string).toLocaleDateString("en-GB")
       : raw.createdAt
         ? new Date(raw.createdAt as string).toLocaleDateString("en-GB")
         : "",
 
-    // Admin verification
     adminVerified:       (adminVerif.isCorrect === true),
     adminAdjustedAmount: (adminVerif.adjustedAmount ?? undefined) as number | undefined,
     adminNote:           (adminVerif.reason ?? undefined) as string | undefined,
 
-    // Refund / payout — API doesn't give these on the list endpoint yet; default pending
     refundStatus: "pending",
     payoutStatus: "pending",
 
-    // Detail modal fields
     siteInspectionNotes: (inspection.expertNotes ?? "") as string,
     evidenceUrls: evidenceUploaded.map((e) => e.url as string),
   };
@@ -212,7 +194,6 @@ export const fetchCancellationFees = createAsyncThunk(
     try {
       const res = await cancellationFeeService.getCancellationFees({ page, limit });
 
-      // If the API returned real records, normalise and filter them
       if (res.data && res.data.length > 0) {
         const normalised = res.data.map((r) =>
           normaliseApiRecord(r as unknown as Record<string, unknown>)
@@ -231,12 +212,36 @@ export const fetchCancellationFees = createAsyncThunk(
 );
 
 /**
- * Summary — no dedicated endpoint yet; use mock.
- * When the backend adds one, replace the mock return with the API call.
+ * GET /bid/admin/cancellation-fees
+ * Reads the `stats` field from the same list endpoint response.
+ * API shape: { data: { stats: { totalCancellation, totalFeesCollected, averageFee, topReason } } }
+ * Falls back to MOCK_CANCELLATION_SUMMARY if the API errors or returns no stats.
  */
 export const fetchCancellationFeeSummary = createAsyncThunk(
   "cancellationFees/fetchSummary",
-  async () => MOCK_CANCELLATION_SUMMARY
+  async () => {
+    try {
+      const res = await cancellationFeeService.getCancellationFees({ page: 1, limit: 1 });
+      const stats = (res as { stats?: Record<string, unknown> }).stats;
+
+      if (stats) {
+        return {
+          totalCancellations: (stats.totalCancellation  ?? 0) as number,
+          totalFeesCollected: (stats.totalFeesCollected ?? 0) as number,
+          averageFee:         (stats.averageFee         ?? 0) as number,
+          minFee:             (stats.minFee             ?? 0) as number,
+          maxFee:             (stats.maxFee             ?? 0) as number,
+          topReasons: stats.topReason
+            ? [{ reason: stats.topReason as string, percentage: 0 }]
+            : [],
+        } satisfies CancellationFeeSummary;
+      }
+    } catch {
+      // fall through to mock
+    }
+
+    return MOCK_CANCELLATION_SUMMARY;
+  }
 );
 
 /**
@@ -253,7 +258,6 @@ export const fetchCancellationFeeDetail = createAsyncThunk(
       // fall through to mock
     }
 
-    // ── Mock fallback ──
     const found = MOCK_CANCELLATION_FEES.find((f) => f.jobId === jobId);
     if (found) return found;
     return rejectWithValue("Fee record not found");
@@ -262,14 +266,11 @@ export const fetchCancellationFeeDetail = createAsyncThunk(
 
 /**
  * POST /bid/admin/bids/:bidId/waive-fee  (confirm = waive with reason "confirmed_correct")
- * The Swagger only shows a waive-fee endpoint; "confirm" maps to that with a fixed reason.
  */
 export const confirmFeeThunk = createAsyncThunk(
   "cancellationFees/confirm",
   async (jobId: string, { rejectWithValue }) => {
     try {
-      // bidService.waiveFee is the only mutation endpoint available for fees
-      // We use it with a sentinel reason so the backend knows it was an admin confirm.
       const { bidService } = await import("@/lib/api/bidApi");
       await bidService.waiveFee(jobId, "admin_confirmed_correct");
       return jobId;
@@ -282,7 +283,6 @@ export const confirmFeeThunk = createAsyncThunk(
 
 /**
  * No dedicated adjust endpoint in Swagger — optimistic local update only.
- * Remove the try/catch API call once a real endpoint exists.
  */
 export const adjustFeeThunk = createAsyncThunk(
   "cancellationFees/adjust",
@@ -291,7 +291,6 @@ export const adjustFeeThunk = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      // Optimistic — no real endpoint yet; just return payload for state update
       return { jobId, adjustedAmount, reason };
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
@@ -322,7 +321,6 @@ export const waiveFeeThunk = createAsyncThunk(
 
 /**
  * GET /bid/admin/export
- * Falls back gracefully if the endpoint isn't ready.
  */
 export const exportReportThunk = createAsyncThunk(
   "cancellationFees/export",
@@ -353,11 +351,6 @@ export const exportReportThunk = createAsyncThunk(
 
 /**
  * GET /bid/admin/expert-patterns  +  GET /bid/admin/client-patterns
- * Falls back to MOCK_EXPERT_DISPUTES / MOCK_CLIENT_DISPUTES if either errors.
- *
- * The API shape (image 6/7) returns { patterns: [] } where each pattern has:
- *   expert: { id, name, email }, cancellationHistory: [], cancellationRate, priority
- * We map those to ExpertDispute / ClientDispute for the UI.
  */
 export const fetchExcessiveCancellations = createAsyncThunk(
   "cancellationFees/fetchDisputes",
@@ -422,8 +415,7 @@ export const fetchExcessiveCancellations = createAsyncThunk(
 );
 
 /**
- * Dispute action — no dedicated endpoint in Swagger; optimistic dismiss only.
- * Hook in a real API call here when the backend provides one.
+ * Dispute action — optimistic dismiss only.
  */
 export const takeDisputeAction = createAsyncThunk(
   "cancellationFees/disputeAction",
@@ -436,7 +428,6 @@ export const takeDisputeAction = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      // Optimistic — no dedicated endpoint yet
       void entityId; void action; void note;
       return entityId;
     } catch (err: unknown) {
@@ -446,22 +437,13 @@ export const takeDisputeAction = createAsyncThunk(
   }
 );
 
-// ── DROP-IN REPLACEMENT for the fetchNotificationLog thunk in cancellationfeeSlice.ts ──
-// Replaces the old thunk that called notificationLogService.getNotifications(bidId)
-// Now calls notificationLogService.getHistory() → GET /bid/admin/history
-// Then scopes results to the bidId client-side.
-
 export const fetchNotificationLog = createAsyncThunk(
   "cancellationFees/fetchNotifications",
   async (bidId: string, { rejectWithValue }) => {
     try {
-      // GET /bid/admin/history?limit=100&page=1
-      // Envelope: { status, message, data: { data: [], total, page, limit, pages } }
       const res = await notificationLogService.getHistory({ limit: 100, page: 1 });
       const all = res.data ?? [];
 
-      // Scope to this bid: filter notifications that reference the bidId
-      // API notification shape: { id, type, title, body, read, userId, createdAt }
       const scoped = all.filter((n) => {
         const raw = n as unknown as Record<string, unknown>;
         return (
@@ -473,11 +455,8 @@ export const fetchNotificationLog = createAsyncThunk(
         );
       });
 
-      // Fallback: if nothing matches bidId, return everything
-      // (backend may not embed bidId in the notification object yet)
       const list = scoped.length > 0 ? scoped : all;
 
-      // Map API shape → NotificationLog shape the panel expects
       return list.map((n) => {
         const raw = n as unknown as Record<string, unknown>;
         return {
@@ -486,7 +465,6 @@ export const fetchNotificationLog = createAsyncThunk(
           recipient: (raw.userId    ?? raw.recipient ?? "") as string,
           type:      (raw.type      ?? "in_app") as NotificationLog["type"],
           content:   (raw.body      ?? raw.content ?? raw.title ?? "") as string,
-          // API uses `read: boolean`; map to "sent"/"failed"/"pending"
           status:    (
             raw.status != null
               ? raw.status

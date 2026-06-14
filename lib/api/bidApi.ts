@@ -119,11 +119,14 @@ export const cancellationFeeService = {
    * GET /bid/admin/cancellation-fees
    * Cancellation fee monitoring
    * Query: { limit, page }
-   * Envelope: { message, data: { data: [], total, page, limit, pages } }
+   * Envelope: { message, data: { stats: {...}, data: [], total, page, limit, pages } }
+   *
+   * NOTE: `stats` is returned alongside pagination fields and exposed here
+   * so fetchCancellationFeeSummary can consume it without a second API call.
    */
   getCancellationFees: async (
     filters: CancellationFeeFilters = {}
-  ): Promise<PaginatedResponse<CancellationFeeRecord>> => {
+  ): Promise<PaginatedResponse<CancellationFeeRecord> & { stats?: Record<string, unknown> }> => {
     const params = new URLSearchParams();
     if (filters.page)  params.set("page",  String(filters.page));
     if (filters.limit) params.set("limit", String(filters.limit));
@@ -136,6 +139,7 @@ export const cancellationFeeService = {
       page:       envelope.page       ?? 1,
       limit:      envelope.limit      ?? 20,
       totalPages: envelope.totalPages ?? envelope.pages ?? 1,
+      stats:      envelope.stats,          // ← expose raw stats for summary thunk
     };
   },
 
