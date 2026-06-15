@@ -41,8 +41,9 @@ const storedAdmin = (() => {
 
 const initialState: AuthState = {
   token:  storedToken,
-  admin:  storedAdmin,
-  role:   storedRole,
+  // ✅ If stored admin has a role, trust it; otherwise fall back to JWT claim
+  admin:  storedAdmin ?? (storedRole ? { role: storedRole } as Admin : null),
+  role:   storedAdmin?.role ?? storedRole,
   status: "idle",
   error:  null,
 };
@@ -94,12 +95,17 @@ const authSlice = createSlice({
       })
       .addCase(login.fulfilled, (state, action) => {
         const claims = parseJwt(action.payload.token);
+
+        // ✅ API response role takes priority over JWT claim.
+        // JWT can be stale if the role was changed after the token was issued.
+        const role = action.payload.data.role || (claims.role as string) || "";
+
         state.status = "succeeded";
         state.token  = action.payload.token;
-        state.role   = (claims.role as string) || action.payload.data.role || null;
+        state.role   = role;
         state.admin  = {
           ...action.payload.data,
-          role: (claims.role as string) || action.payload.data.role || "",
+          role,
         };
         try {
           localStorage.setItem("admin", JSON.stringify(state.admin));
