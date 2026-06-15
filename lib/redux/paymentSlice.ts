@@ -8,7 +8,7 @@ import {
   getPayouts, retryPayout,
   type ApiTransaction, type ApiBalances, type RefundPayload,
   type ApiEscrow, type TransactionMeta,
-  type ApiPayout,
+  type ApiPayout, type PayoutSummary,
 } from "@/lib/api/paymentApi";
 
 type Status = "idle" | "loading" | "succeeded" | "failed";
@@ -38,6 +38,7 @@ interface PaymentState {
   selectedEscrowError:  string | null;
   // payouts
   payouts:        ApiPayout[];
+  payoutSummary:  PayoutSummary | null;   // ← added
   payoutsStatus:  Status;
   payoutsError:   string | null;
   retryStatus:    Status;
@@ -64,6 +65,7 @@ const initialState: PaymentState = {
   selectedEscrowStatus: "idle",
   selectedEscrowError:  null,
   payouts:        [],
+  payoutSummary:  null,                   // ← added
   payoutsStatus:  "idle",
   payoutsError:   null,
   retryStatus:    "idle",
@@ -117,7 +119,6 @@ export const fetchEscrows = createAsyncThunk(
   }
 );
 
-// GET /admin/escrows/:escrowId/release — fetch single escrow detail
 export const fetchEscrowById = createAsyncThunk(
   "payments/fetchEscrowById",
   async (escrowId: string, { rejectWithValue }) => {
@@ -220,12 +221,13 @@ const paymentSlice = createSlice({
       .addCase(fetchEscrowById.fulfilled, (state, action) => { state.selectedEscrowStatus = "succeeded"; state.selectedEscrow = action.payload; })
       .addCase(fetchEscrowById.rejected,  (state, action) => { state.selectedEscrowStatus = "failed"; state.selectedEscrowError = action.payload as string; });
 
-    // fetchPayouts
+    // fetchPayouts                         ← updated: now also stores summary
     builder
       .addCase(fetchPayouts.pending,   (state) => { state.payoutsStatus = "loading"; state.payoutsError = null; })
-      .addCase(fetchPayouts.fulfilled, (state, action) => { 
-        state.payoutsStatus = "succeeded"; 
-        state.payouts       = action.payload.data; // Fixed type mismatch error here
+      .addCase(fetchPayouts.fulfilled, (state, action) => {
+        state.payoutsStatus  = "succeeded";
+        state.payouts        = action.payload.data;
+        state.payoutSummary  = action.payload.summary ?? null; // ← added
       })
       .addCase(fetchPayouts.rejected,  (state, action) => { state.payoutsStatus = "failed"; state.payoutsError = action.payload as string; });
 

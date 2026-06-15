@@ -97,7 +97,7 @@ export default function LoginPage() {
           {/* Brand */}
           <div className="text-center mb-6 sm:mb-8">
              <Link href="/" className="shrink-0">
-              <Image src="/logo/insmartio.png" alt="inSmartio Logo" width={120} height={35} style={{ height: "auto", width: "auto" }} priority />
+              <Image src="/insmartio.png" alt="inSmartio Logo" width={180} height={55} style={{ height: "auto", width: "auto", marginLeft: "-20px", marginTop: "-10px" }} priority />
             </Link>
           </div>
 

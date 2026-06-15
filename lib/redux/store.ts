@@ -22,6 +22,12 @@ import dashboardReducer           from "./dashboardSlice";
 import scheduledReportsReducer    from "./schedduleReportSlice";
 import reportTemplatesReducer     from "./reportTemplatesSlice";
 import notificationSettingsReducer from "./notificationSettingsSlice"
+import auditLogsReducer from "./auditlogSlice"; 
+import bidReducer from "./bidSlice";  
+import cancellationfeeReducer from "./cancellationfeeSlice"
+import appVersionReducer from "./appversionSlice";
+import clientRefundReducer from "./clientrefundSlice";
+import expertPayoutReducer from "./expertpayoutSlice";
 
 export const store = configureStore({
   reducer: {
@@ -34,20 +40,26 @@ export const store = configureStore({
     disputes:              disputeReducer,
     banners:               bannerReducer,
     announcements:         announcementReducer,
-    verifications:         verificationReducer,        // old slice — other pages use s.verifications
-    tas:                   tasReducer,                 // old slice — other pages use s.tas
+    verifications:         verificationReducer,       
+    tas:                   tasReducer,
     payments:              paymentReducer,
     report:                reportReducer,
     faq:                   faqReducer,
     notificationTemplates: notificationReducer,
     commission:            commissionReducer,
     notifications:         notificationsReducer,
-    tastier:               tastierReducer,             // new TAS tier settings slice
-    verificationSettings:  verificationsettingsReducer, // new verification settings slice  ← renamed from 'verification'
+    tastier:               tastierReducer,             
+    verificationSettings:  verificationsettingsReducer, 
     dashboard:             dashboardReducer,
     scheduledReports:      scheduledReportsReducer,
     reportTemplates:       reportTemplatesReducer,
     notificationSettings: notificationSettingsReducer,
+    auditLogs:             auditLogsReducer,
+    bids:                  bidReducer,                
+    cancellationFees:      cancellationfeeReducer,
+    appVersion:            appVersionReducer,
+    clientRefund:          clientRefundReducer,
+    expertPayout:          expertPayoutReducer,
   },
 });
 

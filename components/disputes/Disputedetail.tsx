@@ -82,22 +82,20 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
   const [appealing,      setAppealing]      = useState(false);
 
   // Mediation state
-  const [mediationOpen,   setMediationOpen]   = useState(false);
-  const [mediationNote,   setMediationNote]   = useState("");
-  const [mediationDate,   setMediationDate]   = useState(""); // "YYYY-MM-DD"
-  const [mediationTime,   setMediationTime]   = useState(""); // "HH:MM"
-  const [addingNote,      setAddingNote]      = useState(false);
-  // Local override so UI updates immediately after PUT
-  const [localMediation,  setLocalMediation]  = useState<MediationNote | null>(null);
+  const [mediationOpen,  setMediationOpen]  = useState(false);
+  const [mediationNote,  setMediationNote]  = useState("");
+  const [mediationDate,  setMediationDate]  = useState("");
+  const [mediationTime,  setMediationTime]  = useState("");
+  const [addingNote,     setAddingNote]     = useState(false);
+  const [localMediation, setLocalMediation] = useState<MediationNote | null>(null);
 
-  // ── Mediation note: local override → real API data
-  // mediation is a single object: { date, time, note }
+  // ── Mediation note ────────────────────────────────────────
   const rawMediation = dispute.mediationNotes as unknown as MediationNote | MediationNote[] | null;
   const currentMediation: MediationNote | null =
     localMediation ??
     (rawMediation
       ? Array.isArray(rawMediation)
-        ? rawMediation[rawMediation.length - 1] ?? null  // if somehow array, take last
+        ? rawMediation[rawMediation.length - 1] ?? null
         : rawMediation
       : null);
 
@@ -107,7 +105,17 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
     setMediationTime("");
   };
 
-  // ── Add / update mediation note (PUT) ────────────────────
+  // ── Case title for the top bar ────────────────────────────
+  // Prefer dispute.title if it exists, fall back to jobId, then just the id
+  const caseTitle = [
+    dispute.id,
+    (dispute as unknown as Record<string, unknown>).title as string | undefined
+      ?? (dispute.jobId ? `Job ${dispute.jobId}` : null),
+  ]
+    .filter(Boolean)
+    .join(" – ");
+
+  // ── Handlers ─────────────────────────────────────────────
   const handleAddMediationNote = async () => {
     if (!mediationDate.trim()) { toast.warning("Please select a date."); return; }
     if (!mediationTime.trim()) { toast.warning("Please select a time."); return; }
@@ -115,17 +123,12 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
 
     setAddingNote(true);
     try {
-      // Send exactly what the backend expects:
-      // { mediation: { date: "2026-05-19", time: "14:30", note: "..." } }
       const payload: MediationNote = {
-        date: mediationDate,       // "YYYY-MM-DD" — backend stores as-is
-        time: mediationTime,       // "HH:MM"
+        date: mediationDate,
+        time: mediationTime,
         note: mediationNote.trim(),
       };
-
       await addMediationNote(disputeId, { mediation: payload });
-
-      // Optimistic update — show the new note immediately
       setLocalMediation(payload);
       resetMediationForm();
       setMediationOpen(false);
@@ -138,7 +141,6 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
     }
   };
 
-  // ── Submit decision ───────────────────────────────────────
   const handleSubmitDecision = () => {
     if (!resolution)            { toast.warning("Select a resolution option first."); return; }
     if (!decisionReason.trim()) { toast.warning("Please provide a decision reason."); return; }
@@ -161,7 +163,6 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
 
   const handleSaveDraft = () => { setDraftSaved(true); toast.success("Saved as draft"); };
 
-  // ── Appeal ────────────────────────────────────────────────
   const handleAppealSubmit = () => {
     if (!appealReason.trim()) { toast.warning("Please provide a reason for the appeal."); return; }
     setAppealing(true);
@@ -202,12 +203,48 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
       {/* ── Scrollable content ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
 
-        <button onClick={onBack}
-          style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
-            fontWeight: 500, color: "#111827", background: "none", border: "none",
-            cursor: "pointer", marginBottom: "20px" }}>
-          <ArrowLeft size={16} /> Disputes
-        </button>
+        {/* ── Top navigation bar: ← Disputes | Case title | [Resolve] ── */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: "20px", gap: "12px",
+        }}>
+          {/* Back */}
+          <button
+            onClick={onBack}
+            style={{
+              display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
+              fontWeight: 500, color: "#111827", background: "none", border: "none",
+              cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap",
+            }}>
+            <ArrowLeft size={16} /> Disputes
+          </button>
+
+          {/* Case title — centered */}
+          <p style={{
+            flex: 1, textAlign: "center", fontSize: "14px", fontWeight: 600,
+            color: "#111827", margin: 0, overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {caseTitle}
+          </p>
+
+          {/* Resolve button */}
+          <button
+            onClick={handleSubmitDecision}
+            disabled={submitting}
+            style={{
+              display: "flex", alignItems: "center", gap: "6px", flexShrink: 0,
+              padding: "8px 20px", borderRadius: "10px", border: "none",
+              backgroundColor: "#2563EB", color: "#ffffff",
+              fontSize: "13px", fontWeight: 600,
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.7 : 1,
+            }}>
+            {submitting
+              ? <><Loader2 size={13} className="animate-spin" /> Resolving...</>
+              : "Resolve"}
+          </button>
+        </div>
 
         <div style={{ borderRadius: "16px", backgroundColor: "#ffffff",
           border: "1px solid #E5E7EB", overflow: "hidden" }}>
@@ -383,7 +420,6 @@ export default function DisputeDetail({ dispute, disputeId, onBack }: Props) {
           </div>
         }>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Pre-fill with existing note if updating */}
           {currentMediation && (
             <p style={{ fontSize: "12px", color: "#6B7280", margin: 0,
               padding: "8px 12px", backgroundColor: "#F9FAFB", borderRadius: "8px",

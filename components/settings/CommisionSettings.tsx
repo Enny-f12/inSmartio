@@ -87,6 +87,20 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+// ── Inactive row — greyed out with badge ──────────────────────────────────────
+// line 91 — change value: string → value?: string
+function InactiveInfoRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 12px", borderRadius: "10px", border: "1px dashed #E5E7EB", backgroundColor: "#F9FAFB", marginBottom: "6px", opacity: 0.6 }}>
+      <span style={{ fontSize: "13px", color: "#9CA3AF", flex: 1 }}>{label}</span>
+      <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", backgroundColor: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: "999px", padding: "2px 8px" }}>
+        Inactive
+      </span>
+      <span style={{ fontSize: "13px", fontWeight: 600, color: "#9CA3AF" }}>{value}</span>
+    </div>
+  );
+}
+
 function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating }: {
   onToggle: () => void; onEdit: () => void; onDelete: () => void;
   isActive?: boolean; isMutating?: boolean;
@@ -192,14 +206,14 @@ function CommissionModal({ item, onClose, onSave, saving }: {
 }) {
   const [model2Rate, setModel2Rate] = useState(String(item?.model2CommissionRate ?? ""));
   const [model1Sub,  setModel1Sub]  = useState(item?.modelISubscription ?? "");
-  const [tasBonus,   setTasBonus]   = useState(String(item?.tasRegistrationBonus ?? ""));
   const [tasModel1,  setTasModel1]  = useState(String(item?.tasModel1Commission ?? ""));
   const [tasModel2,  setTasModel2]  = useState(String(item?.tasModel2Commission ?? ""));
   const [effDate,    setEffDate]    = useState(
     item?.effectiveDate ? new Date(item.effectiveDate).toISOString().slice(0, 10) : ""
   );
 
-  const valid = model2Rate && model1Sub && tasBonus && tasModel1 && tasModel2 && effDate;
+  // tasRegistrationBonus is inactive — not shown in form, sent as 0
+  const valid = model2Rate && model1Sub && tasModel1 && tasModel2 && effDate;
 
   return (
     <Modal open onClose={onClose} title={item ? "Edit Commission Settings" : "Add Commission Settings"}
@@ -208,7 +222,7 @@ function CommissionModal({ item, onClose, onSave, saving }: {
           onSave={() => onSave({
             model2CommissionRate: Number(model2Rate),
             modelISubscription:   model1Sub,
-            tasRegistrationBonus: Number(tasBonus),
+            tasRegistrationBonus: 0,          // inactive — not configurable for now
             tasModel1Commission:  Number(tasModel1),
             tasModel2Commission:  Number(tasModel2),
             effectiveDate:        new Date(effDate).toISOString().replace("Z", "+00:00"),
@@ -229,12 +243,20 @@ function CommissionModal({ item, onClose, onSave, saving }: {
               onChange={(e) => setModel1Sub(e.target.value)} />
           </div>
         </div>
+
         <SubLabel text="TAS" />
-        <div>
-          <label style={LABEL_STYLE}>Registration Bonus (₦)</label>
-          <input style={INP} type="number" placeholder="e.g. 7000" value={tasBonus}
-            onChange={(e) => setTasBonus(e.target.value)} />
+
+        {/* Registration Bonus — shown as inactive, not editable */}
+        <div style={{ padding: "10px 14px", borderRadius: "10px", border: "1px dashed #E5E7EB", backgroundColor: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ fontSize: "12px", fontWeight: 500, color: "#9CA3AF", marginBottom: "2px" }}>Registration Bonus (₦)</p>
+            <p style={{ fontSize: "12px", color: "#9CA3AF" }}>Not configurable at this time</p>
+          </div>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", backgroundColor: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap" }}>
+            Inactive
+          </span>
         </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           <div>
             <label style={LABEL_STYLE}>Model 1 Commission (₦/month)</label>
@@ -247,6 +269,7 @@ function CommissionModal({ item, onClose, onSave, saving }: {
               onChange={(e) => setTasModel2(e.target.value)} />
           </div>
         </div>
+
         <div>
           <label style={LABEL_STYLE}>Effective Date</label>
           <input style={INP} type="date" value={effDate} onChange={(e) => setEffDate(e.target.value)} />
@@ -319,10 +342,10 @@ function CommissionCard() {
             <InfoRow label="Model 1 Subscription Fee" value="₦50,000 / month" />
             <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
             <SubLabel text="TAS" />
-            <InfoRow label="Registration Bonus"  value="₦7,000" />
-            <InfoRow label="Model 2 Commission"  value="1%" />
-            <InfoRow label="Model 1 Commission"  value="₦1,000 / month" />
-           
+            {/* Registration Bonus — rendered as inactive */}
+            <InactiveInfoRow label="Registration Bonus" value="₦7,000" />
+            <InfoRow label="Model 2 Commission" value="1%" />
+            <InfoRow label="Model 1 Commission" value="₦1,000 / month" />
           </div>
         )}
 
@@ -348,9 +371,10 @@ function CommissionCard() {
             <InfoRow label="Model 1 Subscription Fee" value={c.modelISubscription ?? "—"} />
             <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
             <SubLabel text="TAS" />
-            <InfoRow label="Registration Bonus" value={naira(c.tasRegistrationBonus)} />
-            <InfoRow label="Model 2 Commission"  value={`${c.tasModel2Commission}%`} />
-            <InfoRow label="Model 1 Commission"  value={`${naira(c.tasModel1Commission)} / month`} />
+            {/* Registration Bonus — always inactive */}
+            <InactiveInfoRow label="Registration Bonus" />
+            <InfoRow label="Model 2 Commission" value={`${c.tasModel2Commission}%`} />
+            <InfoRow label="Model 1 Commission" value={`${naira(c.tasModel1Commission)} / month`} />
           </div>
         ))}
       </div>
@@ -416,7 +440,6 @@ function VerificationModal({ item, onClose, onSave, saving }: {
 
 function VerificationCard() {
   const dispatch = useAppDispatch();
-  // ✅ Fixed: s.verificationSettings (new slice) — not s.verifications (old slice)
   const { settings, loading } = useAppSelector((s) => s.verificationSettings);
   const [editItem,   setEditItem]   = useState<VerificationSettings | null>(null);
   const [showAdd,    setShowAdd]    = useState(false);
@@ -531,14 +554,7 @@ function TasTierModal({ item, onClose, onSave, saving }: {
 }) {
   const [tiers, setTiers] = useState<Record<TierKey, TierConfig>>(() => {
     if (item) {
-      return {
-        tier1: item.tier1,
-        tier2: item.tier2,
-        tier3: item.tier3,
-        tier4: item.tier4,
-        tier5: item.tier5,
-        tier6: item.tier6,
-      };
+      return { tier1: item.tier1, tier2: item.tier2, tier3: item.tier3, tier4: item.tier4, tier5: item.tier5, tier6: item.tier6 };
     }
     return emptyTiers();
   });
@@ -581,7 +597,6 @@ function TasTierModal({ item, onClose, onSave, saving }: {
 
 function TasTierCard() {
   const dispatch = useAppDispatch();
-  // ✅ Fixed: s.tastier (new slice) — not s.tas (old slice)
   const { tiers, loading } = useAppSelector((s) => s.tastier);
   const [editItem,   setEditItem]   = useState<TasTier | null>(null);
   const [showAdd,    setShowAdd]    = useState(false);

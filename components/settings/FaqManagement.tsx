@@ -256,11 +256,7 @@ export default function FaqManagement({ onBack }: { onBack: () => void }) {
         onBack={onBack}
         action={
           <div style={{ display: "flex", gap: "8px" }}>
-            {/* Upload Doc */}
-            <button onClick={() => setShowUpload(true)}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#374151", cursor: "pointer" }}>
-              <Upload size={14} /> Upload Doc
-            </button>
+            
             {/* Add New */}
             <button onClick={() => setShowAdd(true)} className="btn-primary"
               style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>

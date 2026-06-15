@@ -1,8 +1,7 @@
-// lib/redux/adminSlice.ts
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
-  getAllAdmins, registerAdmin, updateAdmin, deleteAdmin, toggle2FA,
+  getAllAdmins, registerAdmin, updateAdmin, deleteAdmin, toggle2FA, changeAdminRole,
   type Admin, type RegisterAdminPayload, type UpdateAdminPayload,
 } from "@/lib/api/adminApi";
 
@@ -60,8 +59,16 @@ export const removeAdmin = createAsyncThunk(
 export const toggleAdmin2FA = createAsyncThunk(
   "admin/toggle2fa",
   async (id: string, { rejectWithValue }) => {
-    try { return await toggle2FA(id); }  // returns updated Admin
+    try { return await toggle2FA(id); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to toggle 2FA")); }
+  }
+);
+
+export const changeRole = createAsyncThunk(
+  "admin/changeRole",
+  async ({ id, role }: { id: string; role: string }, { rejectWithValue }) => {
+    try { return await changeAdminRole(id, role); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to change role")); }
   }
 );
 
@@ -105,12 +112,22 @@ const adminSlice = createSlice({
       })
       .addCase(removeAdmin.rejected,  (state) => { state.mutateStatus = "failed"; });
 
-    // toggleAdmin2FA — use real updated admin from API response
+    // toggleAdmin2FA
     builder
       .addCase(toggleAdmin2FA.fulfilled, (state, action) => {
         const idx = state.list.findIndex((a) => a.id === action.payload.id);
         if (idx !== -1) state.list[idx] = action.payload;
       });
+
+    // changeRole
+    builder
+      .addCase(changeRole.pending,   (state) => { state.mutateStatus = "loading"; })
+      .addCase(changeRole.fulfilled, (state, action) => {
+        state.mutateStatus = "succeeded";
+        const idx = state.list.findIndex((a) => a.id === action.payload.id);
+        if (idx !== -1) state.list[idx] = action.payload;
+      })
+      .addCase(changeRole.rejected,  (state) => { state.mutateStatus = "failed"; });
   },
 });
 

@@ -1,22 +1,78 @@
-// components/jobs/JobDetail.tsx
+// components/jobs/JobDetailView.tsx
 "use client";
 
-import { ArrowLeft, Star } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowLeft, Star, ChevronDown, ChevronUp } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { StatusBadge } from "@/components/ui/Badge";
-import type { Job, JobStatus } from "@/components/jobs/types";
+import type { ApiJob } from "@/lib/api/jobApi";
 
-const statusVariant: Record<JobStatus, "green" | "yellow" | "purple" | "red" | "gray"> = {
-  Completed:  "green",
-  Inprogress: "yellow",
-  Bidding:    "purple",
-  Disputed:   "red",
-  Cancelled:  "gray",
+// ─────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────
+type StatusVariant = "green" | "yellow" | "purple" | "red" | "gray";
+
+// ─────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────
+const getStatusVariant = (status: string): StatusVariant => {
+  const map: Record<string, StatusVariant> = {
+    completed:   "green",
+    inprogress:  "yellow",
+    in_progress: "yellow",
+    active:      "yellow",
+    biding:      "purple",
+    bidding:     "purple",
+    open:        "purple",
+    disputed:    "red",
+    cancelled:   "gray",
+    closed:      "gray",
+  };
+  return map[status?.toLowerCase()] ?? "gray";
 };
 
+const val = (job: ApiJob, ...keys: string[]): string => {
+  for (const key of keys) {
+    const v = job[key];
+    if (v !== undefined && v !== null && v !== "") return String(v);
+  }
+  return "—";
+};
+
+const fmt = (iso?: string | null) => {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleDateString("en-GB"); }
+  catch { return String(iso); }
+};
+
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    });
+  } catch { return String(iso); }
+};
+
+const fmtMoney = (amount?: number | null, fallback = "—") =>
+  amount != null ? `₦${amount.toLocaleString()}` : fallback;
+
+export const deriveStatus = (job: ApiJob): string => {
+  const explicit = val(job, "status");
+  if (explicit !== "—") return explicit;
+  const closed   = job["closed"]   as boolean | undefined;
+  const verified = job["verified"] as boolean | undefined;
+  return closed ? "closed" : verified ? "active" : "biding";
+};
+
+// ─────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-4">
+    <p style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase",
+      letterSpacing: "0.08em", color: "#6B7280", margin: "0 0 16px" }}>
       {text}
     </p>
   );
@@ -24,154 +80,237 @@ function SectionLabel({ text }: { text: string }) {
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex gap-2 text-[13px] mb-2">
-      <span className="w-44 shrink-0 font-medium text-text-muted">{label}</span>
-      <span className="text-text-main">{value ?? "—"}</span>
+    <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
+      <span style={{ minWidth: "220px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
     </div>
   );
 }
 
-function Rating({ value }: { value: number }) {
+function StarRating({ value }: { value?: number | null }) {
+  if (value == null) return <span style={{ color: "#9CA3AF", fontSize: "13px" }}>—</span>;
   return (
-    <span className="flex items-center gap-1">
-      <Star size={13} fill="#F9A826" color="#F9A826" />
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#111827" }}>
+      <Star size={13} fill="#F9A826" color="#F9A826" style={{ flexShrink: 0 }} />
       {value}
     </span>
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────
 interface Props {
-  job: Job;
+  job: ApiJob;
   onBack: () => void;
 }
 
-export default function JobDetail({ job, onBack }: Props) {
+export default function JobDetailView({ job, onBack }: Props) {
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const [isMobile, setIsMobile] = React.useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  // ── Location ──────────────────────────────────────────
+  const locationObj = job["location"] as { city?: string; state?: string; address?: string } | undefined;
+  const location = locationObj
+    ? [locationObj.address, locationObj.city, locationObj.state].filter(Boolean).join(", ")
+    : val(job, "location");
+
+  // ── Budget / Financial ────────────────────────────────
+  const budgetObj = job["budget"] as { amount?: number; min?: number; max?: number } | undefined;
+  const budget = budgetObj
+    ? budgetObj.min != null && budgetObj.max != null
+      ? `₦${budgetObj.min.toLocaleString()} – ₦${budgetObj.max.toLocaleString()}`
+      : fmtMoney(budgetObj.amount)
+    : "—";
+
+  const finalAmountBeforeInspection = fmtMoney(
+    job["finalAmountBeforeInspection"] as number | undefined,
+    fmtMoney(job["finalAmount"] as number | undefined),
+  );
+  const finalAmountAfterInspection = fmtMoney(
+    job["finalAmountAfterInspection"] as number | undefined,
+  );
+
+  const commissionAmt = fmtMoney(job["commissionAmount"] as number | undefined);
+  const expertPayout  = fmtMoney(job["expertPayout"]    as number | undefined);
+  const paymentStatus = val(job, "paymentStatus");
+  const paymentMethod = job["paymentMethod"] === "any" ? "Any" : val(job, "paymentMethod");
+
+  // ── Client ────────────────────────────────────────────
+  const clientObj   = job["client"] as { name?: string; phone?: string; email?: string; rating?: number } | undefined;
+  const clientName  = clientObj?.name  ?? val(job, "postedBy");
+  const clientPhone = clientObj?.phone ?? "—";
+  const clientEmail = clientObj?.email ?? "—";
+  const clientRating = clientObj?.rating ?? null;
+
+  // ── Expert ────────────────────────────────────────────
+  const bids = (job["bids"] as Array<{
+    status: string;
+    expert?: { name?: string; phone?: string; email?: string; rating?: number; commission?: number };
+  }> | undefined) ?? [];
+  const acceptedBid = bids.find(b => b.status === "accepted");
+
+  const expertObj    = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number; commission?: number } | undefined;
+  const expertName   = expertObj?.name   ?? acceptedBid?.expert?.name   ?? null;
+  const expertPhone  = expertObj?.phone  ?? acceptedBid?.expert?.phone  ?? "—";
+  const expertEmail  = expertObj?.email  ?? acceptedBid?.expert?.email  ?? "—";
+  const expertRating = expertObj?.rating ?? acceptedBid?.expert?.rating ?? null;
+  const expertCommission = (expertObj?.commission ?? acceptedBid?.expert?.commission ?? null) as number | null;
+
+  // ── Status ────────────────────────────────────────────
+  const status      = deriveStatus(job);
+  const isCompleted = status.toLowerCase() === "completed";
+
+  // ── Dates ─────────────────────────────────────────────
+  const createdAt = fmt(job["createdAt"] as string);
+  const deadline  = fmt(job["deadline"]  as string);
+
+  // ── Timeline ──────────────────────────────────────────
+  const allTimeline = (job["timeline"] as { datetime: string; label: string }[] | undefined) ?? [];
+  const seen = new Set<string>();
+  const uniqueTimeline = allTimeline.filter(t => {
+    const key = `${t.label}||${t.datetime}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const TIMELINE_LIMIT = 10;
+  const visibleTimeline = timelineExpanded ? uniqueTimeline : uniqueTimeline.slice(0, TIMELINE_LIMIT);
+  const hasMoreTimeline = uniqueTimeline.length > TIMELINE_LIMIT;
+
   return (
-    <div className="flex flex-col flex-1">
-      <Topbar title="Jobs" />
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
+      <Topbar title="Jobs Management" />
+      <main style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
 
-      <main className="flex-1 px-8 py-6 overflow-y-auto">
-
-        {/* Back */}
+        {/* Back button */}
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-[13.5px] font-medium text-text-main hover:text-primary transition-colors mb-6"
+          style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
+            fontWeight: 500, color: "#111827", background: "none", border: "none",
+            cursor: "pointer", marginBottom: "24px" }}
         >
-          <ArrowLeft size={16} />
-          Jobs
+          <ArrowLeft size={16} /> Jobs
         </button>
 
-        <div className="bg-surface rounded-2xl border border-border divide-y divide-border">
+        <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #E5E7EB",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>
 
           {/* ── Job Information ── */}
-          <div className="px-8 py-6">
+          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Job Information" />
-            <InfoRow label="Job ID:"      value={job.id} />
-            <InfoRow label="Title"        value={job.title} />
-            <InfoRow label="Category"     value={job.category} />
-            <InfoRow label="Location:"    value={job.location} />
-            <InfoRow label="Budget:"      value={job.budget} />
-            <InfoRow label="Final Price:" value={job.finalPrice} />
-            <InfoRow label="Created:"     value={job.created} />
-            <InfoRow
-              label="Status:"
-              value={<StatusBadge label={job.status} variant={statusVariant[job.status]} />}
-            />
+            <InfoRow label="Job ID:"                         value={val(job, "id", "_id")} />
+            <InfoRow label="Title:"                          value={val(job, "title")} />
+            <InfoRow label="Category:"                       value={val(job, "category")} />
+            <InfoRow label="Description:"                    value={val(job, "description")} />
+            <InfoRow label="Location:"                       value={location} />
+            <InfoRow label="Budget:"                         value={budget} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow label="Created:"                        value={createdAt} />
+            {isCompleted && <InfoRow label="Deadline:" value={deadline} />}
+            <InfoRow label="Status:"
+              value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
           </div>
 
           {/* ── Client + Expert ── */}
-          <div className="px-8 py-6 grid grid-cols-2 gap-8">
+          <div
+            style={{
+              padding: isMobile ? "20px 16px" : "24px 32px",
+              borderBottom: "1px solid #E5E7EB",
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gap: isMobile ? "0" : "32px",
+            }}
+          >
             <div>
               <SectionLabel text="Client" />
-              <InfoRow label="Name:"   value={job.client} />
-              <InfoRow label="Phone:"  value={job.clientPhone} />
-              <InfoRow label="Email:"  value={job.clientEmail} />
-              <InfoRow label="Rating:" value={<Rating value={job.clientRating} />} />
+              <InfoRow label="Name:"   value={clientName} />
+              <InfoRow label="Phone:"  value={clientPhone} />
+              <InfoRow label="Email:"  value={clientEmail} />
+              <InfoRow label="Rating:" value={<StarRating value={clientRating} />} />
             </div>
-            <div>
+
+            <div
+              style={
+                isMobile
+                  ? { borderTop: "1px solid #E5E7EB", paddingTop: "20px", marginTop: "20px" }
+                  : {}
+              }
+            >
               <SectionLabel text="Expert" />
-              {job.expert ? (
+              {expertName ? (
                 <>
-                  <InfoRow label="Name:"   value={job.expert} />
-                  <InfoRow label="Phone:"  value={job.expertPhone!} />
-                  <InfoRow label="Email:"  value={job.expertEmail!} />
-                  <InfoRow label="Rating:" value={<Rating value={job.expertRating!} />} />
+                  <InfoRow label="Name:"   value={expertName} />
+                  <InfoRow label="Phone:"  value={expertPhone} />
+                  <InfoRow label="Email:"  value={expertEmail} />
+                  <InfoRow label="Rating:" value={<StarRating value={expertRating} />} />
                 </>
               ) : (
-                <p className="text-[13px] text-text-muted">No expert assigned yet.</p>
+                <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No expert assigned yet.</p>
               )}
             </div>
           </div>
 
           {/* ── Payment Information ── */}
-          <div className="px-8 py-6">
+          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Payment Information" />
-            <InfoRow label="Payment Method:"                            value={job.paymentMethod} />
-            <InfoRow label="Amount"                                     value={job.amount} />
-            <InfoRow label={`Platform Commission (${job.commission}):`} value={job.commissionAmt} />
-            <InfoRow label="Expert Payout:"                             value={job.expertPayout} />
-            <InfoRow label="Payment Status:"                            value={job.paymentStatus} />
+            <InfoRow label="Payment Method:"                 value={paymentMethod} />
+            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow
+              label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
+              value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"}
+            />
+            <InfoRow label="Expert Payout:"  value={expertPayout} />
+            <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
           </div>
 
           {/* ── Timeline ── */}
-          <div className="px-8 py-6">
+          <div style={{ padding: "24px 32px" }}>
             <SectionLabel text="Timeline" />
-            {!job.timeline || job.timeline.length === 0 ? (
-              <p className="text-[13px] text-text-muted">No timeline events yet.</p>
+            {uniqueTimeline.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No timeline events available.</p>
             ) : (
-              <div className="space-y-3">
-                {job.timeline.map((event, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-primary" />
-                    <p className="text-[13px]">
-                      <span className="font-medium text-text-main">{event.datetime} - </span>
-                      <span className="text-text-muted">{event.label}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── Reviews ── */}
-          <div className="px-8 py-6">
-            <SectionLabel text="Reviews" />
-            {!job.reviews || job.reviews.length === 0 ? (
-              <p className="text-[13px] text-text-muted">No reviews yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {job.reviews.map((review, i) => (
-                  <div key={i} style={{ padding: "14px 16px", borderRadius: "12px",
-                    backgroundColor: "#F9FAFB", border: "1px solid #F3F4F6" }}>
-                    <div style={{ display: "flex", alignItems: "center",
-                      justifyContent: "space-between", marginBottom: "8px" }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600,
-                        color: "#111827", margin: 0 }}>
-                        {review.reviewerName ?? review.reviewer ?? "Anonymous"}
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {visibleTimeline.map((event, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%",
+                        backgroundColor: "#2563EB", flexShrink: 0, marginTop: "4px" }} />
+                      <p style={{ fontSize: "13px", margin: 0 }}>
+                        <span style={{ fontWeight: 500, color: "#111827" }}>
+                          {fmtDateTime(event.datetime)}
+                        </span>
+                        <span style={{ color: "#6B7280" }}> — {event.label}</span>
                       </p>
-                      <span style={{ display: "flex", alignItems: "center",
-                        gap: "4px", fontSize: "13px", color: "#374151" }}>
-                        <Star size={13} fill="#F9A826" color="#F9A826" />
-                        {review.rating ?? "—"}
-                      </span>
                     </div>
-                    {review.comment && (
-                      <p style={{ fontSize: "13px", color: "#6B7280",
-                        lineHeight: 1.6, margin: 0 }}>
-                        &ldquo;{review.comment}&rdquo;
-                      </p>
+                  ))}
+                </div>
+
+                {hasMoreTimeline && (
+                  <button
+                    onClick={() => setTimelineExpanded(!timelineExpanded)}
+                    style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "6px",
+                      fontSize: "12.5px", fontWeight: 600, color: "#2563EB", background: "none",
+                      border: "none", cursor: "pointer", padding: "6px 0" }}
+                  >
+                    {timelineExpanded ? (
+                      <><ChevronUp size={14} /> Show less</>
+                    ) : (
+                      <><ChevronDown size={14} /> View {uniqueTimeline.length - TIMELINE_LIMIT} more events</>
                     )}
-                    {review.createdAt && (
-                      <p style={{ fontSize: "11px", color: "#9CA3AF",
-                        marginTop: "6px", marginBottom: 0 }}>
-                        {new Date(review.createdAt).toLocaleDateString("en-GB", {
-                          day: "numeric", month: "short", year: "numeric",
-                        })}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  </button>
+                )}
+              </>
             )}
           </div>
 

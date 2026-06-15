@@ -9,12 +9,13 @@ import Modal from "@/components/ui/Modal";
 import { SubPageShell } from "./SettingsShared";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
-  fetchAdmins, addAdmin, editAdmin, removeAdmin, toggleAdmin2FA,
+  fetchAdmins, addAdmin, editAdmin, removeAdmin, toggleAdmin2FA, changeRole,
 } from "@/lib/redux/adminSlice";
 import type { RegisterAdminPayload, UpdateAdminPayload } from "@/lib/api/adminApi";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, type AdminRole } from "@/lib/adminPermissions";
 
-// ── Styles ─
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "10px 14px", borderRadius: "10px",
   border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)",
@@ -27,32 +28,49 @@ const labelStyle: React.CSSProperties = {
 
 const ALL_ROLES = Object.keys(ROLE_LABELS) as AdminRole[];
 
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
 function AdminAvatar({ name }: { name: string }) {
   const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   return (
-    <div style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>
+    <div style={{
+      width: 36, height: 36, borderRadius: "50%", backgroundColor: "#2563eb",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontSize: "12px", fontWeight: 700, flexShrink: 0,
+    }}>
       {initials}
     </div>
   );
 }
 
 const ROLE_COLORS: Record<AdminRole, { bg: string; color: string }> = {
-  super_admin:           { bg: "#EDE9FE", color: "#6D28D9" },
-  verification_officer:  { bg: "#DBEAFE", color: "#1D4ED8" },
-  finance_admin:         { bg: "#D1FAE5", color: "#065F46" },
-  support_admin:         { bg: "#FEF3C7", color: "#B45309" },
-  view_only_admin:       { bg: "#F3F4F6", color: "#374151" },
+  admin:        { bg: "#EDE9FE", color: "#6D28D9" },
+  verification: { bg: "#DBEAFE", color: "#1D4ED8" },
+  finance:      { bg: "#D1FAE5", color: "#065F46" },
+  support:      { bg: "#FEF3C7", color: "#B45309" },
+  view:         { bg: "#F3F4F6", color: "#374151" },
 };
 
 function RoleBadge({ role }: { role: string }) {
   const key = role as AdminRole;
   const c = ROLE_COLORS[key] ?? { bg: "#F3F4F6", color: "#374151" };
   return (
-    <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 9px", borderRadius: 999, backgroundColor: c.bg, color: c.color, whiteSpace: "nowrap" }}>
+    <span style={{
+      fontSize: "11px", fontWeight: 600, padding: "2px 9px",
+      borderRadius: 999, backgroundColor: c.bg, color: c.color, whiteSpace: "nowrap",
+    }}>
       {ROLE_LABELS[key] ?? role}
     </span>
   );
 }
+
+// ── Edit form state type ───────────────────────────────────────────────────────
+
+interface EditFormState extends UpdateAdminPayload {
+  role?: string;
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function AdminManagement({ onBack }: { onBack: () => void }) {
   const dispatch = useAppDispatch();
@@ -64,10 +82,10 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const [addForm, setAddForm] = useState<RegisterAdminPayload>({
-    name: "", email: "", password: "", role: "view_only_admin",
+    name: "", email: "", password: "", role: "view",
   });
-  const [editForm, setEditForm] = useState<UpdateAdminPayload & { role?: string }>({
-    name: "", email: "", role: "view_only_admin",
+  const [editForm, setEditForm] = useState<EditFormState>({
+    name: "", email: "", role: "view",
   });
 
   const isMutating   = mutateStatus === "loading";
@@ -77,6 +95,8 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchAdmins());
   }, [dispatch, listStatus]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleAdd = () => {
     if (!addForm.name || !addForm.email || !addForm.password) {
@@ -88,15 +108,37 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       .then(() => {
         toast.success("Admin added");
         setAddOpen(false);
-        setAddForm({ name: "", email: "", password: "", role: "view_only_admin" });
+        setAddForm({ name: "", email: "", password: "", role: "view" });
       })
       .catch((err: string) => toast.error("Failed to add admin", { description: err }));
   };
 
   const handleEdit = () => {
     if (!editTarget) return;
-    dispatch(editAdmin({ id: editTarget, payload: editForm }))
-      .unwrap()
+
+    const { role, ...rest } = editForm;
+    const promises: Promise<unknown>[] = [];
+
+    // name / email → PUT /admin/{id}
+    if (rest.name || rest.email) {
+      promises.push(
+        dispatch(editAdmin({ id: editTarget, payload: rest })).unwrap()
+      );
+    }
+
+    // role → PUT /admin/roles/{id}
+    if (role) {
+      promises.push(
+        dispatch(changeRole({ id: editTarget, role })).unwrap()
+      );
+    }
+
+    if (promises.length === 0) {
+      toast.info("No changes to save");
+      return;
+    }
+
+    Promise.all(promises)
       .then(() => { toast.success("Admin updated"); setEditTarget(null); })
       .catch((err: string) => toast.error("Failed to update admin", { description: err }));
   };
@@ -118,8 +160,10 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
 
   const openEdit = (admin: typeof list[number]) => {
     setEditTarget(admin.id);
-    setEditForm({ name: admin.name, email: admin.email, role: admin.role ?? "view_only_admin" });
+    setEditForm({ name: admin.name, email: admin.email, role: admin.role ?? "view" });
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SubPageShell
@@ -129,13 +173,18 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
         <button
           onClick={() => setAddOpen(true)}
           className="btn-primary"
-          style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", whiteSpace: "nowrap", marginBottom: "5px" }}
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "8px 14px", borderRadius: "12px", fontSize: "13px",
+            fontWeight: 600, border: "none", cursor: "pointer",
+            whiteSpace: "nowrap", marginBottom: "5px",
+          }}
         >
           <Plus size={15} /> Add Admin
         </button>
       }
     >
-      {/* List */}
+      {/* ── List ── */}
       {listStatus === "loading" && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
           <Loader2 size={18} className="animate-spin" />
@@ -161,19 +210,30 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
           `}</style>
 
           {list.length === 0 && (
-            <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "var(--color-text-muted)" }}>No admins found.</p>
+            <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "var(--color-text-muted)" }}>
+              No admins found.
+            </p>
           )}
 
           {list.map((admin) => (
-            <div key={admin.id} style={{ padding: "16px 20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}>
+            <div
+              key={admin.id}
+              style={{ padding: "16px 20px", borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff" }}
+            >
               <div className="admin-card">
                 {/* Avatar + info */}
                 <div className="admin-card-top">
                   <AdminAvatar name={admin.name} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-                      <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>{admin.name}</p>
-                      <span style={{ fontSize: "11px", fontWeight: 500, padding: "2px 8px", borderRadius: "999px", backgroundColor: admin.status === "active" ? "#dcfce7" : "#f3f4f6", color: admin.status === "active" ? "#15803d" : "#6b7280" }}>
+                      <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>
+                        {admin.name}
+                      </p>
+                      <span style={{
+                        fontSize: "11px", fontWeight: 500, padding: "2px 8px", borderRadius: "999px",
+                        backgroundColor: admin.status === "active" ? "#dcfce7" : "#f3f4f6",
+                        color: admin.status === "active" ? "#15803d" : "#6b7280",
+                      }}>
                         {admin.status}
                       </span>
                       {admin.role && <RoleBadge role={admin.role} />}
@@ -192,16 +252,25 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
                     <span>2FA {admin.twoFactorAuth ? "On" : "Off"}</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                    <button onClick={() => handleToggle2FA(admin.id, admin.twoFactorAuth, admin.name)} title="Toggle 2FA"
-                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                    <button
+                      onClick={() => handleToggle2FA(admin.id, admin.twoFactorAuth, admin.name)}
+                      title="Toggle 2FA"
+                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}
+                    >
                       {admin.twoFactorAuth ? <ShieldOff size={15} strokeWidth={1.8} /> : <ShieldCheck size={15} strokeWidth={1.8} />}
                     </button>
-                    <button onClick={() => openEdit(admin)} title="Edit"
-                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                    <button
+                      onClick={() => openEdit(admin)}
+                      title="Edit"
+                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}
+                    >
                       <Pencil size={15} strokeWidth={1.8} />
                     </button>
-                    <button onClick={() => setDeleteTarget(admin.id)} title="Delete"
-                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#f87171" }}>
+                    <button
+                      onClick={() => setDeleteTarget(admin.id)}
+                      title="Delete"
+                      style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#f87171" }}
+                    >
                       <Trash2 size={15} strokeWidth={1.8} />
                     </button>
                   </div>
@@ -216,17 +285,23 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       <Modal
         key={addOpen ? "add-open" : "add-closed"}
         open={addOpen}
-        onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "view_only_admin" }); }}
+        onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "view" }); }}
         title="Add New Admin"
         size="sm"
         footer={
           <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-            <button onClick={() => setAddOpen(false)}
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
+            <button
+              onClick={() => setAddOpen(false)}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}
+            >
               Cancel
             </button>
-            <button onClick={handleAdd} disabled={isMutating} className="btn-primary"
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
+            <button
+              onClick={handleAdd}
+              disabled={isMutating}
+              className="btn-primary"
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}
+            >
               {isMutating ? <><Loader2 size={14} className="animate-spin" /> Adding...</> : "Add Admin"}
             </button>
           </div>
@@ -235,22 +310,38 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Full Name *</label>
-            <input style={inputStyle} placeholder="e.g. John Doe" value={addForm.name}
-              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
+            <input
+              style={inputStyle}
+              placeholder="e.g. John Doe"
+              value={addForm.name}
+              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+            />
           </div>
           <div>
             <label style={labelStyle}>Email Address *</label>
-            <input style={inputStyle} type="email" placeholder="admin@insmart.io" value={addForm.email}
-              onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} />
+            <input
+              style={inputStyle}
+              type="email"
+              placeholder="admin@insmart.io"
+              value={addForm.email}
+              onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+            />
           </div>
           <div>
             <label style={labelStyle}>Password *</label>
             <div style={{ position: "relative" }}>
-              <input style={{ ...inputStyle, paddingRight: "40px" }} type={showPassword ? "text" : "password"}
-                placeholder="StrongPassword123!" value={addForm.password}
-                onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))} />
-              <button type="button" onClick={() => setShowPassword((v) => !v)}
-                style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", display: "flex", alignItems: "center" }}>
+              <input
+                style={{ ...inputStyle, paddingRight: "40px" }}
+                type={showPassword ? "text" : "password"}
+                placeholder="StrongPassword123!"
+                value={addForm.password}
+                onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", display: "flex", alignItems: "center" }}
+              >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
@@ -259,7 +350,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
             <label style={labelStyle}>Role *</label>
             <select
               style={{ ...inputStyle, cursor: "pointer" }}
-              value={addForm.role ?? "view_only_admin"}
+              value={addForm.role ?? "view"}
               onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as AdminRole }))}
             >
               {ALL_ROLES.map((r) => (
@@ -267,9 +358,8 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
               ))}
             </select>
           </div>
-          {/* Role description hint */}
           <p style={{ fontSize: "12px", color: "#6B7280", backgroundColor: "#F9FAFB", borderRadius: "8px", padding: "8px 12px", margin: 0, lineHeight: 1.6, border: "1px solid #E5E7EB" }}>
-            {ROLE_DESCRIPTIONS[(addForm.role ?? "view_only_admin") as AdminRole]}
+            {ROLE_DESCRIPTIONS[(addForm.role ?? "view") as AdminRole]}
           </p>
         </div>
       </Modal>
@@ -283,12 +373,18 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
         size="sm"
         footer={
           <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-            <button onClick={() => setEditTarget(null)}
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
+            <button
+              onClick={() => setEditTarget(null)}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}
+            >
               Cancel
             </button>
-            <button onClick={handleEdit} disabled={isMutating} className="btn-primary"
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
+            <button
+              onClick={handleEdit}
+              disabled={isMutating}
+              className="btn-primary"
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}
+            >
               {isMutating ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : "Save Changes"}
             </button>
           </div>
@@ -297,19 +393,28 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Full Name</label>
-            <input style={inputStyle} placeholder="Full name" value={editForm.name ?? ""}
-              onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+            <input
+              style={inputStyle}
+              placeholder="Full name"
+              value={editForm.name ?? ""}
+              onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+            />
           </div>
           <div>
             <label style={labelStyle}>Email Address</label>
-            <input style={inputStyle} type="email" placeholder="Email" value={editForm.email ?? ""}
-              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} />
+            <input
+              style={inputStyle}
+              type="email"
+              placeholder="Email"
+              value={editForm.email ?? ""}
+              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+            />
           </div>
           <div>
             <label style={labelStyle}>Role</label>
             <select
               style={{ ...inputStyle, cursor: "pointer" }}
-              value={(editForm.role ?? "view_only_admin") as AdminRole}
+              value={(editForm.role ?? "view") as AdminRole}
               onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as AdminRole }))}
             >
               {ALL_ROLES.map((r) => (
@@ -317,9 +422,8 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
               ))}
             </select>
           </div>
-          {/* Role description hint */}
           <p style={{ fontSize: "12px", color: "#6B7280", backgroundColor: "#F9FAFB", borderRadius: "8px", padding: "8px 12px", margin: 0, lineHeight: 1.6, border: "1px solid #E5E7EB" }}>
-            {ROLE_DESCRIPTIONS[(editForm.role ?? "view_only_admin") as AdminRole]}
+            {ROLE_DESCRIPTIONS[(editForm.role ?? "view") as AdminRole]}
           </p>
         </div>
         {editAdmin_ && (
@@ -337,19 +441,26 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
         size="sm"
         footer={
           <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-            <button onClick={() => setDeleteTarget(null)}
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
+            <button
+              onClick={() => setDeleteTarget(null)}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}
+            >
               Cancel
             </button>
-            <button onClick={handleDelete} disabled={isMutating}
-              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
+            <button
+              onClick={handleDelete}
+              disabled={isMutating}
+              style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}
+            >
               {isMutating ? <><Loader2 size={14} className="animate-spin" /> Deleting...</> : "Delete"}
             </button>
           </div>
         }
       >
         <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
-          Are you sure you want to delete <strong style={{ color: "var(--color-text-main)" }}>{deleteAdmin_?.name}</strong>? This action cannot be undone.
+          Are you sure you want to delete{" "}
+          <strong style={{ color: "var(--color-text-main)" }}>{deleteAdmin_?.name}</strong>?{" "}
+          This action cannot be undone.
         </p>
       </Modal>
     </SubPageShell>

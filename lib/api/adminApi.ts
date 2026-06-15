@@ -1,4 +1,3 @@
-// lib/api/adminApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
 export interface Admin {
@@ -22,19 +21,23 @@ export interface AdminResponse {
   status: boolean;
   message: string;
   data: Admin;
+  token?: string;
 }
 
 export interface RegisterAdminPayload {
-  name:      string;
-  email:     string;
-  password:  string;
-  role?:     string; // optional until backend supports it
+  name:     string;
+  email:    string;
+  password: string;
+  role?:    string;
 }
 
 export interface UpdateAdminPayload {
   name?:  string;
   email?: string;
-  role?:  string; // optional until backend supports it
+}
+
+export interface ChangeRolePayload {
+  role: string;
 }
 
 export const getAllAdmins = async (): Promise<Admin[]> => {
@@ -54,6 +57,11 @@ export const registerAdmin = async (payload: RegisterAdminPayload): Promise<Admi
 
 export const updateAdmin = async (id: string, payload: UpdateAdminPayload): Promise<Admin> => {
   const { data } = await axiosInstance.put<AdminResponse>(`/admin/${id}`, payload);
+  return data.data;
+};
+
+export const changeAdminRole = async (id: string, role: string): Promise<Admin> => {
+  const { data } = await axiosInstance.put<AdminResponse>(`/admin/roles/${id}`, { role });
   return data.data;
 };
 

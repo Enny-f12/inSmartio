@@ -1,7 +1,8 @@
 // components/users/UserDetail.tsx
 "use client";
 
-import { ArrowLeft, ShieldCheck, Trash2, ShieldOff, UserX, Eye } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ShieldCheck, Trash2, ShieldOff, UserX, Eye, StickyNote, Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/Badge";
 
 // ─────────────────────────────────────────────────────────
@@ -17,6 +18,13 @@ export interface UserJob {
   payment:  number;
   notes:    string;
   review?:  string;
+  tas?: {
+    id?:         string;
+    name?:       string;
+    phone?:      string;
+    tier?:       number;
+    commission?: number | null;
+  };
 }
 
 export interface User {
@@ -93,8 +101,7 @@ function SectionTitle({ text }: { text: string }) {
 }
 
 // ─────────────────────────────────────────────────────────
-// Documents section — handles object with numeric keys
-// API returns: { "0": { url, type, verify }, "1": {...}, ... }
+// Documents section
 // ─────────────────────────────────────────────────────────
 function DocumentsSection({ document }: { document?: Record<string, unknown> | unknown[] }) {
   if (!document) return null;
@@ -103,9 +110,9 @@ function DocumentsSection({ document }: { document?: Record<string, unknown> | u
 
   const docs: DocItem[] = Array.isArray(document)
     ? (document as Record<string, unknown>[]).map((d) => ({
-        url:     String(d.secureUrl ?? d.url ?? ""),
-        type:    d.type as string,
-        verify:  Boolean(d.verify),
+        url:    String(d.secureUrl ?? d.url ?? ""),
+        type:   d.type as string,
+        verify: Boolean(d.verify),
       }))
     : Object.values(document as Record<string, unknown>)
         .filter((d) => d && typeof d === "object")
@@ -167,14 +174,12 @@ function ExpertRows({ user }: { user: User }) {
   const cat   = user.category as Record<string, unknown> | undefined;
   const bank  = user.bankDetails as Record<string, unknown> | undefined;
 
-  // Normalize verification tier label
   const verificationLabel = user.verification
     ? user.verification.replace("tier", "Tier ").replace(/(\d)/, " $1").trim()
     : undefined;
 
   return (
     <>
-      {/* Basic Info */}
       <InfoRow label="Name:"           value={user.name} />
       <InfoRow label="Phone:"          value={user.phone} />
       <InfoRow label="Email:"          value={user.email} />
@@ -187,7 +192,6 @@ function ExpertRows({ user }: { user: User }) {
       <InfoRow label="Joined:"         value={user.joined} />
       <InfoRow label="Status:"         value={<StatusBadge label={user.status} variant={statusVariant[user.status]} />} />
 
-      {/* Skill */}
       {skill && (
         <>
           <SectionTitle text="Skill" />
@@ -198,7 +202,6 @@ function ExpertRows({ user }: { user: User }) {
         </>
       )}
 
-      {/* Category */}
       {cat && (
         <>
           <SectionTitle text="Category" />
@@ -209,10 +212,8 @@ function ExpertRows({ user }: { user: User }) {
         </>
       )}
 
-      {/* Documents */}
       <DocumentsSection document={user.document} />
 
-      {/* Bank Details */}
       {bank && (
         <>
           <SectionTitle text="Bank Details" />
@@ -220,7 +221,7 @@ function ExpertRows({ user }: { user: User }) {
           <InfoRow label="Account No:"   value={bank.accountNumber as string} />
           <InfoRow label="Account Name:" value={bank.accountName as string} />
           {bank.bvn && (
-            <InfoRow label="BVN:"        value={String(bank.bvn).replace(/\d(?=\d{4})/g, "*")} />
+            <InfoRow label="BVN:" value={String(bank.bvn).replace(/\d(?=\d{4})/g, "*")} />
           )}
         </>
       )}
@@ -248,7 +249,6 @@ function ClientRows({ user }: { user: User }) {
 
 function TasRows({ user }: { user: User }) {
   const loc  = user.location;
-  // Prefer address field, fall back to area/city/state
   const loc2 = loc?.address
     || [loc?.area, loc?.city, loc?.state, loc?.country].filter(Boolean).join(", ")
     || undefined;
@@ -256,14 +256,12 @@ function TasRows({ user }: { user: User }) {
   const bank   = user.bankDetails as Record<string, string> | undefined;
   const re     = user.recruitExpectations as Record<string, unknown> | undefined;
 
-  // category is string[] for TAS
   const catArr = Array.isArray(user.category)
     ? (user.category as string[]).join(", ")
     : undefined;
 
   return (
     <>
-      {/* Basic */}
       <InfoRow label="Name:"             value={user.name} />
       <InfoRow label="Username:"         value={user.username} />
       <InfoRow label="Phone:"            value={user.phone} />
@@ -280,7 +278,6 @@ function TasRows({ user }: { user: User }) {
       <InfoRow label="Joined:"           value={user.joined} />
       <InfoRow label="Status:"           value={<StatusBadge label={user.status} variant={statusVariant[user.status]} />} />
 
-      {/* Recruit Expectations */}
       {re && (
         <>
           <SectionTitle text="Recruit Expectations" />
@@ -298,10 +295,8 @@ function TasRows({ user }: { user: User }) {
         </>
       )}
 
-      {/* Documents */}
       <DocumentsSection document={user.document} />
 
-      {/* Bank Details */}
       {bank?.bankName && (
         <>
           <SectionTitle text="Bank Details" />
@@ -347,12 +342,13 @@ function JobsTable({ jobs, userType }: { jobs?: UserJob[]; userType: User["type"
               <th style={TH}>Payment</th>
               <th style={TH}>Notes</th>
               <th style={TH}>Review</th>
+              <th style={TH}>TAS Info</th>
             </tr>
           </thead>
           <tbody>
             {!jobs || jobs.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", padding: "48px",
+                <td colSpan={6} style={{ textAlign: "center", padding: "48px",
                   fontSize: "13px", color: "#9CA3AF" }}>
                   No jobs found for this user.
                 </td>
@@ -361,11 +357,37 @@ function JobsTable({ jobs, userType }: { jobs?: UserJob[]; userType: User["type"
               <tr key={job.id} style={{ borderBottom: "1px solid #F3F4F6" }}
                 onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
-                <td style={{ ...TD, fontWeight: 500, color: "#111827", fontFamily: "monospace", fontSize: "12px" }}>{job.id}</td>
+                <td style={{ ...TD, fontWeight: 500, color: "#111827", fontFamily: "monospace", fontSize: "12px" }}>
+                  {job.id}
+                </td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.info}</td>
                 <td style={{ ...TD, fontWeight: 500, color: "#111827" }}>{fmtMoney(job.payment)}</td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.notes}</td>
                 <td style={{ ...TD, color: "#6B7280" }}>{job.review ?? "—"}</td>
+                <td style={{ ...TD }}>
+                  {job.tas?.name ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "#111827" }}>
+                        {job.tas.name}
+                      </span>
+                      {job.tas.phone && (
+                        <span style={{ fontSize: "11.5px", color: "#6B7280" }}>{job.tas.phone}</span>
+                      )}
+                      {job.tas.tier != null && (
+                        <span style={{
+                          display: "inline-flex", alignSelf: "flex-start",
+                          fontSize: "10.5px", fontWeight: 600, color: "#7c3aed",
+                          backgroundColor: "#F3E8FF", borderRadius: "5px",
+                          padding: "1px 7px", marginTop: "2px",
+                        }}>
+                          Tier {job.tas.tier}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span style={{ color: "#9CA3AF", fontSize: "13px" }}>—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -384,10 +406,81 @@ function JobsTable({ jobs, userType }: { jobs?: UserJob[]; userType: User["type"
 }
 
 // ─────────────────────────────────────────────────────────
-// Action bar
+// Add Note Modal
 // ─────────────────────────────────────────────────────────
-function ActionBar({ user, onDelete, onSuspend }: {
-  user: User; onDelete?: () => void; onSuspend?: () => void;
+function AddNoteModal({ userName, onClose }: { userName: string; onClose: () => void }) {
+  const [note, setNote]       = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const handleSave = async () => {
+    if (!note.trim()) return;
+    setSaving(true);
+    // TODO: wire to API — POST /admin/users/:id/notes
+    await new Promise(r => setTimeout(r, 600));
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      <div style={{ backgroundColor: "#fff", borderRadius: "16px", padding: "28px 32px",
+        width: "440px", maxWidth: "calc(100vw - 32px)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+        <div>
+          <p style={{ fontSize: "16px", fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
+            Add Note
+          </p>
+          <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>
+            Add an internal note for <strong>{userName}</strong>. This is only visible to admins.
+          </p>
+        </div>
+
+        <textarea
+          rows={4}
+          placeholder="e.g. User contacted support regarding payment issue on 03/06/2026..."
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          style={{ width: "100%", padding: "12px 14px", borderRadius: "10px",
+            border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", fontSize: "13px",
+            color: "#111827", outline: "none", resize: "none",
+            boxSizing: "border-box", lineHeight: 1.6 }}
+        />
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose}
+            style={{ padding: "9px 20px", borderRadius: "10px", border: "1px solid #E5E7EB",
+              fontSize: "13px", fontWeight: 500, color: "#6B7280",
+              background: "#fff", cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!note.trim() || saving}
+            style={{ padding: "9px 20px", borderRadius: "10px", border: "none",
+              fontSize: "13px", fontWeight: 600, backgroundColor: "#2563EB", color: "#fff",
+              cursor: note.trim() && !saving ? "pointer" : "not-allowed",
+              opacity: note.trim() && !saving ? 1 : 0.5,
+              display: "flex", alignItems: "center", gap: "6px" }}>
+            {saving
+              ? <><Loader2 size={13} className="animate-spin" /> Saving...</>
+              : "Save Note"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Action bar — role-specific
+// ─────────────────────────────────────────────────────────
+function ActionBar({ user, onDelete, onSuspend, onAddNote }: {
+  user:        User;
+  onDelete?:   () => void;
+  onSuspend?:  () => void;
+  onAddNote:   () => void;
 }) {
   const isSuspended = user.status === "Suspended";
 
@@ -397,21 +490,29 @@ function ActionBar({ user, onDelete, onSuspend }: {
     fontWeight: 500, cursor: "pointer", border: "1px solid #E5E7EB",
     backgroundColor: "#fff", color: "#374151",
   };
-  const dangerBtn: React.CSSProperties = { ...baseBtn, color: "#ef4444", border: "1px solid #fecaca" };
+  const dangerBtn: React.CSSProperties = {
+    ...baseBtn, color: "#ef4444", border: "1px solid #fecaca",
+  };
   const warnBtn: React.CSSProperties = {
     ...baseBtn,
     color:           isSuspended ? "#16a34a" : "#d97706",
     border:          isSuspended ? "1px solid #bbf7d0" : "1px solid #fde68a",
     backgroundColor: isSuspended ? "#f0fdf4" : "#fffbeb",
   };
+  const noteBtn: React.CSSProperties = {
+    ...baseBtn, color: "#2563EB", border: "1px solid #DBEAFE",
+    backgroundColor: "#EFF6FF",
+  };
 
   if (user.type === "Expert") return (
     <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
       <button style={baseBtn}><ShieldCheck size={14} /> Verify Tier 2</button>
       <button onClick={onSuspend} style={warnBtn}>
-        {isSuspended ? <><ShieldOff size={14} /> Reinstate User</> : <><ShieldOff size={14} /> Suspend User</>}
+        <ShieldOff size={14} />
+        {isSuspended ? "Reinstate User" : "Suspend User"}
       </button>
       <button onClick={onDelete} style={dangerBtn}><Trash2 size={14} /> Delete Account</button>
+      <button onClick={onAddNote} style={noteBtn}><StickyNote size={14} /> Add Note</button>
     </div>
   );
 
@@ -440,11 +541,15 @@ function ActionBar({ user, onDelete, onSuspend }: {
 // Main component
 // ─────────────────────────────────────────────────────────
 interface UserDetailProps {
-  user: User; onBack: () => void; onDelete?: () => void; onSuspend?: () => void;
+  user:       User;
+  onBack:     () => void;
+  onDelete?:  () => void;
+  onSuspend?: () => void;
 }
 
 export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDetailProps) {
-  const isSuspended = user.status === "Suspended";
+  const isSuspended  = user.status === "Suspended";
+  const [noteOpen, setNoteOpen] = useState(false);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1,
@@ -454,10 +559,14 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
         @media(min-width:640px){ .ud-wrap { padding: 24px 32px; } }
       `}</style>
 
+      {noteOpen && (
+        <AddNoteModal userName={user.name} onClose={() => setNoteOpen(false)} />
+      )}
+
       <main className="ud-wrap" style={{ flex: 1, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        {/* Back + Suspend */}
+        {/* Back + Suspend (top bar) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <button onClick={onBack}
             style={{ display: "inline-flex", alignItems: "center", gap: "8px",
@@ -502,8 +611,13 @@ export default function UserDetail({ user, onBack, onDelete, onSuspend }: UserDe
         {/* Jobs table */}
         <JobsTable jobs={user.jobs} userType={user.type} />
 
-        {/* Actions */}
-        <ActionBar user={user} onDelete={onDelete} onSuspend={onSuspend} />
+        {/* Action bar */}
+        <ActionBar
+          user={user}
+          onDelete={onDelete}
+          onSuspend={onSuspend}
+          onAddNote={() => setNoteOpen(true)}
+        />
 
       </main>
     </div>

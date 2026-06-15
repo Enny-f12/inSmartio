@@ -28,7 +28,8 @@ const TD: React.CSSProperties = {
   borderBottom: "1px solid #F3F4F6",
 };
 
-const fmtDate = (iso: string) => {
+const fmtDate = (iso?: string) => {
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   } catch { return iso; }
@@ -40,9 +41,9 @@ export default function ReportTemplatesSection() {
 
   const [showAdd,  setShowAdd]  = useState(false);
   const [editItem, setEditItem] = useState<ReportTemplate | null>(null);
-  const [form,     setForm]     = useState<{ name: string; type: ReportType }>({
-    name: "", type: ALL_REPORT_TYPES[0],
-  });
+  const [form,     setForm]     = useState<{ name: string; type: ReportType; content: string }>(
+    { name: "", type: ALL_REPORT_TYPES[0], content: "" },
+  );
 
   useEffect(() => {
     if (status === "idle") dispatch(fetchReportTemplatesThunk());
@@ -51,7 +52,7 @@ export default function ReportTemplatesSection() {
   const rows = status === "succeeded" && list.length > 0 ? list : MOCK;
 
   const resetForm = () => {
-    setForm({ name: "", type: ALL_REPORT_TYPES[0] });
+    setForm({ name: "", type: ALL_REPORT_TYPES[0], content: "" });
     setShowAdd(false);
     setEditItem(null);
   };
@@ -72,7 +73,8 @@ export default function ReportTemplatesSection() {
 
   const handleEdit = (item: ReportTemplate) => {
     setEditItem(item);
-    setForm({ name: item.name, type: item.type as ReportType });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setForm({ name: item.name, type: item.type as ReportType, content: (item as any).content ?? "" });
     setShowAdd(true);
   };
 
