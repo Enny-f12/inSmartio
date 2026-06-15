@@ -9,24 +9,15 @@ import {
 // ── State ────────────────────────
 
 interface AuditLogsState {
-  // Full list (paginated)
   logs:           AuditLog[];
   pagination:     AuditLogPagination | null;
   listStatus:     "idle" | "loading" | "succeeded" | "failed";
   listError:      string | null;
-
-  // Recent logs (dashboard widget)
   recentLogs:     AuditLog[];
   recentStatus:   "idle" | "loading" | "succeeded" | "failed";
-
-  // Stats (dashboard widget)
   stats:          AuditLogStats | null;
   statsStatus:    "idle" | "loading" | "succeeded" | "failed";
-
-  // Export
   exportStatus:   "idle" | "loading" | "succeeded" | "failed";
-
-  // Active filters (kept in Redux so page re-mounts restore state)
   activeFilters:  AuditLogsParams;
 }
 
@@ -94,15 +85,12 @@ const auditLogsSlice = createSlice({
   reducers: {
     setFilters: (state, action) => {
       state.activeFilters = { ...state.activeFilters, ...action.payload, page: 1 };
-      state.listStatus    = "idle"; // trigger re-fetch
     },
     setPage: (state, action) => {
       state.activeFilters.page = action.payload;
-      state.listStatus         = "idle";
     },
     resetFilters: (state) => {
       state.activeFilters = initialFilters;
-      state.listStatus    = "idle";
     },
     resetExportStatus: (state) => {
       state.exportStatus = "idle";
@@ -111,15 +99,23 @@ const auditLogsSlice = createSlice({
   extraReducers: (builder) => {
     // ── fetchAuditLogs ──────────────────────────────────
     builder
-      .addCase(fetchAuditLogs.pending,   (state) => { state.listStatus = "loading"; state.listError = null; })
+      .addCase(fetchAuditLogs.pending, (state) => {
+        state.listStatus = "loading";
+        state.listError  = null;
+      })
       .addCase(fetchAuditLogs.fulfilled, (state, action) => {
         state.listStatus = "succeeded";
-        state.logs       = action.payload.logs;
-        state.pagination = action.payload.pagination;
+
+        // FIX: API may return data: null or a different shape — guard every field
+        const payload = action.payload;
+        state.logs       = payload?.logs       ?? [];
+        state.pagination = payload?.pagination ?? null;
       })
-      .addCase(fetchAuditLogs.rejected,  (state, action) => {
+      .addCase(fetchAuditLogs.rejected, (state, action) => {
         state.listStatus = "failed";
         state.listError  = action.payload as string;
+        state.logs       = [];       // clear stale data on error
+        state.pagination = null;
       });
 
     // ── fetchRecentAuditLogs ────────────────────────────
@@ -127,7 +123,7 @@ const auditLogsSlice = createSlice({
       .addCase(fetchRecentAuditLogs.pending,   (state) => { state.recentStatus = "loading"; })
       .addCase(fetchRecentAuditLogs.fulfilled, (state, action) => {
         state.recentStatus = "succeeded";
-        state.recentLogs   = action.payload;
+        state.recentLogs   = action.payload ?? [];
       })
       .addCase(fetchRecentAuditLogs.rejected,  (state) => { state.recentStatus = "failed"; });
 
@@ -136,7 +132,7 @@ const auditLogsSlice = createSlice({
       .addCase(fetchAuditLogStats.pending,   (state) => { state.statsStatus = "loading"; })
       .addCase(fetchAuditLogStats.fulfilled, (state, action) => {
         state.statsStatus = "succeeded";
-        state.stats       = action.payload;
+        state.stats       = action.payload ?? null;
       })
       .addCase(fetchAuditLogStats.rejected,  (state) => { state.statsStatus = "failed"; });
 

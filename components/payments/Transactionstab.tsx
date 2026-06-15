@@ -17,13 +17,6 @@ const truncateRef = (ref: string) => {
   return parts.slice(0, 3).join("_");
 };
 
-const MOCK_TRANSACTIONS = [
-  { id: "m1", createdAt: "2026-03-15T00:00:00Z", resourceType: "Escrow In",  userId: "Funke A.",   amount: 18500,  status: "Held",     reference: "INV" },
-  { id: "m2", createdAt: "2026-03-18T00:00:00Z", resourceType: "Escrow Out", userId: "Adebayo S.", amount: 16650,  status: "Released", reference: "PAY" },
-  { id: "m3", createdAt: "2026-03-20T00:00:00Z", resourceType: "Commission", userId: "Platform",   amount: 1850,   status: "Revenue",  reference: "—"   },
-  { id: "m4", createdAt: "2026-03-22T00:00:00Z", resourceType: "TAS Payout", userId: "Chidi E.",   amount: 245000, status: "Paid",     reference: "TAS" },
-];
-
 function StatusPill({ status }: { status: string }) {
   const s = (status ?? "").toLowerCase();
   let style = { color: "#6B7280", background: "#F9FAFB", border: "1px solid #E5E7EB" };
@@ -60,8 +53,6 @@ export default function TransactionsTab() {
   }, [dispatch, listStatus]);
 
   const isLoading = listStatus === "idle" || listStatus === "loading";
-  const data = listStatus === "succeeded" && list.length > 0 ? list : MOCK_TRANSACTIONS;
-
   const hasFilters = !!(search || amountMin || amountMax || dateFrom || dateTo || typeFilter || statusFilter);
 
   const clear = () => {
@@ -69,12 +60,12 @@ export default function TransactionsTab() {
     setAmountMin(""); setAmountMax(""); setDateFrom(""); setDateTo(""); setPage(1);
   };
 
-  const filtered = data.filter((t) => {
+  const filtered = list.filter((t) => {
     const rec = t as Record<string, unknown>;
     if (search) {
       const q    = search.toLowerCase();
-      const user = String(rec.userId      ?? "").toLowerCase();
-      const ref  = String(rec.reference   ?? "").toLowerCase();
+      const user = String(rec.userId       ?? "").toLowerCase();
+      const ref  = String(rec.reference    ?? "").toLowerCase();
       const type = String(rec.resourceType ?? "").toLowerCase();
       if (!user.includes(q) && !ref.includes(q) && !type.includes(q) && !t.id?.toLowerCase().includes(q)) return false;
     }
@@ -82,8 +73,8 @@ export default function TransactionsTab() {
     if (statusFilter && String(rec.status ?? "").toLowerCase() !== statusFilter)            return false;
     if (amountMin && Number(t.amount) < Number(amountMin)) return false;
     if (amountMax && Number(t.amount) > Number(amountMax)) return false;
-    if (dateFrom && new Date(t.createdAt) < new Date(dateFrom))               return false;
-    if (dateTo   && new Date(t.createdAt) > new Date(dateTo + "T23:59:59"))   return false;
+    if (dateFrom && new Date(t.createdAt) < new Date(dateFrom))             return false;
+    if (dateTo   && new Date(t.createdAt) > new Date(dateTo + "T23:59:59")) return false;
     return true;
   });
 
@@ -109,8 +100,6 @@ export default function TransactionsTab() {
 
         {/* ── Toolbar ── */}
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
-
-          {/* Header row */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
               <SlidersHorizontal size={14} style={{ color: "var(--color-text-muted)" }} />
@@ -124,59 +113,24 @@ export default function TransactionsTab() {
             )}
           </div>
 
-          {/* Row 1: User search + Type + Status */}
+          {/* Row 1 */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-
-            {/* Search */}
             <div style={{ position: "relative", flex: "2 1 200px", minWidth: "160px" }}>
               <Search size={14} style={{ position: "absolute", left: "13px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)", pointerEvents: "none" }} />
-              <input
-                type="text"
-                placeholder="Search user, type, reference…"
-                value={search}
+              <input type="text" placeholder="Search user, type, reference…" value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                style={{
-                  width: "100%", paddingLeft: "38px", paddingRight: "14px",
-                  paddingTop: "9px", paddingBottom: "9px",
-                  borderRadius: "10px", fontSize: "13px", outline: "none",
-                  border: "1px solid var(--color-border)",
-                  backgroundColor: "var(--color-background)",
-                  color: "var(--color-text-main)", boxSizing: "border-box",
-                }}
-              />
+                style={{ width: "100%", paddingLeft: "38px", paddingRight: "14px", paddingTop: "9px", paddingBottom: "9px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }} />
             </div>
-
-            {/* Type dropdown */}
-            <select
-              value={typeFilter}
-              onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-              style={{
-                flex: "1 1 130px", minWidth: "120px",
-                padding: "9px 12px", borderRadius: "10px",
-                border: "1px solid var(--color-border)",
-                backgroundColor: "var(--color-background)",
-                color: "var(--color-text-main)",
-                fontSize: "13px", outline: "none", cursor: "pointer",
-              }}>
+            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+              style={{ flex: "1 1 130px", minWidth: "120px", padding: "9px 12px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", fontSize: "13px", outline: "none", cursor: "pointer" }}>
               <option value="">All Types</option>
               <option value="escrow in">Escrow In</option>
               <option value="escrow out">Escrow Out</option>
               <option value="commission">Commission</option>
               <option value="tas payout">TAS Payout</option>
             </select>
-
-            {/* Status dropdown */}
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              style={{
-                flex: "1 1 130px", minWidth: "120px",
-                padding: "9px 12px", borderRadius: "10px",
-                border: "1px solid var(--color-border)",
-                backgroundColor: "var(--color-background)",
-                color: "var(--color-text-main)",
-                fontSize: "13px", outline: "none", cursor: "pointer",
-              }}>
+            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              style={{ flex: "1 1 130px", minWidth: "120px", padding: "9px 12px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", fontSize: "13px", outline: "none", cursor: "pointer" }}>
               <option value="">All Statuses</option>
               <option value="held">Held</option>
               <option value="released">Released</option>
@@ -184,14 +138,12 @@ export default function TransactionsTab() {
               <option value="pending">Pending</option>
               <option value="failed">Failed</option>
               <option value="refunded">Refunded</option>
-              <option value="revenue">Revenue</option>
+              <option value="success">Success</option>
             </select>
           </div>
 
-          {/* Row 2: Amount + Date + Search/Reset buttons */}
+          {/* Row 2 */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-
-            {/* Amount range */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flex: "1 1 220px" }}>
               <span style={{ fontSize: "12px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Amount:</span>
               <input type="number" placeholder="Min" value={amountMin}
@@ -202,38 +154,22 @@ export default function TransactionsTab() {
                 onChange={(e) => { setAmountMax(e.target.value); setPage(1); }}
                 style={{ width: "80px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "var(--color-background)", color: "var(--color-text-main)" }} />
             </div>
-
-            {/* Date range */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flex: "1 1 260px" }}>
               <span style={{ fontSize: "12px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Date:</span>
-              <input type="date" value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
                 style={{ flex: 1, minWidth: "110px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "var(--color-background)", color: "var(--color-text-main)" }} />
               <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>to</span>
-              <input type="date" value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
                 style={{ flex: 1, minWidth: "110px", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--color-border)", fontSize: "13px", outline: "none", backgroundColor: "var(--color-background)", color: "var(--color-text-main)" }} />
             </div>
-
-            {/* Search + Reset buttons */}
             <div style={{ display: "flex", gap: "6px", marginLeft: "auto" }}>
-              <button
-                onClick={() => setPage(1)}
-                style={{
-                  padding: "9px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: 600,
-                  border: "none", backgroundColor: "#16a34a", color: "#fff",
-                  cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
-                  whiteSpace: "nowrap",
-                }}>
+              <button onClick={() => setPage(1)}
+                style={{ padding: "9px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, border: "none", backgroundColor: "#16a34a", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
                 <Search size={13} /> Search
               </button>
               {hasFilters && (
                 <button onClick={clear}
-                  style={{
-                    padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 500,
-                    border: "1px solid var(--color-border)", backgroundColor: "#fff",
-                    color: "var(--color-text-muted)", cursor: "pointer", whiteSpace: "nowrap",
-                  }}>
+                  style={{ padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "#fff", color: "var(--color-text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
                   Reset
                 </button>
               )}
@@ -241,7 +177,7 @@ export default function TransactionsTab() {
           </div>
         </div>
 
-        {/* ── Loading / Error ── */}
+        {/* ── States ── */}
         {isLoading && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", gap: "10px", color: "var(--color-text-muted)" }}>
             <Loader2 size={18} className="animate-spin" />
@@ -249,12 +185,14 @@ export default function TransactionsTab() {
           </div>
         )}
         {listStatus === "failed" && (
-          <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>Failed to load transactions.</p>
+          <p style={{ textAlign: "center", padding: "60px", fontSize: "13px", color: "#ef4444" }}>
+            Failed to load transactions.
+          </p>
         )}
 
-        {!isLoading && (
+        {!isLoading && listStatus !== "failed" && (
           <>
-            {/* ── Desktop table ── */}
+            {/* Desktop table */}
             <div className="txn-table-wrap" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -275,7 +213,7 @@ export default function TransactionsTab() {
                         <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", textTransform: "capitalize" }}>{String(rec.resourceType ?? "—")}</td>
                         <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", fontWeight: 500 }}>{String(rec.userId ?? "—")}</td>
                         <td style={{ padding: "15px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>₦{Number(t.amount).toLocaleString()}</td>
-                        <td style={{ padding: "15px 20px" }}><StatusPill status={String(rec.status ?? "—")} /></td>
+                        <td style={{ padding: "15px 20px" }}><StatusPill status={String(t.status ?? "—")} /></td>
                         <td style={{ padding: "15px 20px", fontSize: "12px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
                           {truncateRef(String(rec.reference ?? "—"))}
                         </td>
@@ -286,7 +224,7 @@ export default function TransactionsTab() {
               </table>
             </div>
 
-            {/* ── Mobile cards ── */}
+            {/* Mobile cards */}
             <div className="txn-cards" style={{ backgroundColor: "var(--color-background)" }}>
               {paginated.length === 0 ? (
                 <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No transactions found.</p>
@@ -301,7 +239,7 @@ export default function TransactionsTab() {
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px" }}>₦{Number(t.amount).toLocaleString()}</p>
-                        <StatusPill status={String(rec.status ?? "—")} />
+                        <StatusPill status={String(t.status ?? "—")} />
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "12px", paddingTop: "8px", borderTop: "1px solid var(--color-border)" }}>
@@ -317,7 +255,7 @@ export default function TransactionsTab() {
           </>
         )}
 
-        {/* ── Pagination ── */}
+        {/* Pagination */}
         {!isLoading && (
           <div className="txn-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
             <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>

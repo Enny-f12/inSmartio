@@ -115,7 +115,6 @@ export default function CancellationFeeMonitoringPage() {
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
-            {/* Back button — hidden on mobile, visible on sm+ */}
             <button
               onClick={() => router.push("/bid")}
               className="hidden sm:flex p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
@@ -132,7 +131,6 @@ export default function CancellationFeeMonitoringPage() {
             </div>
           </div>
 
-          {/* Action buttons — icon only on mobile, full on sm+ */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => router.push("/bid/client-refund")}
@@ -191,12 +189,15 @@ export default function CancellationFeeMonitoringPage() {
             <SummaryCard
               label="Average Fee"
               value={fmt(summary.averageFee)}
-              sub={`Min: ${fmt(summary.minFee)} / Max: ${fmt(summary.maxFee)}`}
             />
             <SummaryCard
               label="Top Reason"
               value={summary.topReasons[0]?.reason ?? "—"}
-              sub={`${summary.topReasons[0]?.percentage ?? 0}% of cases`}
+              sub={
+                summary.topReasons[0]?.percentage
+                  ? `${summary.topReasons[0].percentage}% of cases`
+                  : undefined
+              }
             />
           </>
         )}
@@ -235,11 +236,10 @@ export default function CancellationFeeMonitoringPage() {
         <DisputeFlaggingPanel />
       ) : (
         <>
-          {/* Filters — matches spec: [Date Range ▼] [Expert ▼] [Client ▼] */}
+          {/* Filters */}
           <div className="bg-surface rounded-xl border border-border p-4 flex flex-wrap items-center gap-3">
             <span className="text-sm text-text-muted font-medium shrink-0">Filter:</span>
 
-            {/* Date Range dropdown */}
             <select
               value={filters.dateRange ?? "last_30"}
               onChange={(e) => dispatch(setFeeFilters({ dateRange: e.target.value as "last_30" | "last_90" | "all" }))}
@@ -250,7 +250,6 @@ export default function CancellationFeeMonitoringPage() {
               ))}
             </select>
 
-            {/* Expert dropdown */}
             <select
               value={filters.expertId ?? ""}
               onChange={(e) => dispatch(setFeeFilters({ expertId: e.target.value || undefined }))}
@@ -262,7 +261,6 @@ export default function CancellationFeeMonitoringPage() {
               ))}
             </select>
 
-            {/* Client dropdown */}
             <select
               value={filters.clientId ?? ""}
               onChange={(e) => dispatch(setFeeFilters({ clientId: e.target.value || undefined }))}
@@ -274,7 +272,6 @@ export default function CancellationFeeMonitoringPage() {
               ))}
             </select>
 
-            {/* Clear filters */}
             {(filters.expertId || filters.clientId || filters.dateRange !== "last_30") && (
               <button
                 onClick={() => dispatch(setFeeFilters({ expertId: undefined, clientId: undefined, dateRange: "last_30" }))}

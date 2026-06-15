@@ -238,7 +238,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewVerifications:     false,
     canApproveVerification:   false,
     canRejectVerification:    false,
-    canViewJobs:              true,
+    canViewJobs:              false,
     canDeleteJob:             false,
     canFlagJob:               true,
     canViewTas:               false,

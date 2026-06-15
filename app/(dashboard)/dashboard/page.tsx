@@ -176,15 +176,15 @@ export default function DashboardPage() {
 
   // ── Recent Activity — live only, max 10 ───────────────────────────────────
   const activityRows: { dot: string; time: string; text: string }[] =
-    recentActivityStatus === "succeeded" && recentActivity.length > 0
-      ? recentActivity.slice(0, 10).map((item) => ({
-          dot:  DOT_COLORS[item.type] ?? "#9CA3AF",
-          time: new Date(item.createdAt).toLocaleTimeString("en-GB", {
-            hour: "2-digit", minute: "2-digit",
-          }),
-          text: item.text,
-        }))
-      : [];
+  recentActivityStatus === "succeeded" && recentActivity.length > 0
+    ? recentActivity.slice(0, 10).map((item) => ({
+        dot:  DOT_COLORS[item.type] ?? "#9CA3AF",
+        time: new Date(item.createdAt).toLocaleTimeString("en-GB", {
+          hour: "2-digit", minute: "2-digit",
+        }),
+        text: item.text ?? "",
+      }))
+    : [];
 
   // ── Pending Alerts — live or mock ─────────────────────────────────────────
   const pa = pendingAlerts;

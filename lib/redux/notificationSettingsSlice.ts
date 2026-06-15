@@ -13,10 +13,10 @@ import { AxiosError } from "axios";
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 interface NotificationSettingsState {
-  settings:   NotificationSettingsResponse | null;
-  loading:    boolean;
-  saving:     boolean;
-  error:      string | null;
+  settings: NotificationSettingsResponse | null;
+  loading:  boolean;
+  saving:   boolean;
+  error:    string | null;
 }
 
 const initialState: NotificationSettingsState = {
@@ -40,13 +40,14 @@ const extractErrorMessage = (error: unknown, fallback: string): string => {
 
 // ── THUNKS ────────────────────────────────────────────────────────────────────
 
+// Fetch by adminId using GET /api/notification-settings/admin/{adminId}
 export const fetchNotificationSettings = createAsyncThunk<
-  NotificationSettingsResponse | null, void, { rejectValue: string }
+  NotificationSettingsResponse | null, string, { rejectValue: string }
 >(
   "notificationSettings/fetch",
-  async (_, { rejectWithValue }) => {
+  async (adminId, { rejectWithValue }) => {
     try {
-      return await getNotificationSettings();
+      return await getNotificationSettings(adminId);
     } catch (error) {
       return rejectWithValue(extractErrorMessage(error, "Failed to fetch notification settings"));
     }
@@ -80,7 +81,6 @@ const notificationSettingsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // fetch
       .addCase(fetchNotificationSettings.pending,   (state) => { state.loading = true;  state.error = null; })
       .addCase(fetchNotificationSettings.fulfilled, (state, action: PayloadAction<NotificationSettingsResponse | null>) => {
         state.loading  = false;
@@ -91,7 +91,6 @@ const notificationSettingsSlice = createSlice({
         state.error   = action.payload ?? "Failed to fetch notification settings";
       })
 
-      // save (create or update)
       .addCase(saveNotificationSettings.pending,   (state) => { state.saving = true;  state.error = null; })
       .addCase(saveNotificationSettings.fulfilled, (state, action: PayloadAction<NotificationSettingsResponse>) => {
         state.saving   = false;
