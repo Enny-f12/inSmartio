@@ -48,7 +48,10 @@ const toUser = (u: ApiUser, avatarSeed: number): User => {
     type: normalizeType(u.role ?? u.mode ?? "client"),
     status: normalizeStatus(u.status),
     joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB") : "—",
-    verify: u.verify, gender: u.gender, bio: u.bio,
+    verify: typeof u.verify === "boolean"
+      ? u.verify
+      : (typeof u.verify === "string" ? u.verify.toLowerCase() === "true" : undefined),
+    gender: u.gender, bio: u.bio,
     verification: u.verification,
     category: rawCategory as Record<string, unknown>,
     skill: u.skill,

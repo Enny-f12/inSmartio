@@ -28,6 +28,9 @@ import cancellationfeeReducer from "./cancellationfeeSlice"
 import appVersionReducer from "./appversionSlice";
 import clientRefundReducer from "./clientrefundSlice";
 import expertPayoutReducer from "./expertpayoutSlice";
+import cloudReducer from "./cloudSlice";
+
+
 
 export const store = configureStore({
   reducer: {
@@ -60,6 +63,7 @@ export const store = configureStore({
     appVersion:            appVersionReducer,
     clientRefund:          clientRefundReducer,
     expertPayout:          expertPayoutReducer,
+    cloud: cloudReducer,
   },
 });
 

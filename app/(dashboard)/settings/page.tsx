@@ -13,10 +13,10 @@ import CommissionSettings     from "@/components/settings/CommisionSettings";
 import NotificationTemplates  from "@/components/settings/Notification";
 import NotificationSettings   from "@/components/settings/NotificationSettings";
 import AdminManagement        from "@/components/settings/AdminManagement";
-import AppVersion      from "@/components/settings/AppVersion";
+
 import type { SettingsView }  from "@/components/settings/types";
 
-type ExtendedView = SettingsView | "notif-settings" | "app-version";
+type ExtendedView = SettingsView | "notif-settings" | "app-version" | "cloud-upload";
 
 function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -30,8 +30,6 @@ function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-// ── Inner component that uses useSearchParams ─────────────
-// Must be wrapped in <Suspense> to satisfy Next.js static generation.
 function SettingsInner() {
   const searchParams = useSearchParams();
   const [view, setView] = useState<ExtendedView>("main");
@@ -46,11 +44,11 @@ function SettingsInner() {
   if (view === "faq")            return <FaqManagement          onBack={() => setView("main")} />;
   if (view === "banners")        return <BannerManagement       onBack={() => setView("main")} />;
   if (view === "announcements")  return <AnnouncementManagement onBack={() => setView("main")} />;
- if (view === "commission")     return <CommissionSettings      onBack={() => setView("main")} />;
+  if (view === "commission")     return <CommissionSettings      onBack={() => setView("main")} />;
   if (view === "notifications")  return <NotificationTemplates  onBack={() => setView("main")} />;
   if (view === "notif-settings") return <NotificationSettings   onBack={() => setView("main")} />;
-  if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />; 
-   if (view === "app-version")    return <AppVersion      onBack={() => setView("main")} />;
+  if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />;
+ 
 
   return (
     <div className="flex flex-col flex-1">
@@ -90,7 +88,7 @@ function SettingsInner() {
           </p>
           <div className="rounded-2xl border border-border bg-surface overflow-hidden">
             <MenuItem label="Admin Management" onClick={() => setView("admins")} />
-            <MenuItem label="App Version" onClick={() => setView("app-version")} />
+           
           </div>
         </div>
 
@@ -99,7 +97,6 @@ function SettingsInner() {
   );
 }
 
-// ── Page export wraps inner component in Suspense ─────────
 export default function SettingsPage() {
   return (
     <Suspense fallback={null}>
