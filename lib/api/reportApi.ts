@@ -113,19 +113,39 @@ export interface DisputeAnalysisData {
   topReasons: DisputeReasonItem[];
 }
 
+// ── Download Report Types ─────────────────────────────────
+
 export type DownloadReportType =
+  // Core entity exports
+  | "user"        | "users"
+  | "job"         | "jobs"
+  | "escrow"      | "escrows"
+  | "dispute"     | "disputes"
+  | "cities"  
+  // Trend / growth reports
   | "user-growth"
   | "revenue-trend"
   | "service-category"
-  | "cities"
-  | "job-completion-report"
-  | "tas-performance-report"
-  | "dispute-analysis-report"
-  | "expert-verification"
-  | "users"
-  | "jobs"
-  | "escrows"
-  | "dispute";
+  // Expert verification
+  | "verification" | "expert-verification"
+  // Analysis reports
+  | "dispute-analysis"  | "dispute-analysis-report"
+  | "tas-performance"   | "tas-performance-report"
+  | "job-completion"    | "job-completion-report";
+
+export const REPORT_TYPES = {
+  USERS:            "users",
+  JOBS:             "jobs",
+  ESCROWS:          "escrows",
+  DISPUTES:         "dispute",
+  USER_GROWTH:      "user-growth",
+  REVENUE_TREND:    "revenue-trend",
+  SERVICE_CATEGORY: "service-category",
+  VERIFICATION:     "expert-verification",
+  DISPUTE_ANALYSIS: "dispute-analysis-report",
+  TAS_PERFORMANCE:  "tas-performance-report",
+  JOB_COMPLETION:   "job-completion-report",
+} as const satisfies Record<string, DownloadReportType>;
 
 export type ReportFileType = "pdf" | "csv";
 
@@ -164,7 +184,7 @@ export const fetchReportsSummary = async (): Promise<ReportsSummaryData> => {
 };
 
 export const fetchExpertPerformance = async (limit?: number): Promise<ExpertPerformanceItem[]> => {
-  const { data } = await axiosInstance.get("/reports/expert-verification", {
+  const { data } = await axiosInstance.get("/reports/verification", {
     params: limit ? { limit } : undefined,
   });
   return data.data ?? [];
@@ -178,12 +198,12 @@ export const fetchTasPerformance = async (limit?: number): Promise<TasPerformanc
 };
 
 export const fetchJobCompletion = async (q: ReportQuery): Promise<JobCompletionData> => {
-  const { data } = await axiosInstance.get("/reports/job-completion", { params: q });
+  const { data } = await axiosInstance.get("/reports/job-completion-report", { params: q });
   return data.data;
 };
 
 export const fetchDisputeAnalysis = async (q: ReportQuery): Promise<DisputeAnalysisData> => {
-  const { data } = await axiosInstance.get("/reports/dispute-analysis", { params: q });
+  const { data } = await axiosInstance.get("/reports/dispute-analysis-report", { params: q });
   return data.data;
 };
 
