@@ -132,7 +132,7 @@ export interface RegisterClientPayload {
   referral?: string;
 }
 
-// POST /experts/register  — multipart/form-data (same pattern as banner)
+// POST /experts/register  — multipart/form-data
 export interface RegisterExpertPayload {
   name:          string;
   email:         string;
@@ -143,7 +143,7 @@ export interface RegisterExpertPayload {
   referral?:     string;
   avatar?:       string | Blob;
   // document files sent as Blobs directly in FormData
-  ninSlip?:      Blob;
+  ninSlip?:      Blob;   // sent as field "nin" to /experts/register
   passport?:     Blob;
   location?: {
     country?: string;
@@ -240,8 +240,8 @@ function buildExpertFormData(p: RegisterExpertPayload): FormData {
   if (p.verification) fd.append("verification", p.verification);
   if (p.paymentModel) fd.append("paymentModel", p.paymentModel);
 
-  // Files
-  if (p.ninSlip)  fd.append("ninSlip",  p.ninSlip,  "nin_slip.jpg");
+  // Files — /experts/register expects "nin" (not "ninSlip") for the NIN document
+  if (p.ninSlip)  fd.append("nin",      p.ninSlip,  "nin_slip.jpg");
   if (p.passport) fd.append("passport", p.passport, "passport.jpg");
   if (p.avatar instanceof Blob) fd.append("avatar", p.avatar, "avatar.jpg");
 

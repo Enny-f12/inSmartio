@@ -121,6 +121,7 @@ export type DownloadReportType =
   | "job"         | "jobs"
   | "escrow"      | "escrows"
   | "dispute"     | "disputes"
+  | "cities"  
   // Trend / growth reports
   | "user-growth"
   | "revenue-trend"
