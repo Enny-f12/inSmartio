@@ -5,7 +5,7 @@ const baseURL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
 const axiosInstance = axios.create({
   baseURL,
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
