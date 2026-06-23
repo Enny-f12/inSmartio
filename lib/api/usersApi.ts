@@ -132,7 +132,9 @@ export interface RegisterClientPayload {
   referral?: string;
 }
 
-// POST /experts/register  — multipart/form-data
+// POST /experts/register — multipart/form-data
+// category is sent as category[] array entries (same as TAS)
+// bankDetails.accountCode must always be a string
 export interface RegisterExpertPayload {
   name:          string;
   email:         string;
@@ -141,10 +143,10 @@ export interface RegisterExpertPayload {
   gender:        "male" | "female" | "other";
   bio:           string;
   referral?:     string;
-  avatar?:       string | Blob;
-  // document files sent as Blobs directly in FormData
-  ninSlip?:      Blob;   // sent as field "nin" to /experts/register
+  avatar?:       Blob;
+  ninSlip?:      Blob;
   passport?:     Blob;
+  addressProof?: Blob;
   location?: {
     country?: string;
     state?:   string;
@@ -157,23 +159,21 @@ export interface RegisterExpertPayload {
     role?:        string[];
     area?:        string;
   };
-  category?: {
-    name?: string;
-    sub?:  string[];
-  };
+  // category sent as string[] — appended as category[] in FormData
+  category?: string[];
   verification?: "tier1" | "tier2" | "tier3";
   paymentModel?: "protected" | "unprotected";
   bankDetails?: {
     bankName?:      string;
     accountNumber?: string;
     bvn?:           string;
-    accountCode?:   string;
+    accountCode:    string; // required, default "0000"
     accountName?:   string;
   };
   services?: unknown[];
 }
 
-// POST /tas/register  — multipart/form-data
+// POST /tas/register — multipart/form-data
 export interface RegisterTasPayload {
   username:        string;
   name:            string;
@@ -182,12 +182,12 @@ export interface RegisterTasPayload {
   password:        string;
   gender:          "male" | "female" | "other";
   dateOfBirth:     string;
-  applicationCode: string;   // required (send "" if none)
+  applicationCode: string;
   category?:       string[];
   referral?:       string;
-  avatar?:         string | Blob;
-  location: {                // required
-    address:  string;        // required
+  avatar?:         Blob;
+  location: {
+    address:  string;
     area?:    string;
     city?:    string;
     state?:   string;
@@ -197,9 +197,8 @@ export interface RegisterTasPayload {
     bankName?:      string;
     accountNumber?: string;
     accountName?:   string;
-    accountCode?:   string;  // server requires this; default "0000"
+    accountCode:    string; // required, default "0000"
   };
-  // document files sent as Blobs directly in FormData
   ninSlip?:        Blob;
   bvnConsent?:     Blob;
   governmentId?:   Blob;
@@ -239,17 +238,29 @@ function buildExpertFormData(p: RegisterExpertPayload): FormData {
   if (p.referral)     fd.append("referral",     p.referral);
   if (p.verification) fd.append("verification", p.verification);
   if (p.paymentModel) fd.append("paymentModel", p.paymentModel);
+  if (p.avatar)       fd.append("avatar",       p.avatar, "avatar.jpg");
 
-  // Files — /experts/register expects "nin" (not "ninSlip") for the NIN document
-  if (p.ninSlip)  fd.append("nin",      p.ninSlip,  "nin_slip.jpg");
-  if (p.passport) fd.append("passport", p.passport, "passport.jpg");
-  if (p.avatar instanceof Blob) fd.append("avatar", p.avatar, "avatar.jpg");
+  // Files
+  if (p.ninSlip)      fd.append("ninSlip",      p.ninSlip,      "nin_slip.jpg");
+  if (p.passport)     fd.append("passport",     p.passport,     "passport.jpg");
+  if (p.addressProof) fd.append("addressProof", p.addressProof, "address_proof.jpg");
 
-  // Nested objects → JSON strings (common multipart pattern)
-  if (p.location)    fd.append("location",    JSON.stringify(p.location));
-  if (p.skill)       fd.append("skill",       JSON.stringify(p.skill));
-  if (p.category)    fd.append("category",    JSON.stringify(p.category));
-  if (p.bankDetails) fd.append("bankDetails", JSON.stringify(p.bankDetails));
+  // category — must be an array, send as category[]
+  if (p.category?.length) {
+    p.category.forEach((c) => fd.append("category[]", c));
+  }
+
+  // Nested objects → JSON strings
+  if (p.location) fd.append("location", JSON.stringify(p.location));
+  if (p.skill)    fd.append("skill",    JSON.stringify(p.skill));
+
+  // bankDetails — accountCode must always be a string
+  if (p.bankDetails) {
+    fd.append("bankDetails", JSON.stringify({
+      ...p.bankDetails,
+      accountCode: p.bankDetails.accountCode ?? "0000",
+    }));
+  }
 
   return fd;
 }
@@ -264,27 +275,32 @@ function buildTasFormData(p: RegisterTasPayload): FormData {
   fd.append("password",        p.password);
   fd.append("gender",          p.gender);
   fd.append("dateOfBirth",     p.dateOfBirth);
-  fd.append("applicationCode", p.applicationCode);  // always send, even ""
+  fd.append("applicationCode", p.applicationCode);
   if (p.referral) fd.append("referral", p.referral);
+  if (p.avatar)   fd.append("avatar",   p.avatar, "avatar.jpg");
 
-  // location — always send with address
   fd.append("location", JSON.stringify(p.location));
 
-  // Files
+  if (p.category?.length) {
+    p.category.forEach((c) => fd.append("category[]", c));
+  }
+
+  if (p.bankDetails) {
+    fd.append("bankDetails", JSON.stringify({
+      ...p.bankDetails,
+      accountCode: p.bankDetails.accountCode ?? "0000",
+    }));
+  }
+
+  if (p.recruitExpectations) {
+    fd.append("recruitExpectations", JSON.stringify(p.recruitExpectations));
+  }
+
   if (p.ninSlip)        fd.append("ninSlip",        p.ninSlip,        "nin_slip.jpg");
   if (p.bvnConsent)     fd.append("bvnConsent",     p.bvnConsent,     "bvn_consent.jpg");
   if (p.governmentId)   fd.append("governmentId",   p.governmentId,   "government_id.jpg");
   if (p.guarantorForm)  fd.append("guarantorForm",  p.guarantorForm,  "guarantor_form.jpg");
   if (p.policeClearing) fd.append("policeClearing", p.policeClearing, "police_clearing.jpg");
-  if (p.avatar instanceof Blob) fd.append("avatar", p.avatar, "avatar.jpg");
-
-  // category array
-  if (p.category) p.category.forEach((c) => fd.append("category[]", c));
-
-  // bankDetails — only send if bankName provided
-  if (p.bankDetails?.bankName) fd.append("bankDetails", JSON.stringify(p.bankDetails));
-
-  if (p.recruitExpectations) fd.append("recruitExpectations", JSON.stringify(p.recruitExpectations));
 
   return fd;
 }
