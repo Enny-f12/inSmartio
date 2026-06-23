@@ -20,7 +20,7 @@ const lbl: React.CSSProperties = {
   display: "block", fontSize: "12px", fontWeight: 500,
   color: "var(--color-text-muted)", marginBottom: "5px",
 };
-const row: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "4px" };
+const row: React.CSSProperties   = { display: "flex", flexDirection: "column", gap: "4px" };
 const grid2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" };
 
 // ── Categories ────────────────────────────────────────────
@@ -59,22 +59,24 @@ function PhoneInput({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-function DocPick({ label, required = false, picked, onPick }: {
-  label: string; required?: boolean; picked: File | null; onPick: (file: File) => void;
+function DocPick({ label, picked, onPick }: {
+  label: string; picked: File | null; onPick: (file: File) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div style={row}>
-      <label style={lbl}>{label}{required && " *"}</label>
+      <label style={lbl}>{label}</label>
       <input ref={ref} type="file" accept="image/*,.pdf" style={{ display: "none" }}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }} />
       {picked ? (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 12px",
           borderRadius: "10px", border: "1px solid #86efac", backgroundColor: "#f0fdf4" }}>
           <CheckCircle2 size={14} color="#16a34a" style={{ flexShrink: 0 }} />
-          <span style={{ fontSize: "12px", color: "#15803d", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{picked.name}</span>
+          <span style={{ fontSize: "12px", color: "#15803d", flex: 1, overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{picked.name}</span>
           <button type="button" onClick={() => ref.current?.click()}
-            style={{ fontSize: "11px", color: "#6B7280", background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0 }}>Change</button>
+            style={{ fontSize: "11px", color: "#6B7280", background: "none", border: "none",
+              cursor: "pointer", padding: 0, flexShrink: 0 }}>Change</button>
         </div>
       ) : (
         <button type="button" onClick={() => ref.current?.click()}
@@ -127,12 +129,14 @@ function StepBar({ steps, current }: { steps: { label: string; icon: React.React
             }}>
               {i < current ? <CheckCircle2 size={16} /> : s.icon}
             </div>
-            <span style={{ fontSize: "10px", color: i === current ? "#2563EB" : "var(--color-text-muted)", fontWeight: i === current ? 600 : 400, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: "10px", color: i === current ? "#2563EB" : "var(--color-text-muted)",
+              fontWeight: i === current ? 600 : 400, whiteSpace: "nowrap" }}>
               {s.label}
             </span>
           </div>
           {i < steps.length - 1 && (
-            <div style={{ flex: 1, height: "2px", backgroundColor: i < current ? "#16a34a" : "#E5E7EB", margin: "0 6px", marginBottom: "14px" }} />
+            <div style={{ flex: 1, height: "2px", backgroundColor: i < current ? "#16a34a" : "#E5E7EB",
+              margin: "0 6px", marginBottom: "14px" }} />
           )}
         </div>
       ))}
@@ -210,37 +214,38 @@ function ClientForm({ f, set, showPw, setShowPw }: {
 // EXPERT FORM — multistep
 // ══════════════════════════════════════════════════════════
 interface ExpertState {
-  // Step 1 — Profile
+  // Step 1 — Profile + Password
   name: string; email: string; phone: string; gender: string;
-  bio: string; referral: string; avatar: File | null;
+  bio: string; referral: string; avatar: File | null; password: string;
+  verification: string; paymentModel: string;
   // Step 2 — Service Info
+  // categoryName drives the display; selectedCategory is the string[] sent to API
   categoryName: string; subCategories: string[];
   skillRole: string; skillExp: string; skillDesc: string; skillArea: string;
-  verification: string; paymentModel: string;
   // Step 3 — Location
   country: string; state: string; city: string; area: string;
   // Step 4 — Bank Details
   bankName: string; accountNumber: string; accountName: string; accountCode: string; bvn: string;
-  // Step 5 — Documents & Password
-  ninSlip: File | null; passport: File | null; password: string;
+  // Step 5 — Documents (all optional)
+  ninSlip: File | null; passport: File | null; addressProof: File | null;
 }
 
 const defaultExpert = (): ExpertState => ({
-  name: "", email: "", phone: "", gender: "male", bio: "", referral: "", avatar: null,
+  name: "", email: "", phone: "", gender: "male", bio: "", referral: "",
+  avatar: null, password: "", verification: "tier1", paymentModel: "protected",
   categoryName: "", subCategories: [],
   skillRole: "", skillExp: "", skillDesc: "", skillArea: "",
-  verification: "tier1", paymentModel: "protected",
   country: "", state: "", city: "", area: "",
-  bankName: "", accountNumber: "", accountName: "", accountCode: "", bvn: "",
-  ninSlip: null, passport: null, password: "",
+  bankName: "", accountNumber: "", accountName: "", accountCode: "0000", bvn: "",
+  ninSlip: null, passport: null, addressProof: null,
 });
 
 const EXPERT_STEPS = [
-  { label: "Profile",    icon: <User size={14} /> },
-  { label: "Service",    icon: <Briefcase size={14} /> },
-  { label: "Location",   icon: <span style={{ fontSize: "11px" }}>📍</span> },
-  { label: "Bank",       icon: <CreditCard size={14} /> },
-  { label: "Docs",       icon: <FileText size={14} /> },
+  { label: "Profile",  icon: <User size={14} /> },
+  { label: "Service",  icon: <Briefcase size={14} /> },
+  { label: "Location", icon: <span style={{ fontSize: "11px" }}>📍</span> },
+  { label: "Bank",     icon: <CreditCard size={14} /> },
+  { label: "Docs",     icon: <FileText size={14} /> },
 ];
 
 function ExpertMultiStep({ f, setF, step }: {
@@ -251,15 +256,13 @@ function ExpertMultiStep({ f, setF, step }: {
     setF((p) => ({ ...p, [k]: v }));
 
   const subOptions = f.categoryName ? (CATEGORIES[f.categoryName] ?? []) : [];
-
-  const toggleSub = (sub: string) => {
+  const toggleSub = (sub: string) =>
     setF((p) => ({
       ...p,
       subCategories: p.subCategories.includes(sub)
         ? p.subCategories.filter((s) => s !== sub)
         : [...p.subCategories, sub],
     }));
-  };
 
   const pill = (active: boolean): React.CSSProperties => ({
     padding: "6px 10px", borderRadius: "8px",
@@ -269,6 +272,7 @@ function ExpertMultiStep({ f, setF, step }: {
     fontSize: "11px", cursor: "pointer", fontWeight: active ? 600 : 400,
   });
 
+  // Step 1 — Profile + Password
   if (step === 0) return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <AvatarPick picked={f.avatar} onPick={(file) => set("avatar", file)} />
@@ -284,23 +288,39 @@ function ExpertMultiStep({ f, setF, step }: {
       <div style={grid2}>
         <div style={row}><label style={lbl}>Gender *</label>
           <select style={inp} value={f.gender} onChange={(e) => set("gender", e.target.value)}>
-            <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
           </select>
         </div>
         <div style={row}><label style={lbl}>Verification Tier</label>
           <select style={inp} value={f.verification} onChange={(e) => set("verification", e.target.value)}>
-            <option value="tier1">Tier 1</option><option value="tier2">Tier 2</option><option value="tier3">Tier 3</option>
+            <option value="tier1">Tier 1</option>
+            <option value="tier2">Tier 2</option>
+            <option value="tier3">Tier 3</option>
           </select>
         </div>
       </div>
       <div style={row}><label style={lbl}>Payment Model</label>
         <select style={inp} value={f.paymentModel} onChange={(e) => set("paymentModel", e.target.value)}>
-          <option value="protected">Protected</option><option value="unprotected">Unprotected</option>
+          <option value="protected">Protected</option>
+          <option value="unprotected">Unprotected</option>
         </select>
       </div>
       <div style={row}><label style={lbl}>Bio *</label>
         <textarea style={{ ...inp, resize: "none" } as React.CSSProperties} rows={3}
           placeholder="Brief description..." value={f.bio} onChange={(e) => set("bio", e.target.value)} />
+      </div>
+      <div style={row}><label style={lbl}>Password *</label>
+        <div style={{ position: "relative" }}>
+          <input style={{ ...inp, paddingRight: "40px" }} type={showPw ? "text" : "password"}
+            placeholder="StrongPass123!" value={f.password} onChange={(e) => set("password", e.target.value)} />
+          <button type="button" onClick={() => setShowPw(!showPw)}
+            style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
       </div>
       <div style={row}><label style={lbl}>Referral Code</label>
         <input style={inp} placeholder="Optional" value={f.referral} onChange={(e) => set("referral", e.target.value)} />
@@ -308,10 +328,12 @@ function ExpertMultiStep({ f, setF, step }: {
     </div>
   );
 
+  // Step 2 — Service Info
   if (step === 1) return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={row}><label style={lbl}>Category *</label>
-        <select style={inp} value={f.categoryName} onChange={(e) => { set("categoryName", e.target.value); set("subCategories", []); }}>
+        <select style={inp} value={f.categoryName}
+          onChange={(e) => { set("categoryName", e.target.value); set("subCategories", []); }}>
           <option value="">Select a category</option>
           {Object.keys(CATEGORIES).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
         </select>
@@ -329,19 +351,24 @@ function ExpertMultiStep({ f, setF, step }: {
       )}
       <div style={grid2}>
         <div style={row}><label style={lbl}>Role / Title</label>
-          <input style={inp} placeholder="e.g. Electrician" value={f.skillRole} onChange={(e) => set("skillRole", e.target.value)} /></div>
+          <input style={inp} placeholder="e.g. Electrician" value={f.skillRole}
+            onChange={(e) => set("skillRole", e.target.value)} /></div>
         <div style={row}><label style={lbl}>Experience (yrs)</label>
-          <input style={inp} type="number" min="0" placeholder="5" value={f.skillExp} onChange={(e) => set("skillExp", e.target.value)} /></div>
+          <input style={inp} type="number" min="0" placeholder="5" value={f.skillExp}
+            onChange={(e) => set("skillExp", e.target.value)} /></div>
       </div>
       <div style={row}><label style={lbl}>Skill Description</label>
-        <input style={inp} placeholder="e.g. Electrical installation and repairs" value={f.skillDesc} onChange={(e) => set("skillDesc", e.target.value)} />
+        <input style={inp} placeholder="e.g. Electrical installation and repairs" value={f.skillDesc}
+          onChange={(e) => set("skillDesc", e.target.value)} />
       </div>
       <div style={row}><label style={lbl}>Service Area</label>
-        <input style={inp} placeholder="e.g. Ikeja" value={f.skillArea} onChange={(e) => set("skillArea", e.target.value)} />
+        <input style={inp} placeholder="e.g. Ikeja" value={f.skillArea}
+          onChange={(e) => set("skillArea", e.target.value)} />
       </div>
     </div>
   );
 
+  // Step 3 — Location
   if (step === 2) return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={grid2}>
@@ -357,16 +384,19 @@ function ExpertMultiStep({ f, setF, step }: {
     </div>
   );
 
+  // Step 4 — Bank Details
   if (step === 3) return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={grid2}>
         <div style={row}><label style={lbl}>Bank Name</label>
-          <input style={inp} placeholder="e.g. OPay" value={f.bankName} onChange={(e) => set("bankName", e.target.value)} /></div>
+          <input style={inp} placeholder="e.g. OPay" value={f.bankName}
+            onChange={(e) => set("bankName", e.target.value)} /></div>
         <div style={row}><label style={lbl}>Account Number</label>
           <input style={inp} placeholder="0123456789" maxLength={10} value={f.accountNumber}
             onChange={(e) => set("accountNumber", e.target.value.replace(/\D/g, "").slice(0, 10))} /></div>
         <div style={row}><label style={lbl}>Account Name</label>
-          <input style={inp} placeholder="John Doe" value={f.accountName} onChange={(e) => set("accountName", e.target.value)} /></div>
+          <input style={inp} placeholder="John Doe" value={f.accountName}
+            onChange={(e) => set("accountName", e.target.value)} /></div>
         <div style={row}><label style={lbl}>BVN</label>
           <input style={inp} placeholder="22334455666" maxLength={11} value={f.bvn}
             onChange={(e) => set("bvn", e.target.value.replace(/\D/g, "").slice(0, 11))} /></div>
@@ -374,22 +404,12 @@ function ExpertMultiStep({ f, setF, step }: {
     </div>
   );
 
-  // step 4 — Docs & Password
+  // Step 5 — Documents (all optional, file pickers)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <DocPick label="NIN Slip" required picked={f.ninSlip} onPick={(file) => set("ninSlip", file)} />
-      <DocPick label="Passport Photo" required picked={f.passport} onPick={(file) => set("passport", file)} />
-      <div style={row}><label style={lbl}>Password *</label>
-        <div style={{ position: "relative" }}>
-          <input style={{ ...inp, paddingRight: "40px" }} type={showPw ? "text" : "password"}
-            placeholder="StrongPass123!" value={f.password} onChange={(e) => set("password", e.target.value)} />
-          <button type="button" onClick={() => setShowPw(!showPw)}
-            style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
-              background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
-            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-      </div>
+      <DocPick label="NIN Slip" picked={f.ninSlip} onPick={(file) => set("ninSlip", file)} />
+      <DocPick label="Passport Photo" picked={f.passport} onPick={(file) => set("passport", file)} />
+      <DocPick label="Address Proof" picked={f.addressProof} onPick={(file) => set("addressProof", file)} />
     </div>
   );
 }
@@ -398,18 +418,14 @@ function ExpertMultiStep({ f, setF, step }: {
 // TAS FORM — multistep
 // ══════════════════════════════════════════════════════════
 interface TasState {
-  // Step 1 — Profile
   name: string; email: string; username: string; phone: string;
   password: string; gender: string; dateOfBirth: string;
   applicationCode: string; address: string; avatar: File | null;
-  // Step 2 — Experience & Categories
   hasRecruitmentExp: "yes" | "no" | "";
   selectedCategories: string[];
   otherCategory: string;
   monthlyRecruitment: string;
-  // Step 3 — Bank Details
   bankName: string; accountNumber: string; accountName: string; accountCode: string;
-  // Step 4 — Documents & Referral
   ninSlip: File | null; bvnConsent: File | null; governmentId: File | null;
   guarantorForm: File | null; policeClearing: File | null;
   wasReferred: "yes" | "no" | ""; referralCode: string;
@@ -439,14 +455,13 @@ function TasMultiStep({ f, setF, step }: {
   const set = (k: keyof TasState, v: string | File | null | string[]) =>
     setF((p) => ({ ...p, [k]: v }));
 
-  const toggleCategory = (cat: string) => {
+  const toggleCategory = (cat: string) =>
     setF((p) => ({
       ...p,
       selectedCategories: p.selectedCategories.includes(cat)
         ? p.selectedCategories.filter((c) => c !== cat)
         : [...p.selectedCategories, cat],
     }));
-  };
 
   const pill = (active: boolean): React.CSSProperties => ({
     padding: "8px 12px", borderRadius: "10px",
@@ -455,7 +470,6 @@ function TasMultiStep({ f, setF, step }: {
     color: active ? "#2563EB" : "var(--color-text-main)",
     fontSize: "12px", cursor: "pointer", textAlign: "left", fontWeight: active ? 600 : 400,
   });
-
   const radio = (active: boolean): React.CSSProperties => ({
     display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px",
     borderRadius: "10px", border: `1.5px solid ${active ? "#2563EB" : "#D1D5DB"}`,
@@ -463,7 +477,6 @@ function TasMultiStep({ f, setF, step }: {
     cursor: "pointer", fontSize: "13px",
     color: active ? "#2563EB" : "var(--color-text-main)", fontWeight: active ? 600 : 400,
   });
-
   const dot = (active: boolean): React.CSSProperties => ({
     width: "14px", height: "14px", borderRadius: "50%",
     border: `2px solid ${active ? "#2563EB" : "#9CA3AF"}`,
@@ -497,10 +510,12 @@ function TasMultiStep({ f, setF, step }: {
         </div>
       </div>
       <div style={row}><label style={lbl}>Application Code *</label>
-        <input style={inp} placeholder="e.g. TAS-APP-2024-001" value={f.applicationCode} onChange={(e) => set("applicationCode", e.target.value)} />
+        <input style={inp} placeholder="e.g. TAS-APP-2024-001" value={f.applicationCode}
+          onChange={(e) => set("applicationCode", e.target.value)} />
       </div>
       <div style={row}><label style={lbl}>Address *</label>
-        <input style={inp} placeholder="e.g. Abule Egba, Lagos, Nigeria" value={f.address} onChange={(e) => set("address", e.target.value)} />
+        <input style={inp} placeholder="e.g. Abule Egba, Lagos, Nigeria" value={f.address}
+          onChange={(e) => set("address", e.target.value)} />
       </div>
       <div style={row}><label style={lbl}>Password *</label>
         <div style={{ position: "relative" }}>
@@ -529,7 +544,6 @@ function TasMultiStep({ f, setF, step }: {
           </button>
         </div>
       </div>
-
       <div style={row}>
         <label style={lbl}>Which categories can you recruit? *</label>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
@@ -545,7 +559,6 @@ function TasMultiStep({ f, setF, step }: {
             value={f.otherCategory} onChange={(e) => set("otherCategory", e.target.value)} />
         </div>
       </div>
-
       <div style={row}>
         <label style={lbl}>How many experts can you recruit monthly? *</label>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -573,16 +586,14 @@ function TasMultiStep({ f, setF, step }: {
     </div>
   );
 
-  // step 3 — Documents & Referral
+  // Step 3 — Documents & Referral
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <DocPick label="NIN Slip" required picked={f.ninSlip} onPick={(file) => set("ninSlip", file)} />
+      <DocPick label="NIN Slip" picked={f.ninSlip} onPick={(file) => set("ninSlip", file)} />
       <DocPick label="BVN Consent" picked={f.bvnConsent} onPick={(file) => set("bvnConsent", file)} />
       <DocPick label="Government ID" picked={f.governmentId} onPick={(file) => set("governmentId", file)} />
-      <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>Optional (for Tier 3 eligibility):</p>
       <DocPick label="Guarantor Form" picked={f.guarantorForm} onPick={(file) => set("guarantorForm", file)} />
       <DocPick label="Police Clearance" picked={f.policeClearing} onPick={(file) => set("policeClearing", file)} />
-
       <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: "14px" }}>
         <label style={lbl}>Were you referred by an existing TAS?</label>
         <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
@@ -642,19 +653,16 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
   const handleClose      = () => { reset(); onClose(); };
   const handleRoleSelect = (r: Role) => { setRole(r); setStage("form"); setStep(0); };
 
-  // ── Step validation ───────────────────────────────────
   const validateExpertStep = (): boolean => {
     const f = expertF;
     if (step === 0) {
-      if (!f.name || !f.email || !f.bio) { toast.warning("Name, email and bio are required"); return false; }
+      if (!f.name)     { toast.warning("Full name is required"); return false; }
+      if (!f.email)    { toast.warning("Email is required"); return false; }
+      if (!f.bio)      { toast.warning("Bio is required"); return false; }
+      if (!f.password) { toast.warning("Password is required"); return false; }
     }
-    if (step === 1) {
-      if (!f.categoryName) { toast.warning("Please select a category"); return false; }
-    }
-    if (step === 4) {
-      if (!f.ninSlip)   { toast.warning("NIN slip is required"); return false; }
-      if (!f.passport)  { toast.warning("Passport photo is required"); return false; }
-      if (!f.password)  { toast.warning("Password is required"); return false; }
+    if (step === 1 && !f.categoryName) {
+      toast.warning("Please select a category"); return false;
     }
     return true;
   };
@@ -675,11 +683,8 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
       }
       if (!f.monthlyRecruitment) { toast.warning("Please select monthly recruitment capacity"); return false; }
     }
-    if (step === 3) {
-      if (!f.ninSlip) { toast.warning("NIN slip is required"); return false; }
-      if (f.wasReferred === "yes" && !f.referralCode.trim()) {
-        toast.warning("Please enter the referral code"); return false;
-      }
+    if (step === 3 && f.wasReferred === "yes" && !f.referralCode.trim()) {
+      toast.warning("Please enter the referral code"); return false;
     }
     return true;
   };
@@ -689,10 +694,8 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
     if (role === "tas"    && !validateTasStep())    return;
     setStep((s) => s + 1);
   };
-
   const handleBack = () => setStep((s) => Math.max(0, s - 1));
 
-  // ── Submit ─────────────────────────────────────────────
   const handleSubmit = () => {
     let payload: RegisterUserPayload;
 
@@ -711,17 +714,24 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
     } else if (role === "expert") {
       if (!validateExpertStep()) return;
       const f = expertF;
+
+      // category sent as string[] — the category name is the entry
+      const categoryArr: string[] = f.categoryName ? [f.categoryName] : [];
+
       payload = {
         role: "expert",
         name: f.name, email: f.email, password: f.password,
         phone: f.phone ? `+234${f.phone}` : "",
         gender: f.gender as "male" | "female" | "other",
-        bio: f.bio, referral: f.referral || undefined,
+        bio: f.bio,
+        referral:     f.referral     || undefined,
         verification: (f.verification as "tier1" | "tier2" | "tier3") || "tier1",
         paymentModel: (f.paymentModel as "protected" | "unprotected") || "protected",
-        avatar: f.avatar ?? undefined,
-        ninSlip:  f.ninSlip  ?? undefined,
-        passport: f.passport ?? undefined,
+        avatar:       f.avatar       ?? undefined,
+        ninSlip:      f.ninSlip      ?? undefined,
+        passport:     f.passport     ?? undefined,
+        addressProof: f.addressProof ?? undefined,
+        category: categoryArr,
         location: { country: f.country, state: f.state, city: f.city, area: f.area },
         skill: {
           role:        f.skillRole ? [f.skillRole] : [],
@@ -729,17 +739,13 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
           description: f.skillDesc,
           area:        f.skillArea,
         },
-        category: {
-          name: f.categoryName,
-          sub:  f.subCategories,
-        },
-        bankDetails: f.bankName ? {
-          bankName:      f.bankName,
+        bankDetails: {
+          bankName:      f.bankName      || undefined,
           accountNumber: f.accountNumber || undefined,
           accountName:   f.accountName   || undefined,
-          accountCode:   f.accountCode   || undefined,
+          accountCode:   f.accountCode   || "0000",  // always a string
           bvn:           f.bvn           || undefined,
-        } : undefined,
+        },
       } as RegisterUserPayload;
 
     } else {
@@ -756,16 +762,16 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
         gender: f.gender as "male" | "female" | "other",
         dateOfBirth: f.dateOfBirth,
         applicationCode: f.applicationCode,
-        avatar: f.avatar ?? undefined,
+        avatar:   f.avatar ?? undefined,
         category: allCategories,
         referral: f.wasReferred === "yes" ? f.referralCode : undefined,
         location: { address: f.address },
-        bankDetails: f.bankName ? {
-          bankName:      f.bankName,
+        bankDetails: {
+          bankName:      f.bankName      || undefined,
           accountNumber: f.accountNumber || undefined,
           accountName:   f.accountName   || undefined,
-          accountCode:   f.accountCode   || "0000",
-        } : undefined,
+          accountCode:   f.accountCode   || "0000",  // always a string
+        },
         ninSlip:        f.ninSlip        ?? undefined,
         bvnConsent:     f.bvnConsent     ?? undefined,
         governmentId:   f.governmentId   ?? undefined,
@@ -791,7 +797,6 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
       .finally(() => setAddLoading(false));
   };
 
-  // ── Footer ─────────────────────────────────────────────
   const isExpertLast = role === "expert" && step === expertTotalSteps - 1;
   const isTasLast    = role === "tas"    && step === tasTotalSteps - 1;
   const isLastStep   = isExpertLast || isTasLast || role === "client";
@@ -803,7 +808,7 @@ export default function AddUserModal({ open, onClose }: AddUserModalProps) {
 
   const footer = stage === "role" ? undefined : (
     <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-      <button onClick={stage === "form" && (step > 0) ? handleBack : handleClose}
+      <button onClick={stage === "form" && step > 0 ? handleBack : handleClose}
         style={{ padding: "10px 16px", borderRadius: "10px", border: "1px solid #D1D5DB",
           backgroundColor: "var(--color-surface)", fontSize: "13px",
           cursor: "pointer", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
