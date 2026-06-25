@@ -3,7 +3,7 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   getAllBanners, createBanner, updateBanner, deleteBanner, recordBannerClick,
-  type ApiBanner, type CreateBannerPayload, type UpdateBannerPayload,
+  type ApiBanner, type CreateBannerPayload, type UpdateBannerPayload, type BannerRole,
 } from "@/lib/api/bannerApi";
 
 interface BannerState {
@@ -25,15 +25,14 @@ const errMsg = (err: unknown, fallback: string) =>
 
 export const fetchBanners = createAsyncThunk(
   "banners/fetchAll",
-  async (_, { rejectWithValue }) => {
-    try { return await getAllBanners(); }
+  async (role: BannerRole = "all", { rejectWithValue }) => {
+    try { return await getAllBanners(role); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch banners")); }
   }
 );
 
 export const addBanner = createAsyncThunk(
   "banners/add",
-  // Allow Blob in image so the file passes through to the API untouched
   async (payload: Omit<CreateBannerPayload, "image"> & { image: string | Blob }, { rejectWithValue }) => {
     try { return await createBanner(payload as CreateBannerPayload); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to create banner")); }

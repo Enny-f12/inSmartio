@@ -3,16 +3,17 @@ import axiosInstance from "@/lib/api/axiosInstance";
 
 // ── Types ─────────────────────────────────────────────────
 
-// Cloudinary returns image as an object — normalise it to a string URL
 interface CloudinaryImage {
-  url:    string;
-  bytes?: number;
+  url:     string;
+  bytes?:  number;
   format?: string;
 }
 
+export type BannerRole = "all" | "expert" | "tas" | "client";
+
 export interface ApiBanner {
   id:            string;
-  image:         string; // always a URL string after normalisation
+  image:         string;
   title:         string;
   subTitle:      string;
   ctaButtonText: string;
@@ -20,12 +21,12 @@ export interface ApiBanner {
   startDate:     string;
   endDate:       string;
   status:        string;
+  role:          BannerRole;
   click:         number;
   createdAt:     string;
   updatedAt:     string;
 }
 
-// Raw shape from the API before normalisation
 interface RawApiBanner extends Omit<ApiBanner, "image"> {
   image: string | CloudinaryImage;
 }
@@ -38,6 +39,7 @@ export interface CreateBannerPayload {
   ctaLink:       string;
   startDate:     string;
   endDate:       string;
+  role?:         BannerRole;
 }
 
 export interface UpdateBannerPayload extends Partial<CreateBannerPayload> {
@@ -72,8 +74,10 @@ function normalise(raw: RawApiBanner): ApiBanner {
 
 // ── API functions ─────────────────────────────────────────
 
-export const getAllBanners = async (): Promise<ApiBanner[]> => {
-  const { data } = await axiosInstance.get<BannersResponse>("/banner");
+export const getAllBanners = async (role: BannerRole = "all"): Promise<ApiBanner[]> => {
+  const { data } = await axiosInstance.get<BannersResponse>("/banner", {
+    params: { role },
+  });
   return (data.data ?? []).map(normalise);
 };
 
@@ -97,6 +101,7 @@ export const createBanner = async (payload: CreateBannerPayload): Promise<ApiBan
   fd.append("ctaLink",       payload.ctaLink);
   fd.append("startDate",     payload.startDate);
   fd.append("endDate",       payload.endDate);
+  fd.append("role",          payload.role ?? "all");
 
   const { data } = await axiosInstance.post<BannerResponse>("/banner", fd, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -127,6 +132,7 @@ export const updateBanner = async (id: string, payload: UpdateBannerPayload): Pr
   if (payload.startDate     !== undefined) fd.append("startDate",     payload.startDate);
   if (payload.endDate       !== undefined) fd.append("endDate",       payload.endDate);
   if (payload.status        !== undefined) fd.append("status",        payload.status);
+  if (payload.role          !== undefined) fd.append("role",          payload.role);
 
   const { data } = await axiosInstance.put<BannerResponse>(`/banner/${id}`, fd, {
     headers: { "Content-Type": "multipart/form-data" },
