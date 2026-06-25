@@ -100,20 +100,7 @@ export default function ApplicationsTab({ agents }: Props) {
   return (
     <div style={card}>
 
-      {/* Stats bar */}
-      <div style={{
-        padding: "14px 20px", borderBottom: "1px solid #E5E7EB",
-        display: "flex", gap: 24, flexWrap: "wrap", backgroundColor: "#F9FAFB",
-      }}>
-        {(["pending", "approved", "rejected"] as AppTab[]).map((key) => (
-          <span key={key} style={{ fontSize: 13, color: "#6B7280" }}>
-            {key.charAt(0).toUpperCase() + key.slice(1)}:{" "}
-            <strong style={{ color: "#111827" }}>{counts[key]}</strong>
-          </span>
-        ))}
-      </div>
-
-      {/* Sub-tabs */}
+      {/* Sub-tabs — counts live here, no separate stats bar needed */}
       <div style={{ display: "flex", borderBottom: "1px solid #E5E7EB", padding: "0 20px" }}>
         {appTabs.map((t) => (
           <button key={t.key} onClick={() => setAppTab(t.key)}
