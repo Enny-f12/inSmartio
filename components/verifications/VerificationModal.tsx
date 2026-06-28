@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { X, CheckCircle2, Phone, Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { X, CheckCircle2, Phone, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
@@ -55,15 +55,48 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Status banner ─────────────────────────────────────────────────────────────
+
+function StatusBanner({ status }: { status: "approved" | "rejected" }) {
+  const isApproved = status === "approved";
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: "10px",
+      padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
+      backgroundColor: isApproved ? "#f0fdf4" : "#fef2f2",
+      border: `1px solid ${isApproved ? "#bbf7d0" : "#fecaca"}`,
+    }}>
+      {isApproved
+        ? <CheckCircle2 size={18} color="#16a34a" />
+        : <XCircle size={18} color="#dc2626" />
+      }
+      <div>
+        <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : "#dc2626" }}>
+          {isApproved ? "Verification Approved" : "Verification Rejected"}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: "12px", color: isApproved ? "#166534" : "#b91c1c" }}>
+          {isApproved
+            ? "This expert has been marked as verified."
+            : "This expert's verification has been rejected."
+          }
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Document row ──────────────────────────────────────────────────────────────
 
-function DocumentRow({ name, url, checked, onCheck }: {
-  name:    string;
-  url?:    string;
-  checked: boolean;
-  onCheck: () => void;
+function DocumentRow({ name, url, checked, onCheck, forceVerified }: {
+  name:          string;
+  url?:          string;
+  checked:       boolean;
+  onCheck:       () => void;
+  forceVerified?: boolean;
 }) {
-  const has = !!url && url.length > 10;
+  const has         = !!url && url.length > 10;
+  const showChecked = forceVerified || checked;
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
       <span style={{ flex: 1, fontSize: "13px", color: "#111827" }}>{name}</span>
@@ -83,9 +116,20 @@ function DocumentRow({ name, url, checked, onCheck }: {
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
           </a>
-          <label style={{ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", fontSize: "12px", color: checked ? "#16a34a" : "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={checked} onChange={onCheck}
-              style={{ accentColor: "#16a34a", width: 13, height: 13 }} />
+          <label style={{
+            display: "flex", alignItems: "center", gap: "4px",
+            cursor: forceVerified ? "default" : "pointer",
+            fontSize: "12px",
+            color: showChecked ? "#16a34a" : "#6B7280",
+            fontWeight: 500, whiteSpace: "nowrap",
+          }}>
+            <input
+              type="checkbox"
+              checked={showChecked}
+              onChange={forceVerified ? undefined : onCheck}
+              readOnly={forceVerified}
+              style={{ accentColor: "#16a34a", width: 13, height: 13 }}
+            />
             Verified
           </label>
         </>
@@ -106,13 +150,19 @@ const TYPE_LABEL: Record<string, string> = {
   "addressproof":    "Proof of Address",
   "guarantorform":   "Guarantor Form",
   "policeclearance": "Police Clearance Certificate",
+  "portfolio":       "Portfolio",
 };
 
-const n = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "");
+const normaliseKey = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "");
 
-const TIER12_KEYS = new Set(["ninslip", "governmentid", "profilephoto"]);
+const TIER12_KEYS = new Set([
+  "ninslip",
+  "governmentid",
+  "profilephoto",
+  "addressproof",
+  "portfolio",
+]);
 
-// Now includes publicId so we can send it as documentKey
 interface Doc {
   key:       string;
   name:      string;
@@ -131,14 +181,14 @@ function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[]
     const el = raw[idx] as Record<string, unknown> | undefined;
     if (!el || typeof el !== "object") continue;
 
-    const typeKey  = n(typeof el.type     === "string" ? el.type     : "");
-    const url      = typeof el.url        === "string" && el.url.length > 10 ? el.url : undefined;
-    const publicId = typeof el.publicId   === "string" && el.publicId.length > 0 ? el.publicId : undefined;
+    const typeKey  = normaliseKey(typeof el.type === "string" ? el.type : "");
+    const url      = typeof el.url      === "string" && el.url.length > 10     ? el.url      : undefined;
+    const publicId = typeof el.publicId === "string" && el.publicId.length > 0 ? el.publicId : undefined;
     const label    = TYPE_LABEL[typeKey] ?? (typeof el.type === "string" ? el.type : "Document");
 
-    if (tier === "tier1" || tier === "tier2") {
-      if (!TIER12_KEYS.has(typeKey)) continue;
-    }
+    // Tier 1 & 2: only show TIER12_KEYS; Tier 3: show everything
+    if ((tier === "tier1" || tier === "tier2") && !TIER12_KEYS.has(typeKey)) continue;
+
     docs.push({ key: typeKey || idx, name: label, url, publicId });
   }
   return docs;
@@ -151,11 +201,28 @@ function resolveDocumentKey(detail: ApiVerificationDetail): string | undefined {
   for (const idx of indices) {
     const el = raw[idx] as Record<string, unknown> | undefined;
     if (!el) continue;
-    // Use publicId first, fall back to id
     if (typeof el.publicId === "string" && el.publicId.length > 0) return el.publicId;
-    if (typeof el.id === "string" && el.id.length > 0) return el.id;
+    if (typeof el.id       === "string" && el.id.length       > 0) return el.id;
   }
   return undefined;
+}
+
+// ── Exported doc-count helper ─────────────────────────────────────────────────
+export function countDocsFromDetail(
+  detail: ApiVerificationDetail,
+): { submitted: number; total: number } {
+  const raw = detail.document as Record<string, unknown> | null | undefined;
+  if (!raw || typeof raw !== "object") return { submitted: 0, total: 0 };
+
+  const entries   = Object.values(raw);
+  const total     = entries.length;
+  const submitted = entries.filter((el) => {
+    if (!el || typeof el !== "object") return false;
+    const e = el as Record<string, unknown>;
+    return typeof e.url === "string" && e.url.length > 10;
+  }).length;
+
+  return { submitted, total };
 }
 
 // ── Approve / Reject footer ───────────────────────────────────────────────────
@@ -183,11 +250,23 @@ function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
   );
 }
 
+// Footer shown after a decision — just a close button
+function ClosedFooter({ onClose }: { onClose: () => void }) {
+  return (
+    <div style={{ display: "flex", width: "100%" }}>
+      <button onClick={onClose}
+        style={{ padding: "10px 24px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#374151", backgroundColor: "#F3F4F6", border: "none", cursor: "pointer" }}>
+        Close
+      </button>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // TIER 1 & 2 MODAL
 // ══════════════════════════════════════════════════════════════════════════════
 
-function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMutating, warningBanner }: {
+function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMutating, resolvedStatus }: {
   expert:         ApiVerificationDetail;
   summary:        ApiVerificationSummary;
   tier:           VerificationTier;
@@ -195,25 +274,49 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
   onApprove:      () => void;
   onReject:       () => void;
   isMutating:     boolean;
-  warningBanner?: React.ReactNode;
+  resolvedStatus: "approved" | "rejected" | null;
 }) {
+  const isApproved = resolvedStatus === "approved";
+  const isDecided  = resolvedStatus !== null;
+
   const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
-  const toggle = (k: string) => setDocChecks(p => ({ ...p, [k]: !p[k] }));
+  const toggle = (k: string) => { if (!isDecided) setDocChecks(p => ({ ...p, [k]: !p[k] })); };
+
   const docs = parseDocs(expert, tier);
   const nin  = summary.ninVerification;
 
   const mailtoHref = `mailto:${expert.email}?subject=${encodeURIComponent("Verification – More Information Needed")}&body=${encodeURIComponent(`Dear ${expert.name},\n\nWe need additional information to process your verification.\n\nPlease respond at your earliest convenience.\n\nThank you.`)}`;
 
-  const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "8px", padding: "9px 0", borderBottom: "1px solid #F3F4F6", fontSize: "13px" };
+  const rowStyle: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: "8px",
+    padding: "9px 0", borderBottom: "1px solid #F3F4F6", fontSize: "13px",
+  };
   const lbl: React.CSSProperties = { width: "130px", flexShrink: 0, color: "#6B7280" };
-  const chkLbl = (k: string): React.CSSProperties => ({ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", fontSize: "12px", color: docChecks[k] ? "#16a34a" : "#6B7280", fontWeight: 500, whiteSpace: "nowrap", marginLeft: "auto" });
+
+  const ninChecked = (k: string) => isApproved ? true : !!docChecks[k];
+  const chkLbl = (k: string): React.CSSProperties => ({
+    display: "flex", alignItems: "center", gap: "4px",
+    cursor: isDecided ? "default" : "pointer",
+    fontSize: "12px",
+    color: ninChecked(k) ? "#16a34a" : "#6B7280",
+    fontWeight: 500, whiteSpace: "nowrap", marginLeft: "auto",
+  });
 
   return (
-    <Modal open onClose={onClose} title="Verification Detail"
-      footer={<ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />}
-      size="md">
+    <Modal
+      open
+      onClose={onClose}
+      title="Verification Detail"
+      footer={
+        isDecided
+          ? <ClosedFooter onClose={onClose} />
+          : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
+      }
+      size="md"
+    >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {warningBanner}
+        {isDecided && <StatusBanner status={resolvedStatus} />}
+
         <Card>
           <SectionTitle title="Expert Information" />
           <InfoRow label="Name:"         value={expert.name} />
@@ -228,8 +331,14 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
           {docs.length === 0
             ? <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No documents found.</p>
             : docs.map(d => (
-                <DocumentRow key={d.key} name={d.name} url={d.url}
-                  checked={!!docChecks[d.key]} onCheck={() => toggle(d.key)} />
+                <DocumentRow
+                  key={d.key}
+                  name={d.name}
+                  url={d.url}
+                  checked={!!docChecks[d.key]}
+                  onCheck={() => toggle(d.key)}
+                  forceVerified={isApproved}
+                />
               ))
           }
         </Card>
@@ -244,21 +353,21 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
             <span style={lbl}>NIN Status:</span>
             <span style={{ color: "#111827", flex: 1 }}>{nin?.ninStatus || "—"}</span>
             <label style={chkLbl("ninStatus")}>
-              <input type="checkbox" checked={!!docChecks["ninStatus"]} onChange={() => toggle("ninStatus")}
+              <input type="checkbox" checked={ninChecked("ninStatus")} onChange={() => toggle("ninStatus")} readOnly={isDecided}
                 style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
             </label>
           </div>
           <div style={{ ...rowStyle }}>
             <span style={lbl}>Name Match:</span>
             <label style={chkLbl("ninNameMatch")}>
-              <input type="checkbox" checked={!!docChecks["ninNameMatch"]} onChange={() => toggle("ninNameMatch")}
+              <input type="checkbox" checked={ninChecked("ninNameMatch")} onChange={() => toggle("ninNameMatch")} readOnly={isDecided}
                 style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
             </label>
           </div>
           <div style={{ ...rowStyle, borderBottom: "none" }}>
             <span style={lbl}>DOB Match:</span>
             <label style={chkLbl("ninDobMatch")}>
-              <input type="checkbox" checked={!!docChecks["ninDobMatch"]} onChange={() => toggle("ninDobMatch")}
+              <input type="checkbox" checked={ninChecked("ninDobMatch")} onChange={() => toggle("ninDobMatch")} readOnly={isDecided}
                 style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
             </label>
           </div>
@@ -272,18 +381,23 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
 // TIER 3 MODAL
 // ══════════════════════════════════════════════════════════════════════════════
 
-function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating, warningBanner }: {
+function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating, resolvedStatus }: {
   expert:         ApiVerificationDetail;
   summary:        ApiVerificationSummary;
   onClose:        () => void;
   onApprove:      () => void;
   onReject:       () => void;
   isMutating:     boolean;
-  warningBanner?: React.ReactNode;
+  resolvedStatus: "approved" | "rejected" | null;
 }) {
+  const isApproved = resolvedStatus === "approved";
+  const isDecided  = resolvedStatus !== null;
+
   const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
   const [notes, setNotes]         = useState("");
-  const toggle = (k: string) => setDocChecks(p => ({ ...p, [k]: !p[k] }));
+  const toggle = (k: string) => { if (!isDecided) setDocChecks(p => ({ ...p, [k]: !p[k] })); };
+
+  // Tier 3: show ALL document types
   const docs      = parseDocs(expert, "tier3");
   const guarantor = summary.guarantor;
   const policeClr = summary.policeClearance;
@@ -291,11 +405,20 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
   const mailtoHref = `mailto:${expert.email}?subject=${encodeURIComponent("TAS Verification – More Information Needed")}&body=${encodeURIComponent(`Dear ${expert.name},\n\nWe need additional information to process your TAS verification.\n\nPlease respond at your earliest convenience.\n\nThank you.`)}`;
 
   return (
-    <Modal open onClose={onClose} title="Verification Detail (Tier 3 – TAS)"
-      footer={<ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />}
-      size="md">
+    <Modal
+      open
+      onClose={onClose}
+      title="Verification Detail (Tier 3 – TAS)"
+      footer={
+        isDecided
+          ? <ClosedFooter onClose={onClose} />
+          : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
+      }
+      size="md"
+    >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {warningBanner}
+        {isDecided && <StatusBanner status={resolvedStatus} />}
+
         <Card>
           <SectionTitle title="Expert Information" />
           <InfoRow label="Name:"         value={expert.name} />
@@ -311,8 +434,14 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
           {docs.length === 0
             ? <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No documents found.</p>
             : docs.map(d => (
-                <DocumentRow key={d.key} name={d.name} url={d.url}
-                  checked={!!docChecks[d.key]} onCheck={() => toggle(d.key)} />
+                <DocumentRow
+                  key={d.key}
+                  name={d.name}
+                  url={d.url}
+                  checked={!!docChecks[d.key]}
+                  onCheck={() => toggle(d.key)}
+                  forceVerified={isApproved}
+                />
               ))
           }
         </Card>
@@ -331,12 +460,14 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
                 </a>
               }
             />
-            <div style={{ marginTop: "10px" }}>
-              <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "6px", fontWeight: 500 }}>Admin Notes</p>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Add notes about the guarantor call…" rows={3}
-                style={{ width: "100%", borderRadius: "8px", border: "1px solid #E5E7EB", padding: "10px 12px", fontSize: "13px", color: "#111827", backgroundColor: "#fff", resize: "none", outline: "none", boxSizing: "border-box" }} />
-            </div>
+            {!isDecided && (
+              <div style={{ marginTop: "10px" }}>
+                <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "6px", fontWeight: 500 }}>Admin Notes</p>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                  placeholder="Add notes about the guarantor call…" rows={3}
+                  style={{ width: "100%", borderRadius: "8px", border: "1px solid #E5E7EB", padding: "10px 12px", fontSize: "13px", color: "#111827", backgroundColor: "#fff", resize: "none", outline: "none", boxSizing: "border-box" }} />
+              </div>
+            )}
           </Card>
         ) : (
           <Card>
@@ -441,7 +572,8 @@ interface Props {
 
 export default function VerificationModal({ expert, onClose, onStatusChange }: Props) {
   const dispatch = useAppDispatch();
-  const { mutateStatus, selectedStatus, selectedSummary } = useAppSelector(s => s.verifications);
+  const { mutateStatus, selectedStatus, selectedSummary, localOverrides } =
+    useAppSelector(s => s.verifications);
   const { admin } = useAppSelector(s => s.auth);
 
   const [approveOpen,  setApproveOpen]  = useState(false);
@@ -457,7 +589,14 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   const adminId = admin?.id ?? "";
 
-  // Resolve documentKey — `id` field on first document entry (Cloudinary path)
+  // Derive resolved status from localOverrides so modal reflects result immediately
+  const resolvedStatus = useMemo<"approved" | "rejected" | null>(() => {
+    if (!expert) return null;
+    const override = localOverrides[expert.id];
+    if (override === "approved" || override === "rejected") return override;
+    return null;
+  }, [expert, localOverrides]);
+
   const documentKey = expert ? resolveDocumentKey(expert) : undefined;
 
   const handleApprove = () => {
@@ -473,7 +612,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
       .then(() => {
         toast.success(`${expert.name} approved`);
         setApproveOpen(false);
-        onStatusChange(expert.id, "approved");
+        // Modal stays open — admin sees the approved state and closes manually
       })
       .catch((err: string) => toast.error("Approval failed", { description: err }));
   };
@@ -492,14 +631,22 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
       .then(() => {
         toast.success(`${expert.name} rejected`);
         setRejectOpen(false);
-        onStatusChange(expert.id, "rejected");
+        // Modal stays open — admin sees the rejected state and closes manually
       })
       .catch((err: string) => toast.error("Rejection failed", { description: err }));
   };
 
+  // On close, notify the page so it can update the list badge if needed
+  const handleClose = () => {
+    if (expert && resolvedStatus) {
+      onStatusChange(expert.id, resolvedStatus);
+    }
+    onClose();
+  };
+
   if (isLoadingDetail) {
     return (
-      <Modal open onClose={onClose} title="Verification Detail" size="md">
+      <Modal open onClose={handleClose} title="Verification Detail" size="md">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", gap: "8px", color: "#9CA3AF", fontSize: "14px" }}>
           <Loader2 size={18} className="animate-spin" /> Loading details…
         </div>
@@ -509,7 +656,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   if (!expert || !selectedSummary) {
     return (
-      <Modal open onClose={onClose} title="Verification Detail" size="md">
+      <Modal open onClose={handleClose} title="Verification Detail" size="md">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", fontSize: "14px", color: "#ef4444" }}>
           Failed to load verification detail.
         </div>
@@ -519,11 +666,12 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   const commonProps = {
     expert,
-    summary: selectedSummary,
-    onClose,
-    onApprove:  () => setApproveOpen(true),
-    onReject:   () => setRejectOpen(true),
+    summary:        selectedSummary,
+    onClose:        handleClose,
+    onApprove:      () => setApproveOpen(true),
+    onReject:       () => setRejectOpen(true),
     isMutating,
+    resolvedStatus,
   };
 
   return (
