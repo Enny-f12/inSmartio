@@ -138,16 +138,16 @@ export default function AuditLogsPage() {
     exportStatus, activeFilters,
   } = useAppSelector((s) => s.auditLogs);
 
-  const [search,        setSearch]        = useState(activeFilters.search ?? "");
-  const [exporting,     setExporting]     = useState(false);
+  // Reverse once here so we never mutate the Redux state array
+  const reversedLogs = [...logs].reverse();
 
-  // ── FIX 1: Fetch whenever activeFilters changes, not just when status is "idle"
-  // Using activeFilters as the dependency means filter/page changes always trigger a fetch.
+  const [search,    setSearch]    = useState(activeFilters.search ?? "");
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     dispatch(fetchAuditLogs(activeFilters));
   }, [dispatch, activeFilters]);
 
-  // ── FIX 2: Export status side-effects
   useEffect(() => {
     if (exportStatus === "succeeded") {
       toast.success("Audit logs exported");
@@ -161,7 +161,7 @@ export default function AuditLogsPage() {
     }
   }, [exportStatus, dispatch]);
 
-  // ── Debounced search: dispatch after 400 ms of no typing
+  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       dispatch(setFilters({ search } as AuditLogsParams));
@@ -201,7 +201,6 @@ export default function AuditLogsPage() {
     }
   };
 
-  // Pagination info from server
   const page       = activeFilters.page ?? 1;
   const totalPages = pagination?.totalPages ?? 1;
   const total      = pagination?.total ?? 0;
@@ -231,21 +230,19 @@ export default function AuditLogsPage() {
           </p>
         </div>
 
-        {/* ── Single card — Filter header + table ── */}
+        {/* ── Single card ── */}
         <div style={{ backgroundColor:"#fff", borderRadius:"16px",
           border:"1px solid #E5E7EB", overflow:"hidden" }}>
 
-          {/* Card header row: "Filter" label + controls + Export */}
+          {/* Card header: filters + export */}
           <div style={{ padding:"14px 20px", borderBottom:"1px solid #F3F4F6",
             display:"flex", alignItems:"center", gap:"10px", flexWrap:"wrap" }}>
 
-            {/* Left: Filter label + icon */}
             <div style={{ display:"flex", alignItems:"center", gap:"6px", marginRight:"4px" }}>
               <SlidersHorizontal size={14} color="#6B7280" />
               <span style={{ fontSize:"13px", fontWeight:600, color:"#374151" }}>Filter</span>
             </div>
 
-            {/* FIX 3: Controlled search input with debounced dispatch */}
             <div style={{ position:"relative", flex:1, minWidth:"180px" }}>
               <svg style={{ position:"absolute", left:"13px", top:"50%",
                 transform:"translateY(-50%)", color:"#9CA3AF" }}
@@ -265,28 +262,24 @@ export default function AuditLogsPage() {
               />
             </div>
 
-            {/* Action dropdown */}
             <NativeSelect
               value={activeFilters.action ?? ""}
               onChange={handleActionChange}
               options={ACTION_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
             />
 
-            {/* Admin role dropdown */}
             <NativeSelect
               value={activeFilters.adminId ?? ""}
               onChange={handleAdminChange}
               options={ADMIN_OPTIONS}
             />
 
-            {/* Date dropdown */}
             <NativeSelect
               value="0"
               onChange={(v) => handleDateChange(Number(v))}
               options={DATE_OPTIONS.map((o, i) => ({ label: o.label, value: String(i) }))}
             />
 
-            {/* Export button */}
             <button onClick={() => handleExport("csv")} disabled={exporting}
               style={{ display:"flex", alignItems:"center", gap:"6px",
                 padding:"9px 16px", borderRadius:"10px", fontSize:"13px", fontWeight:500,
@@ -311,7 +304,6 @@ export default function AuditLogsPage() {
               <p style={{ fontSize:"13px", color:"#ef4444", marginBottom:"12px" }}>
                 {listError ?? "Failed to load audit logs."}
               </p>
-              {/* FIX 4: Retry button — old code had no recovery path from "failed" */}
               <button
                 onClick={() => dispatch(fetchAuditLogs(activeFilters))}
                 style={{ padding:"8px 18px", borderRadius:"8px", fontSize:"13px",
@@ -337,10 +329,10 @@ export default function AuditLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.length === 0 ? (
+                    {reversedLogs.length === 0 ? (
                       <tr><td colSpan={5} style={{ textAlign:"center", padding:"56px",
                         fontSize:"14px", color:"#9CA3AF" }}>No audit logs found.</td></tr>
-                    ) : logs.map((log: AuditLog) => (
+                    ) : reversedLogs.map((log: AuditLog) => (
                       <tr key={log.id}
                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FAFAFA")}
                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}>
@@ -375,10 +367,10 @@ export default function AuditLogsPage() {
 
               {/* Mobile cards */}
               <div className="al-mobile" style={{ padding:"12px", backgroundColor:"#F9FAFB" }}>
-                {logs.length === 0 ? (
+                {reversedLogs.length === 0 ? (
                   <p style={{ textAlign:"center", padding:"40px",
                     fontSize:"13px", color:"#9CA3AF" }}>No audit logs found.</p>
-                ) : logs.map((log: AuditLog) => (
+                ) : reversedLogs.map((log: AuditLog) => (
                   <div key={log.id} style={{ padding:"14px 16px", borderRadius:"12px",
                     border:"1px solid #E5E7EB", backgroundColor:"#fff" }}>
                     <div style={{ display:"flex", justifyContent:"space-between",
@@ -422,7 +414,7 @@ export default function AuditLogsPage() {
                   ))}
                 </div>
 
-                {/* Server-driven pagination */}
+                {/* Pagination */}
                 <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
                   <span style={{ fontSize:"12px", color:"#6B7280" }}>
                     {total === 0 ? "No results" : `${from}–${to} of ${total}`}
