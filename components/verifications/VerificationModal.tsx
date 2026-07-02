@@ -28,6 +28,35 @@ function resolveTier(detail: ApiVerificationDetail, summary: ApiVerificationSumm
 const toApiType = (tier: VerificationTier): VerificationType =>
   tier === "tier3" ? "tas" : "expert";
 
+// ── Email helpers ──────────────────────────────────────────────────────────────
+
+const isValidEmail = (email?: string | null): boolean =>
+  typeof email === "string" && /\S+@\S+\.\S+/.test(email);
+
+function buildMailto(email: string | undefined, name: string, tier: VerificationTier): string | undefined {
+  if (!isValidEmail(email)) return undefined;
+  const subject = tier === "tier3"
+    ? "Action Needed: Your TAS Verification"
+    : "Action Needed: Your Verification Application";
+  const body =
+`Hi ${name},
+
+Thank you for submitting your ${tier === "tier3" ? "TAS " : ""}verification application with inSmartio.
+
+We're currently reviewing it and need a bit more information before we can proceed. Could you please reply to this email with any of the following that apply:
+
+- Updated or clearer copies of any documents that may be missing or hard to read
+- Any additional details relevant to your verification
+
+Once we receive this, we'll continue processing your application right away.
+
+Thank you for your patience.
+
+Best regards,
+inSmartio Team`;
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 // ── Shared UI primitives ──────────────────────────────────────────────────────
 
 function SectionTitle({ title }: { title: string }) {
@@ -57,42 +86,56 @@ function Card({ children }: { children: React.ReactNode }) {
 
 // ── Status banner ─────────────────────────────────────────────────────────────
 
-function StatusBanner({ status }: { status: "approved" | "rejected" }) {
+function StatusBanner({ status, reason }: { status: "approved" | "rejected"; reason?: string }) {
   const isApproved = status === "approved";
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: "10px",
-      padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
-      backgroundColor: isApproved ? "#f0fdf4" : "#fef2f2",
-      border: `1px solid ${isApproved ? "#bbf7d0" : "#fecaca"}`,
-    }}>
-      {isApproved
-        ? <CheckCircle2 size={18} color="#16a34a" />
-        : <XCircle size={18} color="#dc2626" />
-      }
-      <div>
-        <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : "#dc2626" }}>
-          {isApproved ? "Verification Approved" : "Verification Rejected"}
-        </p>
-        <p style={{ margin: "2px 0 0", fontSize: "12px", color: isApproved ? "#166534" : "#b91c1c" }}>
-          {isApproved
-            ? "This expert has been marked as verified."
-            : "This expert's verification has been rejected."
-          }
-        </p>
+    <>
+      <div style={{
+        display: "flex", alignItems: "center", gap: "10px",
+        padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
+        backgroundColor: isApproved ? "#f0fdf4" : "#fef2f2",
+        border: `1px solid ${isApproved ? "#bbf7d0" : "#fecaca"}`,
+      }}>
+        {isApproved
+          ? <CheckCircle2 size={18} color="#16a34a" />
+          : <XCircle size={18} color="#dc2626" />
+        }
+        <div>
+          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : "#dc2626" }}>
+            {isApproved ? "Verification Approved" : "Verification Rejected"}
+          </p>
+          <p style={{ margin: "2px 0 0", fontSize: "12px", color: isApproved ? "#166534" : "#b91c1c" }}>
+            {isApproved
+              ? "This expert has been marked as verified."
+              : "This expert's verification has been rejected."
+            }
+          </p>
+        </div>
       </div>
-    </div>
+
+      {!isApproved && reason && (
+        <div style={{
+          fontSize: "13px", color: "#374151", margin: "0 0 10px",
+          background: "#FEF2F2", border: "1px solid #FECACA",
+          borderRadius: "10px", padding: "10px 14px",
+        }}>
+          <strong style={{ color: "#111827" }}>Rejection reason: </strong>
+          {reason}
+        </div>
+      )}
+    </>
   );
 }
 
 // ── Document row ──────────────────────────────────────────────────────────────
 
-function DocumentRow({ name, url, checked, onCheck, forceVerified }: {
-  name:          string;
-  url?:          string;
-  checked:       boolean;
-  onCheck:       () => void;
+function DocumentRow({ name, url, checked, onCheck, forceVerified, forceRejected }: {
+  name:           string;
+  url?:           string;
+  checked:        boolean;
+  onCheck:        () => void;
   forceVerified?: boolean;
+  forceRejected?: boolean;
 }) {
   const has         = !!url && url.length > 10;
   const showChecked = forceVerified || checked;
@@ -118,16 +161,16 @@ function DocumentRow({ name, url, checked, onCheck, forceVerified }: {
           </a>
           <label style={{
             display: "flex", alignItems: "center", gap: "4px",
-            cursor: forceVerified ? "default" : "pointer",
+            cursor: (forceVerified || forceRejected) ? "default" : "pointer",
             fontSize: "12px",
-            color: showChecked ? "#16a34a" : "#6B7280",
+            color: forceVerified ? "#16a34a" : forceRejected ? "#D1D5DB" : (showChecked ? "#16a34a" : "#6B7280"),
             fontWeight: 500, whiteSpace: "nowrap",
           }}>
             <input
               type="checkbox"
-              checked={showChecked}
-              onChange={forceVerified ? undefined : onCheck}
-              readOnly={forceVerified}
+              checked={forceRejected ? false : showChecked}
+              onChange={(forceVerified || forceRejected) ? undefined : onCheck}
+              readOnly={forceVerified || forceRejected}
               style={{ accentColor: "#16a34a", width: 13, height: 13 }}
             />
             Verified
@@ -168,6 +211,9 @@ interface Doc {
   name:      string;
   url?:      string;
   publicId?: string;
+  verified?: boolean;
+  rejected?: boolean;
+  reason?:   string;
 }
 
 function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[] {
@@ -185,11 +231,14 @@ function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[]
     const url      = typeof el.url      === "string" && el.url.length > 10     ? el.url      : undefined;
     const publicId = typeof el.publicId === "string" && el.publicId.length > 0 ? el.publicId : undefined;
     const label    = TYPE_LABEL[typeKey] ?? (typeof el.type === "string" ? el.type : "Document");
+    const verified = el.verify === true;
+    const rejected = el.reject === true;
+    const reason   = typeof el.reason === "string" && el.reason.length > 0 ? el.reason : undefined;
 
     // Tier 1 & 2: only show TIER12_KEYS; Tier 3: show everything
     if ((tier === "tier1" || tier === "tier2") && !TIER12_KEYS.has(typeKey)) continue;
 
-    docs.push({ key: typeKey || idx, name: label, url, publicId });
+    docs.push({ key: typeKey || idx, name: label, url, publicId, verified, rejected, reason });
   }
   return docs;
 }
@@ -227,10 +276,26 @@ export function countDocsFromDetail(
 
 // ── Approve / Reject footer ───────────────────────────────────────────────────
 
+function RequestInfoLink({ mailtoHref, style }: { mailtoHref?: string; style?: React.CSSProperties }) {
+  if (mailtoHref) {
+    return (
+      <a href={mailtoHref} style={{ fontSize: "13px", fontWeight: 500, color: "#6B7280", textDecoration: "none", ...style }}>
+        Request More Info
+      </a>
+    );
+  }
+  return (
+    <span title="No email on file for this applicant"
+      style={{ fontSize: "13px", fontWeight: 500, color: "#D1D5DB", cursor: "not-allowed", ...style }}>
+      Request More Info
+    </span>
+  );
+}
+
 function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
   onApprove:  () => void;
   onReject:   () => void;
-  mailtoHref: string;
+  mailtoHref?: string;
   disabled:   boolean;
 }) {
   return (
@@ -243,21 +308,20 @@ function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
         style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#dc2626", backgroundColor: "#fff", border: "1.5px solid #fecaca", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.7 : 1 }}>
         <X size={13} /> Reject
       </button>
-      <a href={mailtoHref} style={{ marginLeft: "auto", fontSize: "13px", fontWeight: 500, color: "#6B7280", textDecoration: "none" }}>
-        Request More Info
-      </a>
+      <RequestInfoLink mailtoHref={mailtoHref} style={{ marginLeft: "auto" }} />
     </div>
   );
 }
 
-// Footer shown after a decision — just a close button
-function ClosedFooter({ onClose }: { onClose: () => void }) {
+// Footer shown after a decision — close button + still-available Request More Info
+function ClosedFooter({ onClose, mailtoHref }: { onClose: () => void; mailtoHref?: string }) {
   return (
-    <div style={{ display: "flex", width: "100%" }}>
+    <div style={{ display: "flex", alignItems: "center", width: "100%", gap: "10px" }}>
       <button onClick={onClose}
         style={{ padding: "10px 24px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#374151", backgroundColor: "#F3F4F6", border: "none", cursor: "pointer" }}>
         Close
       </button>
+      <RequestInfoLink mailtoHref={mailtoHref} style={{ marginLeft: "auto" }} />
     </div>
   );
 }
@@ -277,6 +341,7 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
   resolvedStatus: "approved" | "rejected" | null;
 }) {
   const isApproved = resolvedStatus === "approved";
+  const isRejected = resolvedStatus === "rejected";
   const isDecided  = resolvedStatus !== null;
 
   const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
@@ -285,7 +350,8 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
   const docs = parseDocs(expert, tier);
   const nin  = summary.ninVerification;
 
-  const mailtoHref = `mailto:${expert.email}?subject=${encodeURIComponent("Verification – More Information Needed")}&body=${encodeURIComponent(`Dear ${expert.name},\n\nWe need additional information to process your verification.\n\nPlease respond at your earliest convenience.\n\nThank you.`)}`;
+  const rejectReasonText = docs.find(d => d.rejected && d.reason)?.reason;
+  const mailtoHref = buildMailto(expert.email, expert.name, tier);
 
   const rowStyle: React.CSSProperties = {
     display: "flex", alignItems: "center", gap: "8px",
@@ -309,13 +375,13 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
       title="Verification Detail"
       footer={
         isDecided
-          ? <ClosedFooter onClose={onClose} />
+          ? <ClosedFooter onClose={onClose} mailtoHref={mailtoHref} />
           : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
       }
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {isDecided && <StatusBanner status={resolvedStatus} />}
+        {isDecided && <StatusBanner status={resolvedStatus} reason={isRejected ? rejectReasonText : undefined} />}
 
         <Card>
           <SectionTitle title="Expert Information" />
@@ -338,6 +404,7 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
                   checked={!!docChecks[d.key]}
                   onCheck={() => toggle(d.key)}
                   forceVerified={isApproved}
+                  forceRejected={isRejected}
                 />
               ))
           }
@@ -391,6 +458,7 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
   resolvedStatus: "approved" | "rejected" | null;
 }) {
   const isApproved = resolvedStatus === "approved";
+  const isRejected = resolvedStatus === "rejected";
   const isDecided  = resolvedStatus !== null;
 
   const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
@@ -402,7 +470,8 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
   const guarantor = summary.guarantor;
   const policeClr = summary.policeClearance;
 
-  const mailtoHref = `mailto:${expert.email}?subject=${encodeURIComponent("TAS Verification – More Information Needed")}&body=${encodeURIComponent(`Dear ${expert.name},\n\nWe need additional information to process your TAS verification.\n\nPlease respond at your earliest convenience.\n\nThank you.`)}`;
+  const rejectReasonText = docs.find(d => d.rejected && d.reason)?.reason;
+  const mailtoHref = buildMailto(expert.email, expert.name, "tier3");
 
   return (
     <Modal
@@ -411,13 +480,13 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
       title="Verification Detail (Tier 3 – TAS)"
       footer={
         isDecided
-          ? <ClosedFooter onClose={onClose} />
+          ? <ClosedFooter onClose={onClose} mailtoHref={mailtoHref} />
           : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
       }
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {isDecided && <StatusBanner status={resolvedStatus} />}
+        {isDecided && <StatusBanner status={resolvedStatus} reason={isRejected ? rejectReasonText : undefined} />}
 
         <Card>
           <SectionTitle title="Expert Information" />
@@ -441,6 +510,7 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
                   checked={!!docChecks[d.key]}
                   onCheck={() => toggle(d.key)}
                   forceVerified={isApproved}
+                  forceRejected={isRejected}
                 />
               ))
           }

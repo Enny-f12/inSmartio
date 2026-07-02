@@ -65,27 +65,44 @@ const STATUS_OPTIONS: { value: VerificationStatus | ""; label: string }[] = [
   { value: "rejected", label: "Rejected"     },
 ];
 
-// ── Doc fraction helpers ─────────────────────────────────────────────────────
+// ── Document count helper ────────────────────────────────────────────────────
+// Verification is decided at the application level, not per-document — the
+// `verify` flag on individual documents in the summary never reflects a real
+// decision. So instead of showing a misleading "X verified / Y expected"
+// fraction, we show a single number: how many documents this applicant has
+// actually SUBMITTED (i.e. have a real url), restricted to the document
+// types relevant to their tier — mirroring exactly what the detail modal
+// shows.
 
-/**
- * Returns { submitted, total } from an ApiVerificationSummary.
- *
- * `totalDocuments` — total docs required (from backend).
- * `documents`      — either an array of VerificationDocument objects
- *                    or a plain number of submitted docs.
- *
- * When documents is an array, "submitted" = docs where verify===true
- * or status==="verified", mirroring the existing docLabel() logic.
- */
-function getDocCounts(e: ApiVerificationSummary): { submitted: number; total: number } {
-  const total = e.totalDocuments ?? 0;
-  if (Array.isArray(e.documents)) {
-    const submitted = e.documents.filter(
-      (d) => d.verify === true || d.status === "verified"
-    ).length;
-    return { submitted, total };
-  }
-  const submitted = typeof e.documents === "number" ? e.documents : 0;
+const TIER12_DOC_KEYS = new Set([
+  "ninslip",
+  "governmentid",
+  "profilephoto",
+  "addressproof",
+  "portfolio",
+]);
+
+const normaliseDocKey = (s: string) => s.toLowerCase().replace(/[\s_-]/g, "");
+
+function getDocCounts(e: ApiVerificationSummary, tier: VerificationTier): { submitted: number; total: number } {
+  const submitted = (() => {
+    if (Array.isArray(e.documents)) {
+      return e.documents.filter((d) => {
+        const hasUrl = typeof d.url === "string" && d.url.length > 10;
+        if (!hasUrl) return false;
+        if (tier === "tier1" || tier === "tier2") {
+          return TIER12_DOC_KEYS.has(normaliseDocKey(d.type ?? ""));
+        }
+        return true;
+      }).length;
+    }
+    // Backend sent a plain number of submitted documents
+    if (typeof e.documents === "number") return e.documents;
+    return 0;
+  })();
+
+  const total = e.totalDocuments ?? (Array.isArray(e.documents) ? e.documents.length : 0);
+
   return { submitted, total };
 }
 
@@ -287,12 +304,12 @@ export default function VerificationsPage() {
                         </td>
                       </tr>
                     ) : paginated.map((expert) => {
-                      const tier              = getTier(expert);
-                      const ts                = TIER_STYLE[tier];
-                      const st                = getStatus(expert);
-                      const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
-                      const docsComplete      = docsIn === docsTotal;
-                      const docsNone          = docsIn === 0;
+                      const tier       = getTier(expert);
+                      const ts         = TIER_STYLE[tier];
+                      const st         = getStatus(expert);
+                      const { submitted: docsIn, total: docsTotal } = getDocCounts(expert, tier);
+                      const docsComplete = docsTotal > 0 && docsIn === docsTotal;
+                      const docsNone      = docsIn === 0;
                       return (
                         <tr key={expert.id} className="ver-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
                           <td style={{ padding: "14px 20px", fontSize: "14px", fontWeight: 600, color: "#111827" }}>{expert.name}</td>
@@ -332,12 +349,12 @@ export default function VerificationsPage() {
                     No verifications found.
                   </p>
                 ) : paginated.map((expert) => {
-                  const tier              = getTier(expert);
-                  const ts                = TIER_STYLE[tier];
-                  const st                = getStatus(expert);
-                  const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
-                  const docsComplete      = docsIn === docsTotal;
-                  const docsNone          = docsIn === 0;
+                  const tier      = getTier(expert);
+                  const ts        = TIER_STYLE[tier];
+                  const st        = getStatus(expert);
+                  const { submitted: docsIn, total: docsTotal } = getDocCounts(expert, tier);
+                  const docsComplete = docsTotal > 0 && docsIn === docsTotal;
+                  const docsNone      = docsIn === 0;
                   return (
                     <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
