@@ -58,13 +58,14 @@ interface DocEntry {
   url?:     string;
   verified: boolean;
   rejected: boolean;
+  reason?:  string;
 }
 
 function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: string } {
   if (!rawDoc || typeof rawDoc !== "object") return { list: [], documentKey: "" };
 
   if (!Array.isArray(rawDoc)) {
-    const obj = rawDoc as Record<string, { url?: string; type?: string; verify?: boolean; reject?: boolean }>;
+    const obj = rawDoc as Record<string, { url?: string; type?: string; verify?: boolean; reject?: boolean; reason?: string }>;
     const list = Object.values(obj)
       .filter((d) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
       .map((d) => ({
@@ -72,6 +73,7 @@ function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: strin
         url:      d.url,
         verified: d.verify ?? false,
         rejected: d.reject ?? false,
+        reason:   d.reason ?? undefined,
       }));
     const documentKey = Object.keys(obj).find(
       (k) => !EXCLUDED_TYPES.includes((obj[k]?.type ?? "").toLowerCase())
@@ -79,7 +81,7 @@ function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: strin
     return { list, documentKey };
   }
 
-  const arr = rawDoc as { type?: string; url?: string; secureUrl?: string; verify?: boolean; reject?: boolean; publicId?: string }[];
+  const arr = rawDoc as { type?: string; url?: string; secureUrl?: string; verify?: boolean; reject?: boolean; reason?: string; publicId?: string }[];
   const list = arr
     .filter((d) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
     .map((d) => ({
@@ -87,6 +89,7 @@ function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: strin
       url:      d.secureUrl ?? d.url,
       verified: d.verify ?? false,
       rejected: d.reject ?? false,
+      reason:   d.reason ?? undefined,
     }));
   const documentKey = arr.find(
     (d) => d.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase())
@@ -126,6 +129,9 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
   const ext      = rawAgent as Record<string, unknown>;
 
   const { list: docList, documentKey } = parseDocuments(ext.document);
+
+  // Reason for rejection — stored per-document; pull the first one that has it.
+  const rejectReasonText = docList.find((d) => d.rejected && d.reason)?.reason;
 
   // Initialise doc checks from actual verified status on the document
   const [docChecks, setDocChecks] = useState<Record<string, boolean>>(
@@ -174,7 +180,29 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
     bankName?: string; accountNumber?: string; accountName?: string;
   } | null;
 
-  const mailHref = `mailto:${email}?subject=${encodeURIComponent("TAS Application – More Information Needed")}&body=${encodeURIComponent(`Dear ${name},\n\nWe need more information regarding your TAS application.\n\nThank you.`)}`;
+  const hasValidEmail = /\S+@\S+\.\S+/.test(email);
+  const mailSubject = `Action Needed: Your TAS Application${tasId ? ` (${tasId})` : ""}`;
+  const mailBody =
+`Hi ${name},
+
+Thank you for applying to become a TAS agent with inSmartio.
+
+We're currently reviewing your application and need a bit more information before we can proceed. Could you please reply to this email with any of the following that apply:
+
+- Updated or clearer copies of any documents that may be missing or hard to read
+- Additional details about your recruitment experience or network
+- Any other supporting information relevant to your application
+
+Once we receive this, we'll continue processing your application right away.
+
+Thank you for your patience.
+
+Best regards,
+inSmartio Team`;
+
+  const mailHref = hasValidEmail
+    ? `mailto:${email}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`
+    : undefined;
 
   const handleApprove = async () => {
     setLoading(true);
@@ -207,7 +235,7 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
           <ArrowLeft size={16} /> TAS Applications
         </button>
         <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#111827" }}>{name}</span>
-        {appStatus === "pending" ? (
+        {appStatus === "pending" || appStatus === "rejected" ? (
           <button onClick={handleApprove} disabled={loading}
             style={{
               display: "flex", alignItems: "center", gap: 6,
@@ -350,13 +378,13 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
                         <label style={{
                           display: "flex", alignItems: "center", gap: 5,
                           fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                          color: "#6B7280", cursor: "default",
+                          color: doc.rejected ? "#dc2626" : "#6B7280", cursor: "default",
                         }}>
                           <input
                             type="checkbox" checked={false} readOnly
                             style={{ width: 14, height: 14 }}
                           />
-                          Mark as Verified
+                          {doc.rejected ? "❌ Rejected" : "Mark as Verified"}
                         </label>
                       )}
                     </div>
@@ -430,20 +458,73 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
                   }}>
                   <X size={14} /> Reject
                 </button>
-                <a href={mailHref}
-                  style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
-                  Request More Info
-                </a>
+                {hasValidEmail ? (
+                  <a href={mailHref}
+                    style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
+                    Request More Info
+                  </a>
+                ) : (
+                  <span title="No email on file for this applicant"
+                    style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
+                    Request More Info
+                  </span>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {appStatus !== "pending" && (
+        {appStatus === "rejected" && (
+          <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              {statusBadge(appStatus)}
+              <span style={{ fontSize: 13, color: "#6B7280" }}>
+                This application has been rejected.
+              </span>
+            </div>
+
+            {rejectReasonText && (
+              <div style={{
+                fontSize: 13, color: "#374151", margin: "0 0 16px",
+                background: "#FEF2F2", border: "1px solid #FECACA",
+                borderRadius: 8, padding: "10px 12px",
+              }}>
+                <strong style={{ color: "#111827" }}>Rejection reason: </strong>
+                {rejectReasonText}
+              </div>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <button onClick={handleApprove} disabled={loading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "10px 22px",
+                  borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
+                  fontSize: 13, fontWeight: 600,
+                  cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
+                }}>
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                Approve as TAS
+              </button>
+              {hasValidEmail ? (
+                <a href={mailHref}
+                  style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
+                  Request More Info
+                </a>
+              ) : (
+                <span title="No email on file for this applicant"
+                  style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
+                  Request More Info
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {appStatus === "approved" && (
           <div style={{ ...card, padding: "16px 24px", display: "flex", alignItems: "center", gap: 10 }}>
             {statusBadge(appStatus)}
             <span style={{ fontSize: 13, color: "#6B7280" }}>
-              This application has been {appStatus}.
+              This application has been approved.
             </span>
           </div>
         )}
