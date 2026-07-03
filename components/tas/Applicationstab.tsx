@@ -3,12 +3,11 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
-import { toast } from "sonner";
-import { useAppSelector } from "@/hooks/redux";
-import { verifyTas } from "@/lib/api/tasApi";
 import type { ApiTas } from "@/lib/api/tasApi";
-import ApplicationDetailPage from "./ApplicationDetail";
-import { card, statusBadge, getType, type AppTab } from "./shared";
+import { useAppDispatch } from "@/hooks/redux";
+import { fetchTas } from "@/lib/redux/tasSlice";
+import ApplicationDetailPage, { computeStatus, type ComputedStatus } from "./ApplicationDetail";
+import { card, statusBadge, getType } from "./shared";
 
 interface Props {
   agents: ApiTas[];
@@ -16,18 +15,12 @@ interface Props {
 
 type View = { type: "list" } | { type: "detail"; agent: ApiTas };
 
-function getAppStatus(
-  a: ApiTas,
-  overrides: Record<string, "approved" | "rejected">
-): AppTab {
-  if (overrides[a.id]) return overrides[a.id];
-  const status = a.status != null && typeof a.status !== "object"
-    ? String(a.status).toLowerCase() : "";
-  const verify = a.verify != null && typeof a.verify !== "object"
-    ? String(a.verify).toLowerCase() : "pending";
-  if (status === "active" || verify === "approved") return "approved";
-  if (verify === "rejected") return "rejected";
-  return "pending";
+// Same priority rule as the detail page: any rejected document wins over
+// everything else; only if none are rejected does "all verified" apply.
+function getAppStatus(a: ApiTas, override?: ComputedStatus): ComputedStatus {
+  if (override) return override;
+  const docs = Array.isArray(a.document) ? a.document : [];
+  return computeStatus(docs.map((d) => ({ verified: d?.verify === true, rejected: d?.reject === true })));
 }
 
 function getNetwork(a: ApiTas): string {
@@ -36,45 +29,35 @@ function getNetwork(a: ApiTas): string {
 }
 
 export default function ApplicationsTab({ agents }: Props) {
-  const { admin }  = useAppSelector((s) => s.auth);
-  const adminId    = (admin as Record<string, string> | null)?.id ?? "";
-
+  const dispatch = useAppDispatch();
   const [view,           setView]           = useState<View>({ type: "list" });
-  const [appTab,         setAppTab]         = useState<AppTab>("pending");
+  const [appTab,         setAppTab]         = useState<ComputedStatus>("pending");
   const [search,         setSearch]         = useState("");
-  const [localOverrides, setLocalOverrides] = useState<Record<string, "approved" | "rejected">>({});
+  const [localOverrides, setLocalOverrides] = useState<Record<string, ComputedStatus>>({});
 
   const counts = {
-    pending:  agents.filter((a) => getAppStatus(a, localOverrides) === "pending").length,
-    approved: agents.filter((a) => getAppStatus(a, localOverrides) === "approved").length,
-    rejected: agents.filter((a) => getAppStatus(a, localOverrides) === "rejected").length,
+    pending:  agents.filter((a) => getAppStatus(a, localOverrides[a.id]) === "pending").length,
+    approved: agents.filter((a) => getAppStatus(a, localOverrides[a.id]) === "approved").length,
+    rejected: agents.filter((a) => getAppStatus(a, localOverrides[a.id]) === "rejected").length,
   };
 
   const filtered = agents.filter((a) =>
-    getAppStatus(a, localOverrides) === appTab &&
+    getAppStatus(a, localOverrides[a.id]) === appTab &&
     a.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleApprove = async (id: string, documentKey: string) => {
-    try {
-      await verifyTas(id, { verify: true, reject: false, adminId, documentKey });
-      setLocalOverrides((prev) => ({ ...prev, [id]: "approved" }));
-      setView({ type: "list" });
-      toast.success("TAS application approved");
-    } catch (err: unknown) {
-      toast.error("Failed to approve", { description: err instanceof Error ? err.message : "Error" });
-    }
+  const handleStatusChange = (id: string, status: ComputedStatus) => {
+    setLocalOverrides((prev) => ({ ...prev, [id]: status }));
   };
 
-  const handleReject = async (id: string, reason: string, documentKey: string) => {
-    try {
-      await verifyTas(id, { verify: false, reject: true, reason, adminId, documentKey });
-      setLocalOverrides((prev) => ({ ...prev, [id]: "rejected" }));
-      setView({ type: "list" });
-      toast.success("TAS application rejected");
-    } catch (err: unknown) {
-      toast.error("Failed to reject", { description: err instanceof Error ? err.message : "Error" });
-    }
+  // The local override above is just for instant feedback while the modal is
+  // open. The real fix: refetch the list from the server so Redux itself has
+  // the correct document data — otherwise switching tabs (which unmounts this
+  // component and wipes the override) or navigating elsewhere and back shows
+  // stale data until a hard refresh.
+  const handleBackToList = () => {
+    setView({ type: "list" });
+    dispatch(fetchTas());
   };
 
   // ── Detail page view ──────────────────────────────────────────────────────
@@ -82,15 +65,13 @@ export default function ApplicationsTab({ agents }: Props) {
     return (
       <ApplicationDetailPage
         agent={view.agent}
-        appStatus={getAppStatus(view.agent, localOverrides)}
-        onBack={() => setView({ type: "list" })}
-        onApprove={handleApprove}
-        onReject={handleReject}
+        onBack={handleBackToList}
+        onStatusChange={handleStatusChange}
       />
     );
   }
 
-  const appTabs: { key: AppTab; label: string }[] = [
+  const appTabs: { key: ComputedStatus; label: string }[] = [
     { key: "pending",  label: "Pending"  },
     { key: "approved", label: "Approved" },
     { key: "rejected", label: "Rejected" },
@@ -191,7 +172,7 @@ export default function ApplicationsTab({ agents }: Props) {
                     </button>
                   ) : (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {statusBadge(getAppStatus(agent, localOverrides))}
+                      {statusBadge(getAppStatus(agent, localOverrides[agent.id]))}
                       <button onClick={() => setView({ type: "detail", agent })}
                         style={{
                           fontSize: 12, fontWeight: 500, padding: "4px 12px", borderRadius: 8,

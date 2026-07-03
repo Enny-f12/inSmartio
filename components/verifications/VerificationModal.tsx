@@ -1,11 +1,13 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useState, useMemo } from "react";
-import { X, CheckCircle2, Phone, Loader2, XCircle } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { CheckCircle2, Phone, Loader2, XCircle, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
-import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { verifyExpertThunk } from "@/lib/redux/verificationSlice";
+import { useAppSelector } from "@/hooks/redux";
+import { verifyExpert } from "@/lib/api/verificationApi";
 import type {
   VerificationTier,
   VerificationType,
@@ -27,6 +29,29 @@ function resolveTier(detail: ApiVerificationDetail, summary: ApiVerificationSumm
 
 const toApiType = (tier: VerificationTier): VerificationType =>
   tier === "tier3" ? "tas" : "expert";
+
+// ── Priority-based status ──────────────────────────────────────────────────────
+//   any document rejected → rejected   (highest priority)
+//   all documents verified → approved
+//   otherwise               → pending
+export type ComputedStatus = "pending" | "rejected" | "approved";
+
+export function computeStatus(docs: { verified: boolean; rejected: boolean }[]): ComputedStatus {
+  if (docs.some((d) => d.rejected)) return "rejected";
+  if (docs.length > 0 && docs.every((d) => d.verified)) return "approved";
+  return "pending";
+}
+
+// ── Cloudinary download fix ────────────────────────────────────────────────────
+// The HTML `download` attribute is ignored by browsers for cross-origin URLs
+// (these files live on res.cloudinary.com, the app runs elsewhere), so it
+// silently just opens the file instead of downloading it. Cloudinary's
+// `fl_attachment` flag forces a real download regardless of origin.
+function toDownloadUrl(url: string): string {
+  if (!url.includes("res.cloudinary.com")) return url;
+  if (url.includes("/fl_attachment")) return url;
+  return url.replace("/upload/", "/upload/fl_attachment/");
+}
 
 // ── Email helpers ──────────────────────────────────────────────────────────────
 
@@ -86,98 +111,169 @@ function Card({ children }: { children: React.ReactNode }) {
 
 // ── Status banner ─────────────────────────────────────────────────────────────
 
-function StatusBanner({ status, reason }: { status: "approved" | "rejected"; reason?: string }) {
-  const isApproved = status === "approved";
-  return (
-    <>
-      <div style={{
-        display: "flex", alignItems: "center", gap: "10px",
-        padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
-        backgroundColor: isApproved ? "#f0fdf4" : "#fef2f2",
-        border: `1px solid ${isApproved ? "#bbf7d0" : "#fecaca"}`,
-      }}>
-        {isApproved
-          ? <CheckCircle2 size={18} color="#16a34a" />
-          : <XCircle size={18} color="#dc2626" />
-        }
-        <div>
-          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : "#dc2626" }}>
-            {isApproved ? "Verification Approved" : "Verification Rejected"}
-          </p>
-          <p style={{ margin: "2px 0 0", fontSize: "12px", color: isApproved ? "#166534" : "#b91c1c" }}>
-            {isApproved
-              ? "This expert has been marked as verified."
-              : "This expert's verification has been rejected."
-            }
-          </p>
-        </div>
-      </div>
+const STATUS_META: Record<ComputedStatus, { bg: string; border: string; text: string; sub: string; icon: React.ReactNode; title: string }> = {
+  approved: {
+    bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d", sub: "#166534",
+    icon: <CheckCircle2 size={18} color="#16a34a" />,
+    title: "Approved — all documents verified",
+  },
+  rejected: {
+    bg: "#fef2f2", border: "#fecaca", text: "#dc2626", sub: "#b91c1c",
+    icon: <XCircle size={18} color="#dc2626" />,
+    title: "Rejected — at least one document rejected",
+  },
+  pending: {
+    bg: "#F9FAFB", border: "#E5E7EB", text: "#374151", sub: "#6B7280",
+    icon: <Clock size={18} color="#6B7280" />,
+    title: "Pending review",
+  },
+};
 
-      {!isApproved && reason && (
-        <div style={{
-          fontSize: "13px", color: "#374151", margin: "0 0 10px",
-          background: "#FEF2F2", border: "1px solid #FECACA",
-          borderRadius: "10px", padding: "10px 14px",
-        }}>
-          <strong style={{ color: "#111827" }}>Rejection reason: </strong>
-          {reason}
-        </div>
-      )}
-    </>
+function StatusBanner({ status, verifiedCount, total }: { status: ComputedStatus; verifiedCount: number; total: number }) {
+  const meta = STATUS_META[status];
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: "10px",
+      padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
+      backgroundColor: meta.bg, border: `1px solid ${meta.border}`,
+    }}>
+      {meta.icon}
+      <div>
+        <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: meta.text }}>
+          {meta.title}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: "12px", color: meta.sub }}>
+          {verifiedCount} of {total} document{total === 1 ? "" : "s"} verified
+        </p>
+      </div>
+    </div>
   );
 }
 
 // ── Document row ──────────────────────────────────────────────────────────────
+// Verify + Reject checkboxes, always switchable. Rejecting opens an inline
+// reason box; unrejecting (unchecking Reject) needs no reason.
 
-function DocumentRow({ name, url, checked, onCheck, forceVerified, forceRejected }: {
-  name:           string;
-  url?:           string;
-  checked:        boolean;
-  onCheck:        () => void;
-  forceVerified?: boolean;
-  forceRejected?: boolean;
+function DocumentRow({
+  name, url, verified, rejected, reason, busy,
+  onToggleVerify, onToggleReject,
+  popupOpen, reasonDraft, onReasonChange, onConfirmReject, onCancelReject,
+}: {
+  name:             string;
+  url?:             string;
+  verified:         boolean;
+  rejected:         boolean;
+  reason?:          string;
+  busy:             boolean;
+  onToggleVerify:   () => void;
+  onToggleReject:   () => void;
+  popupOpen:        boolean;
+  reasonDraft:      string;
+  onReasonChange:   (v: string) => void;
+  onConfirmReject:  () => void;
+  onCancelReject:   () => void;
 }) {
-  const has         = !!url && url.length > 10;
-  const showChecked = forceVerified || checked;
+  const has = !!url && url.length > 10;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
-      <span style={{ flex: 1, fontSize: "13px", color: "#111827" }}>{name}</span>
-      {has ? (
-        <>
-          <a href={url} target="_blank" rel="noreferrer" title="View"
-            style={{ color: "#9CA3AF", display: "flex" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-            </svg>
-          </a>
-          <a href={url} download={name} title="Download"
-            style={{ color: "#9CA3AF", display: "flex" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-          </a>
-          <label style={{
-            display: "flex", alignItems: "center", gap: "4px",
-            cursor: (forceVerified || forceRejected) ? "default" : "pointer",
-            fontSize: "12px",
-            color: forceVerified ? "#16a34a" : forceRejected ? "#D1D5DB" : (showChecked ? "#16a34a" : "#6B7280"),
-            fontWeight: 500, whiteSpace: "nowrap",
-          }}>
-            <input
-              type="checkbox"
-              checked={forceRejected ? false : showChecked}
-              onChange={(forceVerified || forceRejected) ? undefined : onCheck}
-              readOnly={forceVerified || forceRejected}
-              style={{ accentColor: "#16a34a", width: 13, height: 13 }}
-            />
-            Verified
-          </label>
-        </>
-      ) : (
-        <span style={{ fontSize: "12px", color: "#9CA3AF", fontStyle: "italic" }}>N/A</span>
+    <div style={{ padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <span style={{ flex: 1, fontSize: "13px", color: "#111827" }}>{name}</span>
+        {has ? (
+          <>
+            <a href={url} target="_blank" rel="noreferrer" title="View"
+              style={{ color: "#9CA3AF", display: "flex" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </a>
+            <a href={toDownloadUrl(url)} download title="Download"
+              style={{ color: "#9CA3AF", display: "flex" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+            <label style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              cursor: busy ? "default" : "pointer",
+              fontSize: "12px", color: verified ? "#16a34a" : "#6B7280",
+              fontWeight: 500, whiteSpace: "nowrap",
+            }}>
+              <input
+                type="checkbox" checked={verified}
+                onChange={busy ? undefined : onToggleVerify}
+                readOnly={busy}
+                style={{ accentColor: "#16a34a", width: 13, height: 13 }}
+              />
+              Verify
+            </label>
+            <label style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              cursor: busy ? "default" : "pointer",
+              fontSize: "12px", color: rejected ? "#dc2626" : "#6B7280",
+              fontWeight: 500, whiteSpace: "nowrap",
+            }}>
+              <input
+                type="checkbox" checked={rejected}
+                onChange={busy ? undefined : onToggleReject}
+                readOnly={busy}
+                style={{ accentColor: "#dc2626", width: 13, height: 13 }}
+              />
+              Reject
+            </label>
+            {busy && <Loader2 size={12} className="animate-spin" color="#9CA3AF" />}
+          </>
+        ) : (
+          <span style={{ fontSize: "12px", color: "#9CA3AF", fontStyle: "italic" }}>N/A</span>
+        )}
+      </div>
+
+      {rejected && reason && !popupOpen && (
+        <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#b91c1c" }}>
+          Reason: {reason}
+        </p>
+      )}
+
+      {popupOpen && (
+        <div style={{
+          marginTop: "8px", padding: "10px 12px", borderRadius: "10px",
+          border: "1px solid #FECACA", backgroundColor: "#FEF2F2",
+          display: "flex", flexDirection: "column", gap: "8px",
+        }}>
+          <textarea
+            value={reasonDraft}
+            onChange={(e) => onReasonChange(e.target.value)}
+            placeholder="Reason for rejecting this document…"
+            rows={2} autoFocus disabled={busy}
+            style={{
+              width: "100%", borderRadius: "8px", border: "1px solid #FCA5A5",
+              padding: "8px 10px", fontSize: "12px", resize: "none", outline: "none",
+              backgroundColor: "#fff", color: "#111827", boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+            <button onClick={onCancelReject} disabled={busy}
+              style={{
+                padding: "5px 12px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                backgroundColor: "#fff", fontSize: "12px", color: "#6B7280",
+                cursor: busy ? "not-allowed" : "pointer",
+              }}>
+              Cancel
+            </button>
+            <button onClick={onConfirmReject} disabled={busy}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px",
+                padding: "5px 12px", borderRadius: "8px", border: "none",
+                backgroundColor: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600,
+                cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.7 : 1,
+              }}>
+              {busy ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+              Confirm Reject
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -211,8 +307,8 @@ interface Doc {
   name:      string;
   url?:      string;
   publicId?: string;
-  verified?: boolean;
-  rejected?: boolean;
+  verified:  boolean;
+  rejected:  boolean;
   reason?:   string;
 }
 
@@ -243,38 +339,7 @@ function parseDocs(detail: ApiVerificationDetail, tier: VerificationTier): Doc[]
   return docs;
 }
 
-function resolveDocumentKey(detail: ApiVerificationDetail): string | undefined {
-  const raw = detail.document as Record<string, unknown> | null | undefined;
-  if (!raw || typeof raw !== "object") return undefined;
-  const indices = Object.keys(raw).sort((a, b) => Number(a) - Number(b));
-  for (const idx of indices) {
-    const el = raw[idx] as Record<string, unknown> | undefined;
-    if (!el) continue;
-    if (typeof el.publicId === "string" && el.publicId.length > 0) return el.publicId;
-    if (typeof el.id       === "string" && el.id.length       > 0) return el.id;
-  }
-  return undefined;
-}
-
-// ── Exported doc-count helper ─────────────────────────────────────────────────
-export function countDocsFromDetail(
-  detail: ApiVerificationDetail,
-): { submitted: number; total: number } {
-  const raw = detail.document as Record<string, unknown> | null | undefined;
-  if (!raw || typeof raw !== "object") return { submitted: 0, total: 0 };
-
-  const entries   = Object.values(raw);
-  const total     = entries.length;
-  const submitted = entries.filter((el) => {
-    if (!el || typeof el !== "object") return false;
-    const e = el as Record<string, unknown>;
-    return typeof e.url === "string" && e.url.length > 10;
-  }).length;
-
-  return { submitted, total };
-}
-
-// ── Approve / Reject footer ───────────────────────────────────────────────────
+// ── Footer ───────────────────────────────────────────────────────────────────
 
 function RequestInfoLink({ mailtoHref, style }: { mailtoHref?: string; style?: React.CSSProperties }) {
   if (mailtoHref) {
@@ -292,33 +357,43 @@ function RequestInfoLink({ mailtoHref, style }: { mailtoHref?: string; style?: R
   );
 }
 
-function ModalFooter({ onApprove, onReject, mailtoHref, disabled }: {
-  onApprove:  () => void;
-  onReject:   () => void;
-  mailtoHref?: string;
-  disabled:   boolean;
+// Approve/Reject here are read-only status checks — no API call. They just
+// tell the admin whether the condition ("all verified" / "any rejected") is
+// currently met, based on the same per-document checkboxes above.
+function Footer({ onClose, mailtoHref, status, verifiedCount, total }: {
+  onClose:       () => void;
+  mailtoHref?:   string;
+  status:        ComputedStatus;
+  verifiedCount: number;
+  total:         number;
 }) {
+  const checkApprove = () => {
+    if (status === "approved") {
+      toast.success("All documents are verified — this application is Approved.");
+    } else {
+      toast.warning(`Not yet approved — ${verifiedCount}/${total} documents verified.`);
+    }
+  };
+  const checkReject = () => {
+    if (status === "rejected") {
+      toast.success("At least one document is rejected — this application is Rejected.");
+    } else {
+      toast.warning("Not rejected — no documents have been marked Reject yet.");
+    }
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", flexWrap: "wrap" }}>
-      <button onClick={onApprove} disabled={disabled}
-        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 22px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#16a34a", border: "none", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.7 : 1 }}>
+      <button onClick={checkApprove}
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 22px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#fff", backgroundColor: "#16a34a", border: "none", cursor: "pointer" }}>
         <CheckCircle2 size={14} /> Approve
       </button>
-      <button onClick={onReject} disabled={disabled}
-        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#dc2626", backgroundColor: "#fff", border: "1.5px solid #fecaca", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.7 : 1 }}>
-        <X size={13} /> Reject
+      <button onClick={checkReject}
+        style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#dc2626", backgroundColor: "#fff", border: "1.5px solid #fecaca", cursor: "pointer" }}>
+        <XCircle size={13} /> Reject
       </button>
-      <RequestInfoLink mailtoHref={mailtoHref} style={{ marginLeft: "auto" }} />
-    </div>
-  );
-}
-
-// Footer shown after a decision — close button + still-available Request More Info
-function ClosedFooter({ onClose, mailtoHref }: { onClose: () => void; mailtoHref?: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", width: "100%", gap: "10px" }}>
       <button onClick={onClose}
-        style={{ padding: "10px 24px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#374151", backgroundColor: "#F3F4F6", border: "none", cursor: "pointer" }}>
+        style={{ padding: "10px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, color: "#374151", backgroundColor: "#F3F4F6", border: "none", cursor: "pointer" }}>
         Close
       </button>
       <RequestInfoLink mailtoHref={mailtoHref} style={{ marginLeft: "auto" }} />
@@ -330,27 +405,29 @@ function ClosedFooter({ onClose, mailtoHref }: { onClose: () => void; mailtoHref
 // TIER 1 & 2 MODAL
 // ══════════════════════════════════════════════════════════════════════════════
 
-function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMutating, resolvedStatus }: {
-  expert:         ApiVerificationDetail;
-  summary:        ApiVerificationSummary;
-  tier:           VerificationTier;
-  onClose:        () => void;
-  onApprove:      () => void;
-  onReject:       () => void;
-  isMutating:     boolean;
-  resolvedStatus: "approved" | "rejected" | null;
+function Tier12Modal({
+  expert, summary, tier, onClose, docs, busyKey, popupKey, reasonDraft,
+  onToggleVerify, onOpenReject, onCloseReject, onReasonChange, onConfirmReject, onClearReject,
+}: {
+  expert:          ApiVerificationDetail;
+  summary:         ApiVerificationSummary;
+  tier:            VerificationTier;
+  onClose:         () => void;
+  docs:            Doc[];
+  busyKey:         string | null;
+  popupKey:        string | null;
+  reasonDraft:     string;
+  onToggleVerify:  (d: Doc) => void;
+  onOpenReject:    (d: Doc) => void;
+  onCloseReject:   () => void;
+  onReasonChange:  (v: string) => void;
+  onConfirmReject: (d: Doc) => void;
+  onClearReject:   (d: Doc) => void;
 }) {
-  const isApproved = resolvedStatus === "approved";
-  const isRejected = resolvedStatus === "rejected";
-  const isDecided  = resolvedStatus !== null;
+  const nin = summary.ninVerification;
 
-  const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
-  const toggle = (k: string) => { if (!isDecided) setDocChecks(p => ({ ...p, [k]: !p[k] })); };
-
-  const docs = parseDocs(expert, tier);
-  const nin  = summary.ninVerification;
-
-  const rejectReasonText = docs.find(d => d.rejected && d.reason)?.reason;
+  const verifiedCount = docs.filter(d => d.verified).length;
+  const status = computeStatus(docs);
   const mailtoHref = buildMailto(expert.email, expert.name, tier);
 
   const rowStyle: React.CSSProperties = {
@@ -359,29 +436,16 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
   };
   const lbl: React.CSSProperties = { width: "130px", flexShrink: 0, color: "#6B7280" };
 
-  const ninChecked = (k: string) => isApproved ? true : !!docChecks[k];
-  const chkLbl = (k: string): React.CSSProperties => ({
-    display: "flex", alignItems: "center", gap: "4px",
-    cursor: isDecided ? "default" : "pointer",
-    fontSize: "12px",
-    color: ninChecked(k) ? "#16a34a" : "#6B7280",
-    fontWeight: 500, whiteSpace: "nowrap", marginLeft: "auto",
-  });
-
   return (
     <Modal
       open
       onClose={onClose}
       title="Verification Detail"
-      footer={
-        isDecided
-          ? <ClosedFooter onClose={onClose} mailtoHref={mailtoHref} />
-          : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
-      }
+      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} />}
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {isDecided && <StatusBanner status={resolvedStatus} reason={isRejected ? rejectReasonText : undefined} />}
+        <StatusBanner status={status} verifiedCount={verifiedCount} total={docs.length} />
 
         <Card>
           <SectionTitle title="Expert Information" />
@@ -401,10 +465,17 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
                   key={d.key}
                   name={d.name}
                   url={d.url}
-                  checked={!!docChecks[d.key]}
-                  onCheck={() => toggle(d.key)}
-                  forceVerified={isApproved}
-                  forceRejected={isRejected}
+                  verified={d.verified}
+                  rejected={d.rejected}
+                  reason={d.reason}
+                  busy={busyKey === d.key}
+                  onToggleVerify={() => onToggleVerify(d)}
+                  onToggleReject={() => d.rejected ? onClearReject(d) : onOpenReject(d)}
+                  popupOpen={popupKey === d.key}
+                  reasonDraft={reasonDraft}
+                  onReasonChange={onReasonChange}
+                  onConfirmReject={() => onConfirmReject(d)}
+                  onCancelReject={onCloseReject}
                 />
               ))
           }
@@ -416,27 +487,9 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
             <span style={lbl}>NIN Number:</span>
             <span style={{ color: "#111827", fontFamily: "monospace", fontWeight: 600 }}>{nin?.ninNumber || "—"}</span>
           </div>
-          <div style={{ ...rowStyle }}>
+          <div style={{ ...rowStyle, borderBottom: "none" }}>
             <span style={lbl}>NIN Status:</span>
             <span style={{ color: "#111827", flex: 1 }}>{nin?.ninStatus || "—"}</span>
-            <label style={chkLbl("ninStatus")}>
-              <input type="checkbox" checked={ninChecked("ninStatus")} onChange={() => toggle("ninStatus")} readOnly={isDecided}
-                style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
-            </label>
-          </div>
-          <div style={{ ...rowStyle }}>
-            <span style={lbl}>Name Match:</span>
-            <label style={chkLbl("ninNameMatch")}>
-              <input type="checkbox" checked={ninChecked("ninNameMatch")} onChange={() => toggle("ninNameMatch")} readOnly={isDecided}
-                style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
-            </label>
-          </div>
-          <div style={{ ...rowStyle, borderBottom: "none" }}>
-            <span style={lbl}>DOB Match:</span>
-            <label style={chkLbl("ninDobMatch")}>
-              <input type="checkbox" checked={ninChecked("ninDobMatch")} onChange={() => toggle("ninDobMatch")} readOnly={isDecided}
-                style={{ accentColor: "#16a34a", width: 13, height: 13 }} /> Verified
-            </label>
           </div>
         </Card>
       </div>
@@ -448,29 +501,29 @@ function Tier12Modal({ expert, summary, tier, onClose, onApprove, onReject, isMu
 // TIER 3 MODAL
 // ══════════════════════════════════════════════════════════════════════════════
 
-function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating, resolvedStatus }: {
-  expert:         ApiVerificationDetail;
-  summary:        ApiVerificationSummary;
-  onClose:        () => void;
-  onApprove:      () => void;
-  onReject:       () => void;
-  isMutating:     boolean;
-  resolvedStatus: "approved" | "rejected" | null;
+function Tier3Modal({
+  expert, summary, onClose, docs, busyKey, popupKey, reasonDraft,
+  onToggleVerify, onOpenReject, onCloseReject, onReasonChange, onConfirmReject, onClearReject,
+}: {
+  expert:          ApiVerificationDetail;
+  summary:         ApiVerificationSummary;
+  onClose:         () => void;
+  docs:            Doc[];
+  busyKey:         string | null;
+  popupKey:        string | null;
+  reasonDraft:     string;
+  onToggleVerify:  (d: Doc) => void;
+  onOpenReject:    (d: Doc) => void;
+  onCloseReject:   () => void;
+  onReasonChange:  (v: string) => void;
+  onConfirmReject: (d: Doc) => void;
+  onClearReject:   (d: Doc) => void;
 }) {
-  const isApproved = resolvedStatus === "approved";
-  const isRejected = resolvedStatus === "rejected";
-  const isDecided  = resolvedStatus !== null;
-
-  const [docChecks, setDocChecks] = useState<Record<string, boolean>>({});
-  const [notes, setNotes]         = useState("");
-  const toggle = (k: string) => { if (!isDecided) setDocChecks(p => ({ ...p, [k]: !p[k] })); };
-
-  // Tier 3: show ALL document types
-  const docs      = parseDocs(expert, "tier3");
   const guarantor = summary.guarantor;
   const policeClr = summary.policeClearance;
 
-  const rejectReasonText = docs.find(d => d.rejected && d.reason)?.reason;
+  const verifiedCount = docs.filter(d => d.verified).length;
+  const status = computeStatus(docs);
   const mailtoHref = buildMailto(expert.email, expert.name, "tier3");
 
   return (
@@ -478,15 +531,11 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
       open
       onClose={onClose}
       title="Verification Detail (Tier 3 – TAS)"
-      footer={
-        isDecided
-          ? <ClosedFooter onClose={onClose} mailtoHref={mailtoHref} />
-          : <ModalFooter onApprove={onApprove} onReject={onReject} mailtoHref={mailtoHref} disabled={isMutating} />
-      }
+      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} />}
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {isDecided && <StatusBanner status={resolvedStatus} reason={isRejected ? rejectReasonText : undefined} />}
+        <StatusBanner status={status} verifiedCount={verifiedCount} total={docs.length} />
 
         <Card>
           <SectionTitle title="Expert Information" />
@@ -507,10 +556,17 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
                   key={d.key}
                   name={d.name}
                   url={d.url}
-                  checked={!!docChecks[d.key]}
-                  onCheck={() => toggle(d.key)}
-                  forceVerified={isApproved}
-                  forceRejected={isRejected}
+                  verified={d.verified}
+                  rejected={d.rejected}
+                  reason={d.reason}
+                  busy={busyKey === d.key}
+                  onToggleVerify={() => onToggleVerify(d)}
+                  onToggleReject={() => d.rejected ? onClearReject(d) : onOpenReject(d)}
+                  popupOpen={popupKey === d.key}
+                  reasonDraft={reasonDraft}
+                  onReasonChange={onReasonChange}
+                  onConfirmReject={() => onConfirmReject(d)}
+                  onCancelReject={onCloseReject}
                 />
               ))
           }
@@ -530,14 +586,6 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
                 </a>
               }
             />
-            {!isDecided && (
-              <div style={{ marginTop: "10px" }}>
-                <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "6px", fontWeight: 500 }}>Admin Notes</p>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Add notes about the guarantor call…" rows={3}
-                  style={{ width: "100%", borderRadius: "8px", border: "1px solid #E5E7EB", padding: "10px 12px", fontSize: "13px", color: "#111827", backgroundColor: "#fff", resize: "none", outline: "none", boxSizing: "border-box" }} />
-              </div>
-            )}
           </Card>
         ) : (
           <Card>
@@ -572,85 +620,24 @@ function Tier3Modal({ expert, summary, onClose, onApprove, onReject, isMutating,
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CONFIRM MODALS
-// ══════════════════════════════════════════════════════════════════════════════
-
-function ApproveModal({ name, open, onClose, onConfirm, isMutating }: {
-  name: string; open: boolean; onClose: () => void; onConfirm: () => void; isMutating: boolean;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} title="Confirm Approval" size="sm"
-      footer={
-        <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-          <button onClick={onClose}
-            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={isMutating}
-            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#16a34a", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: isMutating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
-            {isMutating ? <><Loader2 size={14} className="animate-spin" /> Approving…</> : <><CheckCircle2 size={14} /> Confirm Approve</>}
-          </button>
-        </div>
-      }>
-      <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
-        Are you sure you want to approve <strong style={{ color: "#111827" }}>{name}</strong>&apos;s verification?
-        This will mark them as verified.
-      </p>
-    </Modal>
-  );
-}
-
-function RejectModal({ name, open, onClose, onConfirm, isMutating, reason, setReason }: {
-  name: string; open: boolean; onClose: () => void; onConfirm: () => void;
-  isMutating: boolean; reason: string; setReason: (v: string) => void;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} title="Reject Verification" size="sm"
-      footer={
-        <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-          <button onClick={onClose}
-            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={isMutating}
-            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: isMutating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isMutating ? 0.7 : 1 }}>
-            {isMutating ? <><Loader2 size={14} className="animate-spin" /> Rejecting…</> : "Confirm Reject"}
-          </button>
-        </div>
-      }>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
-          Provide a reason for rejecting <strong style={{ color: "#111827" }}>{name}</strong>&apos;s verification.
-        </p>
-        <textarea placeholder="e.g. Document unclear, ID expired, information mismatch…"
-          value={reason} onChange={e => setReason(e.target.value)} rows={3}
-          style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
-      </div>
-    </Modal>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // ROOT EXPORT
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface Props {
   expert:         ApiVerificationDetail | null;
   onClose:        () => void;
-  onStatusChange: (id: string, status: "approved" | "rejected") => void;
+  onStatusChange: (id: string, status: ComputedStatus) => void;
 }
 
 export default function VerificationModal({ expert, onClose, onStatusChange }: Props) {
-  const dispatch = useAppDispatch();
-  const { mutateStatus, selectedStatus, selectedSummary, localOverrides } =
-    useAppSelector(s => s.verifications);
+  const { selectedStatus, selectedSummary } = useAppSelector(s => s.verifications);
   const { admin } = useAppSelector(s => s.auth);
 
-  const [approveOpen,  setApproveOpen]  = useState(false);
-  const [rejectOpen,   setRejectOpen]   = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [docs,        setDocs]        = useState<Doc[]>([]);
+  const [busyKey,      setBusyKey]     = useState<string | null>(null);
+  const [popupKey,     setPopupKey]    = useState<string | null>(null);
+  const [reasonDraft,  setReasonDraft] = useState("");
 
-  const isMutating      = mutateStatus   === "loading";
   const isLoadingDetail = selectedStatus === "loading";
 
   const tier: VerificationTier = (expert && selectedSummary)
@@ -659,64 +646,105 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   const adminId = admin?.id ?? "";
 
-  // Derive resolved status from localOverrides so modal reflects result immediately
-  const resolvedStatus = useMemo<"approved" | "rejected" | null>(() => {
-    if (!expert) return null;
-    const override = localOverrides[expert.id];
-    if (override === "approved" || override === "rejected") return override;
-    return null;
-  }, [expert, localOverrides]);
+  // Seed docs from real backend state whenever a different applicant opens
+  useEffect(() => {
+    setDocs(expert ? parseDocs(expert, tier) : []);
+    setBusyKey(null);
+    setPopupKey(null);
+    setReasonDraft("");
+  }, [expert?.id]);
 
-  const documentKey = expert ? resolveDocumentKey(expert) : undefined;
+  const status = useMemo(() => computeStatus(docs), [docs]);
 
-  const handleApprove = () => {
-    if (!expert || !selectedSummary) return;
-    const payload = { documentKey, verify: true, reject: false, adminId };
-    dispatch(verifyExpertThunk({
-      id:          expert.id,
-      type:        toApiType(tier),
-      localStatus: "approved" as const,
-      payload,
-    }))
-      .unwrap()
-      .then(() => {
-        toast.success(`${expert.name} approved`);
-        setApproveOpen(false);
-        // Modal stays open — admin sees the approved state and closes manually
-      })
-      .catch((err: string) => toast.error("Approval failed", { description: err }));
-  };
+  // Report every status change up so the list page's badge stays in sync.
+  const lastReported = useMemo(() => ({ current: null as ComputedStatus | null }), [expert?.id]);
+  useEffect(() => {
+    if (!expert) return;
+    if (lastReported.current === status) return;
+    // eslint-disable-next-line react-hooks/immutability
+    lastReported.current = status;
+    onStatusChange(expert.id, status);
+  }, [status, expert?.id]);
 
-  const handleReject = () => {
-    if (!expert || !selectedSummary) return;
-    if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
-    const payload = { documentKey, verify: false, reject: true, reason: rejectReason.trim(), adminId };
-    dispatch(verifyExpertThunk({
-      id:          expert.id,
-      type:        toApiType(tier),
-      localStatus: "rejected" as const,
-      payload,
-    }))
-      .unwrap()
-      .then(() => {
-        toast.success(`${expert.name} rejected`);
-        setRejectOpen(false);
-        // Modal stays open — admin sees the rejected state and closes manually
-      })
-      .catch((err: string) => toast.error("Rejection failed", { description: err }));
-  };
-
-  // On close, notify the page so it can update the list badge if needed
-  const handleClose = () => {
-    if (expert && resolvedStatus) {
-      onStatusChange(expert.id, resolvedStatus);
+  const handleToggleVerify = async (doc: Doc) => {
+    if (!expert || !doc.publicId) return;
+    const nextVerified = !doc.verified;
+    setBusyKey(doc.key);
+    try {
+      await verifyExpert(expert.id, toApiType(tier), {
+        documentKey: doc.publicId,
+        verify:      nextVerified,
+        reject:      false,
+        adminId,
+      });
+      setDocs(prev => prev.map(d => d.key === doc.key ? { ...d, verified: nextVerified, rejected: false, reason: undefined } : d));
+    } catch (err) {
+      toast.error("Failed to update document", { description: err instanceof Error ? err.message : "Something went wrong" });
+    } finally {
+      setBusyKey(null);
     }
-    onClose();
+  };
+
+  const handleOpenReject = (doc: Doc) => {
+    setPopupKey(doc.key);
+    setReasonDraft(doc.reason ?? "");
+  };
+
+  const handleCloseReject = () => {
+    setPopupKey(null);
+    setReasonDraft("");
+  };
+
+  // Confirm a new rejection — requires a reason, called from the popup.
+  const handleConfirmReject = async (doc: Doc) => {
+    if (!expert || !doc.publicId) return;
+    if (!reasonDraft.trim()) { toast.warning("Please provide a reason"); return; }
+    setBusyKey(doc.key);
+    try {
+      await verifyExpert(expert.id, toApiType(tier), {
+        documentKey: doc.publicId,
+        verify:      false,
+        reject:      true,
+        reason:      reasonDraft.trim(),
+        adminId,
+      });
+      setDocs(prev => prev.map(d => d.key === doc.key
+        ? { ...d, verified: false, rejected: true, reason: reasonDraft.trim() }
+        : d));
+      setPopupKey(null);
+      setReasonDraft("");
+    } catch (err) {
+      toast.error("Failed to reject document", { description: err instanceof Error ? err.message : "Something went wrong" });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  // Un-reject (clear both flags) — no reason needed, called directly from
+  // unchecking an already-rejected document's Reject checkbox.
+  const handleClearReject = async (doc: Doc) => {
+    if (!expert || !doc.publicId) return;
+    setBusyKey(doc.key);
+    try {
+      await verifyExpert(expert.id, toApiType(tier), {
+        documentKey: doc.publicId,
+        verify:      false,
+        reject:      false,
+        adminId,
+      });
+      setDocs(prev => prev.map(d => d.key === doc.key
+        ? { ...d, verified: false, rejected: false, reason: undefined }
+        : d));
+    } catch (err) {
+      toast.error("Failed to update document", { description: err instanceof Error ? err.message : "Something went wrong" });
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   if (isLoadingDetail) {
     return (
-      <Modal open onClose={handleClose} title="Verification Detail" size="md">
+      <Modal open onClose={onClose} title="Verification Detail" size="md">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", gap: "8px", color: "#9CA3AF", fontSize: "14px" }}>
           <Loader2 size={18} className="animate-spin" /> Loading details…
         </div>
@@ -726,7 +754,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   if (!expert || !selectedSummary) {
     return (
-      <Modal open onClose={handleClose} title="Verification Detail" size="md">
+      <Modal open onClose={onClose} title="Verification Detail" size="md">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", fontSize: "14px", color: "#ef4444" }}>
           Failed to load verification detail.
         </div>
@@ -736,12 +764,18 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   const commonProps = {
     expert,
-    summary:        selectedSummary,
-    onClose:        handleClose,
-    onApprove:      () => setApproveOpen(true),
-    onReject:       () => setRejectOpen(true),
-    isMutating,
-    resolvedStatus,
+    summary: selectedSummary,
+    onClose,
+    docs,
+    busyKey,
+    popupKey,
+    reasonDraft,
+    onToggleVerify:  handleToggleVerify,
+    onOpenReject:    handleOpenReject,
+    onCloseReject:   handleCloseReject,
+    onReasonChange:  setReasonDraft,
+    onConfirmReject: handleConfirmReject,
+    onClearReject:   handleClearReject,
   };
 
   return (
@@ -752,18 +786,6 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
       {tier === "tier3" && (
         <Tier3Modal {...commonProps} />
       )}
-
-      <ApproveModal
-        name={expert.name} open={approveOpen}
-        onClose={() => setApproveOpen(false)}
-        onConfirm={handleApprove} isMutating={isMutating}
-      />
-      <RejectModal
-        name={expert.name} open={rejectOpen}
-        onClose={() => { setRejectOpen(false); setRejectReason(""); }}
-        onConfirm={handleReject} isMutating={isMutating}
-        reason={rejectReason} setReason={setRejectReason}
-      />
     </>
   );
 }

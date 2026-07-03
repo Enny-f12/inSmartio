@@ -5,7 +5,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, Eye, Loader2 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
-import VerificationModal from "@/components/verifications/VerificationModal";
+import VerificationModal, { type ComputedStatus } from "@/components/verifications/VerificationModal";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
@@ -15,12 +15,9 @@ import {
   selectItemTier,
 } from "@/lib/redux/verificationSlice";
 import {
-  normaliseVerificationStatus,
   type ApiVerificationSummary,
   type VerificationTier,
-  type VerificationStatus,
 } from "@/lib/api/verificationApi";
-import type { LocalStatus } from "@/lib/redux/verificationSlice";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -40,84 +37,67 @@ const TIER_STYLE: Record<VerificationTier, { bg: string; text: string; label: st
   tier3: { bg: "#ede9fe", text: "#6d28d9", label: "Tier 3" },
 };
 
-const STATUS_VARIANT: Record<VerificationStatus, "green" | "yellow" | "red"> = {
+const STATUS_VARIANT: Record<ComputedStatus, "green" | "yellow" | "red"> = {
   approved: "green",
   pending:  "yellow",
   rejected: "red",
 };
 
-/**
- * Maps backend status values to frontend display statuses.
- *
- * Backend  → Frontend
- * active   → approved
- * inactive → pending
- * suspend  → rejected
- *
- * This is the single source of truth for the mapping. The existing
- * `normaliseVerificationStatus` in verificationApi.ts should be updated
- * to handle these three raw values and return the correct VerificationStatus.
- */
-const STATUS_OPTIONS: { value: VerificationStatus | ""; label: string }[] = [
+const STATUS_OPTIONS: { value: ComputedStatus | ""; label: string }[] = [
   { value: "",         label: "All statuses" },
   { value: "approved", label: "Approved"     },
   { value: "pending",  label: "Pending"      },
   { value: "rejected", label: "Rejected"     },
 ];
 
-// ── Document count helper ────────────────────────────────────────────────────
-// Verification is decided at the application level, not per-document — the
-// `verify` flag on individual documents in the summary never reflects a real
-// decision. So instead of showing a misleading "X verified / Y expected"
-// fraction, we show a single number: how many documents this applicant has
-// actually SUBMITTED (i.e. have a real url), restricted to the document
-// types relevant to their tier — mirroring exactly what the detail modal
-// shows.
+// ── Priority-based status ─────────────────────────────────────────────────────
+// Derive status from the actual per-document verify/reject flags, rather
+// than trusting the backend's own aggregate status/verify field (which was
+// observed resetting unpredictably on a single per-document call).
+//   any document rejected  → rejected   (highest priority)
+//   all documents verified → approved
+//   otherwise               → pending
+function computeStatus(docs: { verified: boolean; rejected: boolean }[]): ComputedStatus {
+  if (docs.some((d) => d.rejected)) return "rejected";
+  if (docs.length > 0 && docs.every((d) => d.verified)) return "approved";
+  return "pending";
+}
 
-const TIER12_DOC_KEYS = new Set([
-  "ninslip",
-  "governmentid",
-  "profilephoto",
-  "addressproof",
-  "portfolio",
-]);
+function getDocFlags(e: ApiVerificationSummary): { verified: boolean; rejected: boolean }[] {
+  if (!Array.isArray(e.documents)) return [];
+  return e.documents.map((d) => ({
+    verified: d.verify === true,
+    rejected: (d as unknown as { reject?: boolean }).reject === true,
+  }));
+}
 
-const normaliseDocKey = (s: string) => s.toLowerCase().replace(/[\s_-]/g, "");
-
-function getDocCounts(e: ApiVerificationSummary, tier: VerificationTier): { submitted: number; total: number } {
-  const submitted = (() => {
-    if (Array.isArray(e.documents)) {
-      return e.documents.filter((d) => {
-        const hasUrl = typeof d.url === "string" && d.url.length > 10;
-        if (!hasUrl) return false;
-        if (tier === "tier1" || tier === "tier2") {
-          return TIER12_DOC_KEYS.has(normaliseDocKey(d.type ?? ""));
-        }
-        return true;
-      }).length;
-    }
-    // Backend sent a plain number of submitted documents
-    if (typeof e.documents === "number") return e.documents;
-    return 0;
-  })();
-
-  const total = e.totalDocuments ?? (Array.isArray(e.documents) ? e.documents.length : 0);
-
-  return { submitted, total };
+function getDocCounts(e: ApiVerificationSummary): { submitted: number; total: number } {
+  if (Array.isArray(e.documents)) {
+    const total     = e.documents.length;
+    const submitted = e.documents.filter((d) => d.verify === true).length;
+    return { submitted, total };
+  }
+  const total = e.totalDocuments ?? 0;
+  const n     = typeof e.documents === "number" ? e.documents : 0;
+  return { submitted: n, total };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function VerificationsPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected, selectedStatus, localOverrides } =
+  const { list, listStatus, listError, selected, selectedStatus } =
     useAppSelector((s) => s.verifications);
 
   const [activeTier,   setActiveTier]   = useState<TierLabel>("Tier 1");
   const [tierSet,      setTierSet]      = useState(false);
-  const [statusFilter, setStatusFilter] = useState<VerificationStatus | "">("");
+  const [statusFilter, setStatusFilter] = useState<ComputedStatus | "">("");
   const [search,       setSearch]       = useState("");
   const [page,         setPage]         = useState(1);
+
+  // Local overrides now use ComputedStatus (from the ratio rule), reported up
+  // by the modal whenever the admin toggles a document's verified state.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, ComputedStatus>>({});
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -127,10 +107,10 @@ export default function VerificationsPage() {
 
   // ── Per-item derived values ────────────────────────────────────────────────
 
-  const getStatus = (e: ApiVerificationSummary): VerificationStatus => {
-    const local = localOverrides[e.id] as LocalStatus | undefined;
-    if (local) return local;
-    return normaliseVerificationStatus(e.status, e.verify);
+  const getStatus = (e: ApiVerificationSummary): ComputedStatus => {
+    const override = statusOverrides[e.id];
+    if (override) return override;
+    return computeStatus(getDocFlags(e));
   };
 
   const getTier = (e: ApiVerificationSummary): VerificationTier => selectItemTier(e);
@@ -141,7 +121,7 @@ export default function VerificationsPage() {
     tier1: list.filter((e) => getTier(e) === "tier1").length,
     tier2: list.filter((e) => getTier(e) === "tier2").length,
     tier3: list.filter((e) => getTier(e) === "tier3").length,
-  }), [list, localOverrides]);
+  }), [list]);
 
   // Auto-select the first tier that has items (runs once after list loads)
   useEffect(() => {
@@ -158,7 +138,7 @@ export default function VerificationsPage() {
     if (statusFilter && getStatus(e) !== statusFilter) return false;
     if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [list, activeTier, statusFilter, search, localOverrides]);
+  }), [list, activeTier, statusFilter, search, statusOverrides]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -172,7 +152,7 @@ export default function VerificationsPage() {
     setPage(1);
   };
 
-  const handleStatusFilterChange = (val: VerificationStatus | "") => {
+  const handleStatusFilterChange = (val: ComputedStatus | "") => {
     setStatusFilter(val);
     setPage(1);
   };
@@ -184,8 +164,18 @@ export default function VerificationsPage() {
 
   const handleOpenDetail  = (e: ApiVerificationSummary) =>
     dispatch(fetchVerificationById({ id: e.id, summary: e }));
-  const handleCloseModal  = () => dispatch(clearSelectedVerification());
-  const handleStatusChange = () => dispatch(clearSelectedVerification());
+  // The local override below is just for instant feedback while the modal is
+  // open. The real fix: refetch the list so Redux itself has the correct
+  // document data — otherwise switching tiers/pages (which can remount this
+  // component) or navigating elsewhere and back shows stale data until a
+  // hard refresh.
+  const handleCloseModal  = () => {
+    dispatch(clearSelectedVerification());
+    dispatch(fetchVerifications());
+  };
+  const handleStatusChange = (id: string, status: ComputedStatus) => {
+    setStatusOverrides((prev) => ({ ...prev, [id]: status }));
+  };
 
   const isModalOpen = selectedStatus === "loading" || selectedStatus === "succeeded";
 
@@ -262,7 +252,7 @@ export default function VerificationsPage() {
             {/* Status filter */}
             <select
               value={statusFilter}
-              onChange={(e) => handleStatusFilterChange(e.target.value as VerificationStatus | "")}
+              onChange={(e) => handleStatusFilterChange(e.target.value as ComputedStatus | "")}
               style={{
                 padding: "10px 14px", borderRadius: "10px", fontSize: "13px",
                 border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
@@ -307,7 +297,7 @@ export default function VerificationsPage() {
                       const tier       = getTier(expert);
                       const ts         = TIER_STYLE[tier];
                       const st         = getStatus(expert);
-                      const { submitted: docsIn, total: docsTotal } = getDocCounts(expert, tier);
+                      const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
                       const docsComplete = docsTotal > 0 && docsIn === docsTotal;
                       const docsNone      = docsIn === 0;
                       return (
@@ -352,7 +342,7 @@ export default function VerificationsPage() {
                   const tier      = getTier(expert);
                   const ts        = TIER_STYLE[tier];
                   const st        = getStatus(expert);
-                  const { submitted: docsIn, total: docsTotal } = getDocCounts(expert, tier);
+                  const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
                   const docsComplete = docsTotal > 0 && docsIn === docsTotal;
                   const docsNone      = docsIn === 0;
                   return (
