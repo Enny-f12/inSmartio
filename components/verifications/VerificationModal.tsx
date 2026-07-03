@@ -47,6 +47,13 @@ export function computeStatus(docs: { verified: boolean; rejected: boolean }[]):
   return "pending";
 }
 
+// Guarantor Form and Police Clearance are verified in their own dedicated
+// sections, not counted as part of the main document tally / overall status.
+const AUX_DOC_KEYS = new Set(["guarantorform", "policeclearance"]);
+function coreDocs<T extends { key: string }>(all: T[]): T[] {
+  return all.filter((d) => !AUX_DOC_KEYS.has(d.key));
+}
+
 // ── Cloudinary download fix ────────────────────────────────────────────────────
 // The HTML `download` attribute is ignored by browsers for cross-origin URLs
 // (these files live on res.cloudinary.com, the app runs elsewhere), so it
@@ -526,9 +533,11 @@ function Tier3Modal({
 }) {
   const guarantor = summary.guarantor;
   const policeClr = summary.policeClearance;
-
+  const guarantorDoc = docs.find(d => d.key === "guarantorform");
+  const policeDoc    = docs.find(d => d.key === "policeclearance");
+  const bodyDocs      = coreDocs(docs); // display only — main Documents card shows just the 4 core docs
   const verifiedCount = docs.filter(d => d.verified).length;
-  const status = computeStatus(docs);
+  const status = computeStatus(docs); // count/status includes ALL docs, incl. guarantor form + police clearance
   const mailtoHref = buildMailto(expert.email, expert.name, "tier3");
 
   return (
@@ -554,9 +563,9 @@ function Tier3Modal({
 
         <Card>
           <SectionTitle title="Documents" />
-          {docs.length === 0
+          {bodyDocs.length === 0
             ? <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No documents found.</p>
-            : docs.map(d => (
+            : bodyDocs.map(d => (
                 <DocumentRow
                   key={d.key}
                   name={d.name}
@@ -577,48 +586,80 @@ function Tier3Modal({
           }
         </Card>
 
-        {guarantor ? (
-          <Card>
-            <SectionTitle title="Guarantor Verification" />
-            <InfoRow label="Name:"       value={guarantor.name} />
-            <InfoRow label="Phone:"      value={guarantor.phone} />
-            <InfoRow label="Occupation:" value={guarantor.occupation} />
-            <InfoRow label="Contact:"
-              value={
-                <a href={`tel:${guarantor.phone}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "#374151", textDecoration: "none", fontWeight: 500 }}>
-                  <Phone size={13} /> Call Guarantor
-                </a>
-              }
+        <Card>
+          <SectionTitle title="Guarantor Verification" />
+          {guarantor && (
+            <>
+              <InfoRow label="Name:"       value={guarantor.name} />
+              <InfoRow label="Phone:"      value={guarantor.phone} />
+              <InfoRow label="Occupation:" value={guarantor.occupation} />
+              <InfoRow label="Contact:"
+                value={
+                  <a href={`tel:${guarantor.phone}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "#374151", textDecoration: "none", fontWeight: 500 }}>
+                    <Phone size={13} /> Call Guarantor
+                  </a>
+                }
+              />
+            </>
+          )}
+          {guarantorDoc ? (
+            <DocumentRow
+              name="Guarantor Form"
+              url={guarantorDoc.url}
+              verified={guarantorDoc.verified}
+              rejected={guarantorDoc.rejected}
+              reason={guarantorDoc.reason}
+              busy={busyKey === guarantorDoc.key}
+              onToggleVerify={() => onToggleVerify(guarantorDoc)}
+              onToggleReject={() => guarantorDoc.rejected ? onClearReject(guarantorDoc) : onOpenReject(guarantorDoc)}
+              popupOpen={popupKey === guarantorDoc.key}
+              reasonDraft={reasonDraft}
+              onReasonChange={onReasonChange}
+              onConfirmReject={() => onConfirmReject(guarantorDoc)}
+              onCancelReject={onCloseReject}
             />
-          </Card>
-        ) : (
-          <Card>
-            <SectionTitle title="Guarantor Verification" />
+          ) : !guarantor ? (
             <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No guarantor information submitted.</p>
-          </Card>
-        )}
+          ) : null}
+        </Card>
 
-        {policeClr ? (
-          <Card>
-            <SectionTitle title="Police Clearance Verification" />
-            <InfoRow label="Certificate #:" value={policeClr.certificateNo} />
-            <InfoRow label="Issued:"         value={policeClr.issued} />
-            <InfoRow label="Issuing State:"  value={policeClr.issuingState} />
-            <InfoRow label="Status:"
-              value={
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "#374151", fontWeight: 500 }}>
-                  <CheckCircle2 size={13} color="#16a34a" /> {policeClr.status}
-                </span>
-              }
+        <Card>
+          <SectionTitle title="Police Clearance Verification" />
+          {policeClr && (
+            <>
+              <InfoRow label="Certificate #:" value={policeClr.certificateNo} />
+              <InfoRow label="Issued:"         value={policeClr.issued} />
+              <InfoRow label="Issuing State:"  value={policeClr.issuingState} />
+              <InfoRow label="Status:"
+                value={
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                    <CheckCircle2 size={13} color="#16a34a" /> {policeClr.status}
+                  </span>
+                }
+              />
+            </>
+          )}
+          {policeDoc ? (
+            <DocumentRow
+              name="Police Clearance Certificate"
+              url={policeDoc.url}
+              verified={policeDoc.verified}
+              rejected={policeDoc.rejected}
+              reason={policeDoc.reason}
+              busy={busyKey === policeDoc.key}
+              onToggleVerify={() => onToggleVerify(policeDoc)}
+              onToggleReject={() => policeDoc.rejected ? onClearReject(policeDoc) : onOpenReject(policeDoc)}
+              popupOpen={popupKey === policeDoc.key}
+              reasonDraft={reasonDraft}
+              onReasonChange={onReasonChange}
+              onConfirmReject={() => onConfirmReject(policeDoc)}
+              onCancelReject={onCloseReject}
             />
-          </Card>
-        ) : (
-          <Card>
-            <SectionTitle title="Police Clearance Verification" />
+          ) : !policeClr ? (
             <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No police clearance submitted.</p>
-          </Card>
-        )}
+          ) : null}
+        </Card>
       </div>
     </Modal>
   );
