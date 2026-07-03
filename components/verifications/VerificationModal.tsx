@@ -1,5 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -27,8 +25,15 @@ function resolveTier(detail: ApiVerificationDetail, summary: ApiVerificationSumm
   return "tier1";
 }
 
-const toApiType = (tier: VerificationTier): VerificationType =>
-  tier === "tier3" ? "tas" : "expert";
+// The `type` query param the backend endpoint needs is determined by which
+// collection the record actually lives in — NOT by tier number. Tier 3 can
+// apply to either a regular Expert or a TAS agent, so tier alone is not a
+// reliable signal (using it caused 401s: an EXPERT-... id was being queried
+// with type=tas because it happened to be Tier 3). The ID prefix is reliable.
+function toApiType(detail: ApiVerificationDetail): VerificationType {
+  const id = (detail.id ?? "").toUpperCase();
+  return id.startsWith("TAS") ? "tas" : "expert";
+}
 
 // ── Priority-based status ──────────────────────────────────────────────────────
 //   any document rejected → rejected   (highest priority)
@@ -648,15 +653,18 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
 
   // Seed docs from real backend state whenever a different applicant opens
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDocs(expert ? parseDocs(expert, tier) : []);
     setBusyKey(null);
     setPopupKey(null);
     setReasonDraft("");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expert?.id]);
 
   const status = useMemo(() => computeStatus(docs), [docs]);
 
   // Report every status change up so the list page's badge stays in sync.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const lastReported = useMemo(() => ({ current: null as ComputedStatus | null }), [expert?.id]);
   useEffect(() => {
     if (!expert) return;
@@ -664,6 +672,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     // eslint-disable-next-line react-hooks/immutability
     lastReported.current = status;
     onStatusChange(expert.id, status);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, expert?.id]);
 
   const handleToggleVerify = async (doc: Doc) => {
@@ -671,7 +680,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     const nextVerified = !doc.verified;
     setBusyKey(doc.key);
     try {
-      await verifyExpert(expert.id, toApiType(tier), {
+      await verifyExpert(expert.id, toApiType(expert), {
         documentKey: doc.publicId,
         verify:      nextVerified,
         reject:      false,
@@ -701,7 +710,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     if (!reasonDraft.trim()) { toast.warning("Please provide a reason"); return; }
     setBusyKey(doc.key);
     try {
-      await verifyExpert(expert.id, toApiType(tier), {
+      await verifyExpert(expert.id, toApiType(expert), {
         documentKey: doc.publicId,
         verify:      false,
         reject:      true,
@@ -726,7 +735,7 @@ export default function VerificationModal({ expert, onClose, onStatusChange }: P
     if (!expert || !doc.publicId) return;
     setBusyKey(doc.key);
     try {
-      await verifyExpert(expert.id, toApiType(tier), {
+      await verifyExpert(expert.id, toApiType(expert), {
         documentKey: doc.publicId,
         verify:      false,
         reject:      false,
