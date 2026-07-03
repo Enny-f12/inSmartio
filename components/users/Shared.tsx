@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Upload, CheckCircle2, User } from "lucide-react";
 
 // ── Styles ────────────────────────────────────────────────
@@ -207,5 +207,147 @@ export function RoleSelector({ onSelect }: { onSelect: (r: Role) => void }) {
         </button>
       ))}
     </div>
+  );
+}
+
+// ── Google Places Autocomplete ─────────────────────────────
+// Loads the Maps JS API (places library) once, lazily, and reuses it across
+// every AddressAutocomplete instance on the page.
+
+declare global {
+  interface Window {
+    // Loosely typed — @types/google.maps isn't installed, and we only touch
+    // a handful of Places Autocomplete APIs here.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    google?: any;
+  }
+}
+
+let mapsLoadPromise: Promise<void> | null = null;
+
+// Google appends its suggestion dropdown (.pac-container) directly to <body>
+// with its own z-index. Inside a modal/dialog, that can end up rendering
+// BELOW the modal's overlay — the suggestions exist but are invisible.
+// This pushes it above anything reasonable a modal would use.
+function ensurePacContainerZIndex() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("pac-container-zfix")) return;
+  const style = document.createElement("style");
+  style.id = "pac-container-zfix";
+  style.textContent = `.pac-container { z-index: 999999 !important; }`;
+  document.head.appendChild(style);
+}
+
+function loadGoogleMaps(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  ensurePacContainerZIndex();
+  if (window.google?.maps?.places) return Promise.resolve();
+  if (mapsLoadPromise) return mapsLoadPromise;
+
+  mapsLoadPromise = new Promise((resolve, reject) => {
+    const existing = document.getElementById("google-maps-script");
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Google Maps script")));
+      return;
+    }
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!key) {
+      reject(new Error("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set"));
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "google-maps-script";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Google Maps script"));
+    document.head.appendChild(script);
+  });
+
+  return mapsLoadPromise;
+}
+
+export interface LocationValue {
+  address: string;
+  city?:    string;
+  state?:   string;
+  country?: string;
+  lat?:     number;
+  lng?:     number;
+}
+
+/**
+ * Plain text input backed by Google Places Autocomplete. No map is rendered —
+ * this is address-verification-by-suggestion only. Falls back to a normal
+ * free-text input if the Maps script fails to load (e.g. missing/invalid key),
+ * so the form never gets stuck.
+ */
+export function AddressAutocomplete({
+  value, onSelect, placeholder = "Start typing an address…",
+}: {
+  value:       string;
+  onSelect:    (loc: LocationValue) => void;
+  placeholder?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [text, setText]   = useState(value);
+  const [ready, setReady] = useState(false);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setText(value); }, [value]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadGoogleMaps()
+      .then(() => { if (!cancelled) setReady(true); })
+      .catch(() => { /* Maps failed to load — input still works as free text */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !inputRef.current || !window.google?.maps?.places) return;
+
+    const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+      fields: ["formatted_address", "address_components", "geometry"],
+    });
+
+    const listener = autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace();
+      if (!place) return;
+
+       
+      const comps: { long_name: string; types: string[] }[] = place.address_components ?? [];
+      const find = (type: string) => comps.find((c) => c.types.includes(type))?.long_name;
+
+      const loc: LocationValue = {
+        address: place.formatted_address ?? inputRef.current?.value ?? "",
+        city:    find("locality") || find("administrative_area_level_2"),
+        state:   find("administrative_area_level_1"),
+        country: find("country"),
+        lat:     place.geometry?.location?.lat?.(),
+        lng:     place.geometry?.location?.lng?.(),
+      };
+      setText(loc.address);
+      onSelect(loc);
+    });
+
+    return () => {
+      window.google?.maps?.event?.removeListener(listener);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  return (
+    <input
+      ref={inputRef}
+      style={inp}
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onSelect({ address: e.target.value });
+      }}
+    />
   );
 }

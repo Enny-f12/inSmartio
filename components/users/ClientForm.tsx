@@ -1,16 +1,23 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
-import { inp, lbl, row, PhoneInput, AvatarPick } from "./Shared";
+import { inp, lbl, row, PhoneInput, AvatarPick, AddressAutocomplete, type LocationValue } from "./Shared";
 
 export interface ClientFormState {
   name: string; email: string; username: string; phone: string; password: string;
   avatar: File | null;
+  locationAddress: string;
+  locationCity?:    string;
+  locationState?:   string;
+  locationCountry?: string;
+  locationLat?:     number;
+  locationLng?:     number;
 }
 
 export const defaultClient = (): ClientFormState => ({
   name: "", email: "", username: "", phone: "", password: "",
   avatar: null,
+  locationAddress: "",
 });
 
 interface ClientFormProps {
@@ -21,6 +28,15 @@ interface ClientFormProps {
 }
 
 export default function ClientForm({ f, set, showPw, setShowPw }: ClientFormProps) {
+  const handleLocationSelect = (loc: LocationValue) => {
+    set("locationAddress", loc.address);
+    set("locationCity",    loc.city);
+    set("locationState",   loc.state);
+    set("locationCountry", loc.country);
+    set("locationLat",     loc.lat);
+    set("locationLng",     loc.lng);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <AvatarPick picked={f.avatar} onPick={(file) => set("avatar", file)} />
@@ -35,6 +51,9 @@ export default function ClientForm({ f, set, showPw, setShowPw }: ClientFormProp
       </div>
       <div style={row}><label style={lbl}>Phone</label>
         <PhoneInput value={f.phone} onChange={(v) => set("phone", v)} />
+      </div>
+      <div style={row}><label style={lbl}>Location</label>
+        <AddressAutocomplete value={f.locationAddress} onSelect={handleLocationSelect} />
       </div>
       <div style={row}><label style={lbl}>Password *</label>
         <div style={{ position: "relative" }}>

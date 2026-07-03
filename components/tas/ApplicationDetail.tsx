@@ -2,17 +2,40 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, CheckCircle2, X, Loader2, Eye, Download } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, Eye, Download, X } from "lucide-react";
 import { toast } from "sonner";
+import { useAppSelector } from "@/hooks/redux";
+import { verifyTas } from "@/lib/api/tasApi";
 import type { ApiTas } from "@/lib/api/tasApi";
-import { card, sectionLabel, statusBadge, getType, type AppTab } from "./shared";
+import { card, sectionLabel, getType } from "./shared";
+
+// ── Priority-based status ──────────────────────────────────────────────────────
+//   any document rejected → rejected   (highest priority)
+//   all documents verified → approved
+//   otherwise               → pending
+export type ComputedStatus = "pending" | "rejected" | "approved";
+
+export function computeStatus(docs: { verified: boolean; rejected: boolean }[]): ComputedStatus {
+  if (docs.some((d) => d.rejected)) return "rejected";
+  if (docs.length > 0 && docs.every((d) => d.verified)) return "approved";
+  return "pending";
+}
+
+// ── Cloudinary download fix ────────────────────────────────────────────────────
+// The HTML `download` attribute is ignored by browsers for cross-origin URLs
+// (files live on res.cloudinary.com, app runs elsewhere), so it silently
+// opens the file instead of downloading it. `fl_attachment` forces a real
+// download regardless of origin.
+function toDownloadUrl(url: string): string {
+  if (!url.includes("res.cloudinary.com")) return url;
+  if (url.includes("/fl_attachment")) return url;
+  return url.replace("/upload/", "/upload/fl_attachment/");
+}
 
 interface Props {
-  agent:     ApiTas;
-  appStatus: AppTab;
-  onBack:    () => void;
-  onApprove: (id: string, documentKey: string) => Promise<void>;
-  onReject:  (id: string, reason: string, documentKey: string) => Promise<void>;
+  agent:          ApiTas;
+  onBack:         () => void;
+  onStatusChange: (id: string, status: ComputedStatus) => void;
 }
 
 // ── Mobile-aware InfoRow ──────────────────────────────────────────────────────
@@ -54,47 +77,45 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 const EXCLUDED_TYPES = ["profile photo", "avatar"];
 
 interface DocEntry {
-  label:    string;
-  url?:     string;
-  verified: boolean;
-  rejected: boolean;
-  reason?:  string;
+  key:       string;
+  label:     string;
+  url?:      string;
+  verified:  boolean;
+  rejected:  boolean;
+  reason?:   string;
+  publicId?: string;
 }
 
-function parseDocuments(rawDoc: unknown): { list: DocEntry[]; documentKey: string } {
-  if (!rawDoc || typeof rawDoc !== "object") return { list: [], documentKey: "" };
+function parseDocuments(rawDoc: unknown): DocEntry[] {
+  if (!rawDoc || typeof rawDoc !== "object") return [];
 
   if (!Array.isArray(rawDoc)) {
-    const obj = rawDoc as Record<string, { url?: string; type?: string; verify?: boolean; reject?: boolean; reason?: string }>;
-    const list = Object.values(obj)
-      .filter((d) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
-      .map((d) => ({
+    const obj = rawDoc as Record<string, { url?: string; type?: string; verify?: boolean; reject?: boolean; reason?: string; publicId?: string }>;
+    return Object.entries(obj)
+      .filter(([, d]) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
+      .map(([key, d]) => ({
+        key,
         label:    d.type!.charAt(0).toUpperCase() + d.type!.slice(1),
         url:      d.url,
         verified: d.verify ?? false,
         rejected: d.reject ?? false,
         reason:   d.reason ?? undefined,
+        publicId: d.publicId ?? key,
       }));
-    const documentKey = Object.keys(obj).find(
-      (k) => !EXCLUDED_TYPES.includes((obj[k]?.type ?? "").toLowerCase())
-    ) ?? "";
-    return { list, documentKey };
   }
 
   const arr = rawDoc as { type?: string; url?: string; secureUrl?: string; verify?: boolean; reject?: boolean; reason?: string; publicId?: string }[];
-  const list = arr
+  return arr
     .filter((d) => d?.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase()))
-    .map((d) => ({
+    .map((d, i) => ({
+      key:      d.publicId ?? String(i),
       label:    d.type!.charAt(0).toUpperCase() + d.type!.slice(1),
       url:      d.secureUrl ?? d.url,
       verified: d.verify ?? false,
       rejected: d.reject ?? false,
       reason:   d.reason ?? undefined,
+      publicId: d.publicId,
     }));
-  const documentKey = arr.find(
-    (d) => d.type && !EXCLUDED_TYPES.includes(d.type.toLowerCase())
-  )?.publicId ?? "";
-  return { list, documentKey };
 }
 
 // ── Category helper ───────────────────────────────────────────────────────────
@@ -109,13 +130,58 @@ function parseCategory(raw: unknown): string {
   return String(raw);
 }
 
+// ── Status banner ─────────────────────────────────────────────────────────────
+
+const STATUS_META: Record<ComputedStatus, { bg: string; border: string; text: string; sub: string; icon: React.ReactNode; title: string }> = {
+  approved: {
+    bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d", sub: "#166534",
+    icon: <CheckCircle2 size={18} color="#16a34a" />,
+    title: "Approved — all documents verified",
+  },
+  rejected: {
+    bg: "#fef2f2", border: "#fecaca", text: "#dc2626", sub: "#b91c1c",
+    icon: <XCircle size={18} color="#dc2626" />,
+    title: "Rejected — at least one document rejected",
+  },
+  pending: {
+    bg: "#F9FAFB", border: "#E5E7EB", text: "#374151", sub: "#6B7280",
+    icon: <Clock size={18} color="#6B7280" />,
+    title: "Pending review",
+  },
+};
+
+function StatusBanner({ status, verifiedCount, total }: { status: ComputedStatus; verifiedCount: number; total: number }) {
+  const meta = STATUS_META[status];
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "12px 16px", borderRadius: 12,
+      backgroundColor: meta.bg, border: `1px solid ${meta.border}`,
+    }}>
+      {meta.icon}
+      <div>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: meta.text }}>
+          {meta.title}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: 12, color: meta.sub }}>
+          {verifiedCount} of {total} document{total === 1 ? "" : "s"} verified
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ApplicationDetailPage({ agent, appStatus, onBack, onApprove, onReject }: Props) {
-  const [rejectOpen,   setRejectOpen]   = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [loading,      setLoading]      = useState(false);
-  const [isMobile,     setIsMobile]     = useState(
+export default function ApplicationDetailPage({ agent, onBack, onStatusChange }: Props) {
+  const { admin } = useAppSelector((s) => s.auth);
+  const adminId   = (admin as Record<string, string> | null)?.id ?? "";
+
+  const [docs,        setDocs]        = useState<DocEntry[]>([]);
+  const [busyKey,      setBusyKey]     = useState<string | null>(null);
+  const [popupKey,     setPopupKey]    = useState<string | null>(null);
+  const [reasonDraft,  setReasonDraft] = useState("");
+  const [isMobile,     setIsMobile]    = useState(
     typeof window !== "undefined" ? window.innerWidth < 640 : false
   );
 
@@ -128,18 +194,23 @@ export default function ApplicationDetailPage({ agent, appStatus, onBack, onAppr
   const rawAgent = ((agent as Record<string, unknown>).user as ApiTas | undefined) ?? agent;
   const ext      = rawAgent as Record<string, unknown>;
 
-  const { list: docList, documentKey } = parseDocuments(ext.document);
+  // Seed docs from real backend state whenever a different agent opens
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDocs(parseDocuments(ext.document));
+    setBusyKey(null);
+    setPopupKey(null);
+    setReasonDraft("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id]);
 
-  // Reason for rejection — stored per-document; pull the first one that has it.
-  const rejectReasonText = docList.find((d) => d.rejected && d.reason)?.reason;
+  const verifiedCount = docs.filter((d) => d.verified).length;
+  const status = computeStatus(docs);
 
-  // Initialise doc checks from actual verified status on the document
-  const [docChecks, setDocChecks] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(docList.map((d) => [d.label, d.verified]))
-  );
-
-  const toggleDoc = (key: string) =>
-    setDocChecks((prev) => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    onStatusChange(agent.id, status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, agent.id]);
 
   const name       = (ext.name     as string) ?? "—";
   const phone      = (ext.phone    as string) ?? "—";
@@ -204,15 +275,70 @@ inSmartio Team`;
     ? `mailto:${email}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`
     : undefined;
 
-  const handleApprove = async () => {
-    setLoading(true);
-    try { await onApprove(agent.id, documentKey); } finally { setLoading(false); }
+  const handleToggleVerify = async (doc: DocEntry) => {
+    if (!doc.publicId) return;
+    const nextVerified = !doc.verified;
+    setBusyKey(doc.key);
+    try {
+      await verifyTas(agent.id, { documentKey: doc.publicId, verify: nextVerified, reject: false, adminId });
+      setDocs(prev => prev.map(d => d.key === doc.key ? { ...d, verified: nextVerified, rejected: false, reason: undefined } : d));
+    } catch (err: unknown) {
+      toast.error("Failed to update document", { description: err instanceof Error ? err.message : "Error" });
+    } finally {
+      setBusyKey(null);
+    }
   };
 
-  const handleReject = async () => {
-    if (!rejectReason.trim()) { toast.warning("Please provide a reason"); return; }
-    setLoading(true);
-    try { await onReject(agent.id, rejectReason.trim(), documentKey); } finally { setLoading(false); }
+  const handleOpenReject = (doc: DocEntry) => {
+    setPopupKey(doc.key);
+    setReasonDraft(doc.reason ?? "");
+  };
+
+  const handleCloseReject = () => {
+    setPopupKey(null);
+    setReasonDraft("");
+  };
+
+  // Confirm a new rejection — requires a reason, called from the popup.
+  const handleConfirmReject = async (doc: DocEntry) => {
+    if (!doc.publicId) return;
+    if (!reasonDraft.trim()) { toast.warning("Please provide a reason"); return; }
+    setBusyKey(doc.key);
+    try {
+      await verifyTas(agent.id, { documentKey: doc.publicId, verify: false, reject: true, reason: reasonDraft.trim(), adminId });
+      setDocs(prev => prev.map(d => d.key === doc.key ? { ...d, verified: false, rejected: true, reason: reasonDraft.trim() } : d));
+      setPopupKey(null);
+      setReasonDraft("");
+    } catch (err: unknown) {
+      toast.error("Failed to reject document", { description: err instanceof Error ? err.message : "Error" });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  // Un-reject (clear both flags) — no reason needed.
+  const handleClearReject = async (doc: DocEntry) => {
+    if (!doc.publicId) return;
+    setBusyKey(doc.key);
+    try {
+      await verifyTas(agent.id, { documentKey: doc.publicId, verify: false, reject: false, adminId });
+      setDocs(prev => prev.map(d => d.key === doc.key ? { ...d, verified: false, rejected: false, reason: undefined } : d));
+    } catch (err: unknown) {
+      toast.error("Failed to update document", { description: err instanceof Error ? err.message : "Error" });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  // Approve/Reject here are read-only status checks — no API call. They just
+  // confirm whether the condition is currently met from the checkboxes above.
+  const checkApprove = () => {
+    if (status === "approved") toast.success("All documents are verified — this application is Approved.");
+    else toast.warning(`Not yet approved — ${verifiedCount}/${docs.length} documents verified.`);
+  };
+  const checkReject = () => {
+    if (status === "rejected") toast.success("At least one document is rejected — this application is Rejected.");
+    else toast.warning("Not rejected — no documents have been marked Reject yet.");
   };
 
   return (
@@ -235,23 +361,26 @@ inSmartio Team`;
           <ArrowLeft size={16} /> TAS Applications
         </button>
         <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#111827" }}>{name}</span>
-        {appStatus === "pending" || appStatus === "rejected" ? (
-          <button onClick={handleApprove} disabled={loading}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={checkApprove}
             style={{
               display: "flex", alignItems: "center", gap: 6,
-              padding: isMobile ? "8px 14px" : "9px 20px",
+              padding: isMobile ? "8px 12px" : "9px 16px",
               borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
-              fontSize: 13, fontWeight: 600,
-              cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
             }}>
-            {loading
-              ? <Loader2 size={14} className="animate-spin" />
-              : <CheckCircle2 size={14} />}
-            Approve
+            <CheckCircle2 size={14} /> Approve
           </button>
-        ) : (
-          <div style={{ width: isMobile ? 0 : 80 }} />
-        )}
+          <button onClick={checkReject}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: isMobile ? "8px 12px" : "9px 16px",
+              borderRadius: 10, border: "1.5px solid #fecaca", backgroundColor: "#fff",
+              color: "#dc2626", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>
+            <XCircle size={14} /> Reject
+          </button>
+        </div>
       </div>
 
       {/* ── Scrollable body ── */}
@@ -260,6 +389,8 @@ inSmartio Team`;
         flex: 1, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
+
+        <StatusBanner status={status} verifiedCount={verifiedCount} total={docs.length} />
 
         {/* ── Applicant Information ── */}
         <div style={card}>
@@ -276,7 +407,6 @@ inSmartio Team`;
             {parentTas   && <InfoRow label="Parent TAS:"      value={parentTas} />}
             {locationStr && <InfoRow label="Location:"        value={locationStr} />}
             <InfoRow label="Submitted:"      value={submitted} />
-            <InfoRow label="Status:"         value={statusBadge(ext.status ?? "inactive")} />
             {expertId            && <InfoRow label="Existing Expert ID:"     value={expertId} />}
             {expertRating       != null && <InfoRow label="Expert Rating:"           value={`${expertRating} ⭐`} />}
             {expertJobsCompleted != null && <InfoRow label="Expert Jobs Completed:"  value={String(expertJobsCompleted)} />}
@@ -315,81 +445,119 @@ inSmartio Team`;
         <div style={card}>
           <div style={{ padding: isMobile ? "16px" : "20px 24px" }}>
             <p style={sectionLabel}>Documents</p>
-            {docList.length === 0 ? (
+            {docs.length === 0 ? (
               <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic", margin: 0 }}>
                 No documents uploaded.
               </p>
-            ) : docList.map((doc) => {
-              const isChecked = !!docChecks[doc.label];
+            ) : docs.map((doc) => {
+              const busy = busyKey === doc.key;
+              const has  = !!doc.url && doc.url.length > 10;
               return (
-                <div key={doc.label} style={{
-                  display: "flex",
-                  flexDirection: isMobile ? "column" : "row",
-                  alignItems: isMobile ? "flex-start" : "center",
-                  gap: isMobile ? 8 : 10,
-                  padding: "12px 0",
-                  borderBottom: "1px solid #F3F4F6",
-                }}>
-                  <span style={{ flex: 1, fontSize: 13, color: "#111827", fontWeight: 500 }}>
-                    📄 {doc.label}
-                  </span>
-                  {doc.url ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <a href={doc.url} target="_blank" rel="noreferrer"
-                        style={{
-                          fontSize: 12, color: "#2563eb", fontWeight: 500, textDecoration: "none",
-                          display: "flex", alignItems: "center", gap: 4,
-                        }}>
-                        <Eye size={13} /> View
-                      </a>
-                      <a href={doc.url} download={`${doc.label}.pdf`}
-                        style={{
-                          fontSize: 12, color: "#6B7280", fontWeight: 500, textDecoration: "none",
-                          display: "flex", alignItems: "center", gap: 4,
-                        }}>
-                        <Download size={13} /> Download
-                      </a>
-                      {appStatus === "pending" ? (
-                        <label style={{
-                          display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
-                          fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                          color: isChecked ? "#16a34a" : "#6B7280",
-                        }}>
-                          <input
-                            type="checkbox" checked={isChecked}
-                            onChange={() => toggleDoc(doc.label)}
-                            style={{ accentColor: "#16a34a", width: 14, height: 14 }}
-                          />
-                          {isChecked ? "✅ Verified" : "Mark as Verified"}
-                        </label>
-                      ) : appStatus === "approved" ? (
+                <div key={doc.key} style={{ padding: "12px 0", borderBottom: "1px solid #F3F4F6" }}>
+                  <div style={{
+                    display: "flex",
+                    flexDirection: isMobile ? "column" : "row",
+                    alignItems: isMobile ? "flex-start" : "center",
+                    gap: isMobile ? 8 : 10,
+                  }}>
+                    <span style={{ flex: 1, fontSize: 13, color: "#111827", fontWeight: 500 }}>
+                      📄 {doc.label}
+                    </span>
+                    {has ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <a href={doc.url} target="_blank" rel="noreferrer"
+                          style={{
+                            fontSize: 12, color: "#2563eb", fontWeight: 500, textDecoration: "none",
+                            display: "flex", alignItems: "center", gap: 4,
+                          }}>
+                          <Eye size={13} /> View
+                        </a>
+                        <a href={toDownloadUrl(doc.url!)} download
+                          style={{
+                            fontSize: 12, color: "#6B7280", fontWeight: 500, textDecoration: "none",
+                            display: "flex", alignItems: "center", gap: 4,
+                          }}>
+                          <Download size={13} /> Download
+                        </a>
                         <label style={{
                           display: "flex", alignItems: "center", gap: 5,
+                          cursor: busy ? "default" : "pointer",
                           fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                          color: "#16a34a", cursor: "default",
+                          color: doc.verified ? "#16a34a" : "#6B7280",
                         }}>
                           <input
-                            type="checkbox" checked readOnly
+                            type="checkbox" checked={doc.verified}
+                            onChange={busy ? undefined : () => handleToggleVerify(doc)}
+                            readOnly={busy}
                             style={{ accentColor: "#16a34a", width: 14, height: 14 }}
                           />
-                          ✅ Verified
+                          Verify
                         </label>
-                      ) : (
                         <label style={{
                           display: "flex", alignItems: "center", gap: 5,
+                          cursor: busy ? "default" : "pointer",
                           fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                          color: doc.rejected ? "#dc2626" : "#6B7280", cursor: "default",
+                          color: doc.rejected ? "#dc2626" : "#6B7280",
                         }}>
                           <input
-                            type="checkbox" checked={false} readOnly
-                            style={{ width: 14, height: 14 }}
+                            type="checkbox" checked={doc.rejected}
+                            onChange={busy ? undefined : () => doc.rejected ? handleClearReject(doc) : handleOpenReject(doc)}
+                            readOnly={busy}
+                            style={{ accentColor: "#dc2626", width: 14, height: 14 }}
                           />
-                          {doc.rejected ? "❌ Rejected" : "Mark as Verified"}
+                          Reject
                         </label>
-                      )}
+                        {busy && <Loader2 size={12} className="animate-spin" color="#9CA3AF" />}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>No URL</span>
+                    )}
+                  </div>
+
+                  {doc.rejected && doc.reason && popupKey !== doc.key && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#b91c1c" }}>
+                      Reason: {doc.reason}
+                    </p>
+                  )}
+
+                  {popupKey === doc.key && (
+                    <div style={{
+                      marginTop: 8, padding: "10px 12px", borderRadius: 10,
+                      border: "1px solid #FECACA", backgroundColor: "#FEF2F2",
+                      display: "flex", flexDirection: "column", gap: 8,
+                    }}>
+                      <textarea
+                        value={reasonDraft}
+                        onChange={(e) => setReasonDraft(e.target.value)}
+                        placeholder="Reason for rejecting this document…"
+                        rows={2} autoFocus disabled={busy}
+                        style={{
+                          width: "100%", borderRadius: 8, border: "1px solid #FCA5A5",
+                          padding: "8px 10px", fontSize: 12, resize: "none", outline: "none",
+                          backgroundColor: "#fff", color: "#111827", boxSizing: "border-box",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <button onClick={handleCloseReject} disabled={busy}
+                          style={{
+                            padding: "5px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
+                            backgroundColor: "#fff", fontSize: 12, color: "#6B7280",
+                            cursor: busy ? "not-allowed" : "pointer",
+                          }}>
+                          Cancel
+                        </button>
+                        <button onClick={() => handleConfirmReject(doc)} disabled={busy}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 5,
+                            padding: "5px 12px", borderRadius: 8, border: "none",
+                            backgroundColor: "#dc2626", color: "#fff", fontSize: 12, fontWeight: 600,
+                            cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.7 : 1,
+                          }}>
+                          {busy ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+                          Confirm Reject
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>No URL</span>
                   )}
                 </div>
               );
@@ -397,137 +565,20 @@ inSmartio Team`;
           </div>
         </div>
 
-        {/* ── Actions ── */}
-        {appStatus === "pending" && (
-          <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px" }}>
-            <p style={sectionLabel}>Actions</p>
-            {rejectOpen ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>
-                  Reason for rejecting <strong style={{ color: "#111827" }}>{name}</strong>:
-                </p>
-                <textarea
-                  value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="e.g. Incomplete documents, insufficient experience..."
-                  rows={3}
-                  style={{
-                    width: "100%", borderRadius: 8, border: "1px solid #E5E7EB",
-                    padding: "10px 12px", fontSize: 13, resize: "none", outline: "none",
-                    boxSizing: "border-box", backgroundColor: "#F9FAFB",
-                  }}
-                />
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button
-                    onClick={() => { setRejectOpen(false); setRejectReason(""); }}
-                    style={{
-                      flex: 1, padding: 10, borderRadius: 10, border: "1px solid #E5E7EB",
-                      backgroundColor: "#fff", fontSize: 13, cursor: "pointer", color: "#6B7280",
-                    }}>
-                    Cancel
-                  </button>
-                  <button onClick={handleReject} disabled={loading}
-                    style={{
-                      flex: 1, padding: 10, borderRadius: 10, border: "none",
-                      backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600,
-                      cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    }}>
-                    {loading
-                      ? <><Loader2 size={14} className="animate-spin" /> Rejecting...</>
-                      : "Confirm Reject"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <button onClick={handleApprove} disabled={loading}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "10px 22px",
-                    borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
-                    fontSize: 13, fontWeight: 600,
-                    cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-                  }}>
-                  {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  Approve as TAS
-                </button>
-                <button onClick={() => setRejectOpen(true)} disabled={loading}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "10px 18px",
-                    borderRadius: 10, border: "1.5px solid #fecaca", backgroundColor: "#fff",
-                    color: "#dc2626", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}>
-                  <X size={14} /> Reject
-                </button>
-                {hasValidEmail ? (
-                  <a href={mailHref}
-                    style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
-                    Request More Info
-                  </a>
-                ) : (
-                  <span title="No email on file for this applicant"
-                    style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
-                    Request More Info
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {appStatus === "rejected" && (
-          <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              {statusBadge(appStatus)}
-              <span style={{ fontSize: 13, color: "#6B7280" }}>
-                This application has been rejected.
-              </span>
-            </div>
-
-            {rejectReasonText && (
-              <div style={{
-                fontSize: 13, color: "#374151", margin: "0 0 16px",
-                background: "#FEF2F2", border: "1px solid #FECACA",
-                borderRadius: 8, padding: "10px 12px",
-              }}>
-                <strong style={{ color: "#111827" }}>Rejection reason: </strong>
-                {rejectReasonText}
-              </div>
-            )}
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <button onClick={handleApprove} disabled={loading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6, padding: "10px 22px",
-                  borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
-                  fontSize: 13, fontWeight: 600,
-                  cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-                }}>
-                {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                Approve as TAS
-              </button>
-              {hasValidEmail ? (
-                <a href={mailHref}
-                  style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
-                  Request More Info
-                </a>
-              ) : (
-                <span title="No email on file for this applicant"
-                  style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
-                  Request More Info
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {appStatus === "approved" && (
-          <div style={{ ...card, padding: "16px 24px", display: "flex", alignItems: "center", gap: 10 }}>
-            {statusBadge(appStatus)}
-            <span style={{ fontSize: 13, color: "#6B7280" }}>
-              This application has been approved.
+        {/* ── Request more info ── */}
+        <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px", display: "flex", alignItems: "center" }}>
+          {hasValidEmail ? (
+            <a href={mailHref}
+              style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
+              Request More Info
+            </a>
+          ) : (
+            <span title="No email on file for this applicant"
+              style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
+              Request More Info
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
