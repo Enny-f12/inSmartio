@@ -15,8 +15,10 @@ import {
   selectItemTier,
 } from "@/lib/redux/verificationSlice";
 import {
+  normaliseVerificationStatus,
   type ApiVerificationSummary,
   type VerificationTier,
+  type VerificationStatus,
 } from "@/lib/api/verificationApi";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -43,17 +45,15 @@ const STATUS_VARIANT: Record<ComputedStatus, "green" | "yellow" | "red"> = {
   rejected: "red",
 };
 
-const STATUS_OPTIONS: { value: ComputedStatus | ""; label: string }[] = [
+const STATUS_OPTIONS: { value: VerificationStatus | ""; label: string }[] = [
   { value: "",         label: "All statuses" },
   { value: "approved", label: "Approved"     },
   { value: "pending",  label: "Pending"      },
   { value: "rejected", label: "Rejected"     },
 ];
 
-// ── Priority-based status ─────────────────────────────────────────────────────
-// Derive status from the actual per-document verify/reject flags, rather
-// than trusting the backend's own aggregate status/verify field (which was
-// observed resetting unpredictably on a single per-document call).
+// ── Priority-based status (used only when per-document data is available —
+// i.e. Tier 3 / TAS rows, which the list endpoint returns in full) ───────────
 //   any document rejected  → rejected   (highest priority)
 //   all documents verified → approved
 //   otherwise               → pending
@@ -74,7 +74,7 @@ function getDocFlags(e: ApiVerificationSummary): { verified: boolean; rejected: 
 function getDocCounts(e: ApiVerificationSummary): { submitted: number; total: number } {
   if (Array.isArray(e.documents)) {
     const total     = e.documents.length;
-    const submitted = e.documents.filter((d) => d.verify === true).length;
+    const submitted = e.documents.filter((d) => typeof d.url === "string" && d.url.length > 10).length;
     return { submitted, total };
   }
   const total = e.totalDocuments ?? 0;
@@ -91,12 +91,12 @@ export default function VerificationsPage() {
 
   const [activeTier,   setActiveTier]   = useState<TierLabel>("Tier 1");
   const [tierSet,      setTierSet]      = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ComputedStatus | "">("");
+  const [statusFilter, setStatusFilter] = useState<VerificationStatus | "">("");
   const [search,       setSearch]       = useState("");
   const [page,         setPage]         = useState(1);
 
-  // Local overrides now use ComputedStatus (from the ratio rule), reported up
-  // by the modal whenever the admin toggles a document's verified state.
+  // Local overrides give instant feedback while the modal is open, on top of
+  // whatever the server returned for the current filter.
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ComputedStatus>>({});
 
   // ── Data loading ───────────────────────────────────────────────────────────
@@ -110,7 +110,12 @@ export default function VerificationsPage() {
   const getStatus = (e: ApiVerificationSummary): ComputedStatus => {
     const override = statusOverrides[e.id];
     if (override) return override;
-    return computeStatus(getDocFlags(e));
+    // Tier 3 / TAS rows carry full per-document data — compute from that.
+    const flags = getDocFlags(e);
+    if (flags.length > 0) return computeStatus(flags);
+    // Everything else: trust the backend's own field (same one the server
+    // uses for the `verify` filter param, so this stays consistent with it).
+    return normaliseVerificationStatus(e.status, e.verify) as ComputedStatus;
   };
 
   const getTier = (e: ApiVerificationSummary): VerificationTier => selectItemTier(e);
@@ -152,7 +157,7 @@ export default function VerificationsPage() {
     setPage(1);
   };
 
-  const handleStatusFilterChange = (val: ComputedStatus | "") => {
+  const handleStatusFilterChange = (val: VerificationStatus | "") => {
     setStatusFilter(val);
     setPage(1);
   };
@@ -165,10 +170,9 @@ export default function VerificationsPage() {
   const handleOpenDetail  = (e: ApiVerificationSummary) =>
     dispatch(fetchVerificationById({ id: e.id, summary: e }));
   // The local override below is just for instant feedback while the modal is
-  // open. The real fix: refetch the list so Redux itself has the correct
-  // document data — otherwise switching tiers/pages (which can remount this
-  // component) or navigating elsewhere and back shows stale data until a
-  // hard refresh.
+  // open. The real fix: refetch the list (with the current filter) so Redux
+  // itself has the correct data — otherwise switching tiers/pages or
+  // navigating elsewhere and back shows stale data until a hard refresh.
   const handleCloseModal  = () => {
     dispatch(clearSelectedVerification());
     dispatch(fetchVerifications());
@@ -249,10 +253,10 @@ export default function VerificationsPage() {
                 }} />
             </div>
 
-            {/* Status filter */}
+            {/* Status filter — server-side */}
             <select
               value={statusFilter}
-              onChange={(e) => handleStatusFilterChange(e.target.value as ComputedStatus | "")}
+              onChange={(e) => handleStatusFilterChange(e.target.value as VerificationStatus | "")}
               style={{
                 padding: "10px 14px", borderRadius: "10px", fontSize: "13px",
                 border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",

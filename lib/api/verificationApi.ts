@@ -111,8 +111,7 @@ export interface VerifyExpertPayload {
 interface VerificationListResponse {
   status:  boolean;
   message: string;
-  // Backend may or may not include `id` — we handle both cases
-  data:    (Partial<ApiVerificationSummary> & { email: string; name: string })[];
+  data:    ApiVerificationSummary[];
 }
 
 interface VerificationDetailResponse {
@@ -181,25 +180,32 @@ export function docLabel(summary: ApiVerificationSummary): string {
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
-// GET /api/admin/experts/verification
-// Injects a stable `id`:
-//   1. Use `id` field from backend if present (preferred)
-//   2. Fall back to `email` (unique, works for detail endpoint lookup by email)
+// GET /api/admin/experts/verification?page=&limit=
+// The backend requires pagination (page, limit — 1-indexed, sorted by
+// createdAt/updatedAt). The rest of this page (tier tabs, counts, search)
+// still expects the FULL list client-side, so we page through automatically
+// and concatenate every page into one array, stopping once a page comes back
+// short of the limit (i.e. the last page) or empty.
+const VERIFICATIONS_PAGE_LIMIT = 10;
+const VERIFICATIONS_MAX_PAGES  = 50; // safety cap — 500 records
+
 export const getAllVerifications = async (): Promise<ApiVerificationSummary[]> => {
-  const { data } = await axiosInstance.get<VerificationListResponse>(
-    "/admin/experts/verification"
-  );
-  return (data.data ?? []).map((item, index) => ({
-    documents:      [],
-    totalDocuments: 0,
-    status:         "pending",
-    submitted:      "",
-    ...item,
-    // id priority: backend id field > email > fallback index string
-    id: (item as Record<string, unknown>).id as string
-        ?? item.email
-        ?? `item-${index}`,
-  })) as ApiVerificationSummary[];
+  const all: ApiVerificationSummary[] = [];
+  let page = 1;
+
+  while (page <= VERIFICATIONS_MAX_PAGES) {
+    const { data } = await axiosInstance.get<VerificationListResponse>(
+      "/admin/experts/verification",
+      { params: { page, limit: VERIFICATIONS_PAGE_LIMIT } },
+    );
+    const batch = data.data ?? [];
+    all.push(...batch);
+
+    if (batch.length < VERIFICATIONS_PAGE_LIMIT) break; // last page reached
+    page++;
+  }
+
+  return all;
 };
 
 // GET /api/admin/experts/verification/{id}?type=expert|tas

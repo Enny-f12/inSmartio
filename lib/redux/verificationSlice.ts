@@ -10,6 +10,7 @@ import {
   type ApiVerificationDetail,
   type VerificationTier,
   type VerificationType,
+  type VerificationStatus,
   type VerifyExpertPayload,
 } from "@/lib/api/verificationApi";
 
@@ -80,9 +81,14 @@ const errMsg = (err: unknown, fallback: string) =>
 
 // ── Thunks ───────────────────────────────────────────────────────────────────
 
+// Accepts an optional filter for callers that still pass one (page.tsx),
+// but does NOT forward it to the backend — the `verify` query param was
+// confirmed to make the endpoint return an empty list regardless of value,
+// so status filtering happens client-side in page.tsx instead. Pagination
+// (page/limit) is still handled automatically inside getAllVerifications.
 export const fetchVerifications = createAsyncThunk(
   "verifications/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async (_filter: VerificationStatus | undefined, { rejectWithValue }) => {
     try { return await getAllVerifications(); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch verifications")); }
   }
