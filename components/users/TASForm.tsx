@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Eye, EyeOff, User as UserIcon, Briefcase, FileText, CreditCard } from "lucide-react";
 import {
   inp, lbl, row, grid2,
-  TAS_CATEGORIES, TAS_DOC_TYPES,
-  PhoneInput, DocListPicker, AvatarPick,
+  TAS_CATEGORIES, TAS_DOCUMENT_SLOTS,
+  PhoneInput, FixedDocSlots, AvatarPick, AddressAutocomplete, BankDetailsFields,
   DocEntry,
 } from "./Shared";
 
@@ -18,7 +18,8 @@ export interface TasState {
   selectedCategories: string[];
   otherCategory: string;
   monthlyRecruitment: string;
-  // bankDetails
+  // bankDetails — accountCode doubles as the CBN bank code once resolved
+  // via the bank-select + /tas/resolve-bank flow (see BankDetailsFields).
   bankName: string; accountNumber: string; accountName: string; accountCode: string; bvn: string;
   // documents
   documents: DocEntry[];
@@ -57,6 +58,21 @@ export function validateTasStep(f: TasState, step: number, warn: (msg: string) =
       warn("Select at least one category"); return false;
     }
     if (!f.monthlyRecruitment) { warn("Please select monthly recruitment capacity"); return false; }
+  }
+  if (step === 2) {
+    if (!f.bankName || !f.accountNumber || !f.accountName) {
+      warn("Select a bank, enter the account number, and verify the account before continuing");
+      return false;
+    }
+  }
+  if (step === 3) {
+    const missing = TAS_DOCUMENT_SLOTS.filter(
+      (s) => s.required && !f.documents.some((d) => d.type === s.type)
+    );
+    if (missing.length) {
+      warn(`Please upload: ${missing.map((s) => s.label).join(", ")}`);
+      return false;
+    }
   }
   return true;
 }
@@ -126,10 +142,22 @@ export default function TasMultiStep({ f, setF, step }: TasMultiStepProps) {
           <input style={inp} type="date" value={f.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
         </div>
       </div>
-      {/* Location fields */}
+      {/* Location — Google Places Autocomplete fills area/city/state/country;
+          the fields stay visible + editable underneath in case the admin needs
+          to correct or fill in what the address search couldn't infer. */}
       <div style={row}><label style={lbl}>Address *</label>
-        <input style={inp} placeholder="e.g. 12 Allen Avenue" value={f.address}
-          onChange={(e) => set("address", e.target.value)} />
+        <AddressAutocomplete
+          value={f.address}
+          placeholder="e.g. 12 Allen Avenue, Ikeja, Lagos"
+          onSelect={(loc) => setF((p) => ({
+            ...p,
+            address: loc.address,
+            area:    loc.area    ?? p.area,
+            city:    loc.city    ?? p.city,
+            state:   loc.state   ?? p.state,
+            country: loc.country ?? p.country,
+          }))}
+        />
       </div>
       <div style={grid2}>
         <div style={row}><label style={lbl}>Area</label>
@@ -197,35 +225,35 @@ export default function TasMultiStep({ f, setF, step }: TasMultiStepProps) {
     </div>
   );
 
-  // Step 2 — Bank (account)
+  // Step 2 — Bank
   if (step === 2) return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <div style={row}><label style={lbl}>Bank Name</label>
-        <input style={inp} placeholder="e.g. Access Bank" value={f.bankName} onChange={(e) => set("bankName", e.target.value)} /></div>
-      <div style={row}><label style={lbl}>Account Number</label>
-        <input style={inp} placeholder="0123456789" maxLength={10} value={f.accountNumber}
-          onChange={(e) => set("accountNumber", e.target.value.replace(/\D/g, "").slice(0, 10))} /></div>
-      <div style={row}><label style={lbl}>Account Name</label>
-        <input style={inp} placeholder="Jane Doe" value={f.accountName} onChange={(e) => set("accountName", e.target.value)} /></div>
+      <BankDetailsFields
+        bankName={f.bankName}
+        bankCode={f.accountCode}
+        accountNumber={f.accountNumber}
+        accountName={f.accountName}
+        onChange={(patch) => setF((p) => ({
+          ...p,
+          ...(patch.bankName      !== undefined ? { bankName: patch.bankName } : {}),
+          ...(patch.bankCode      !== undefined ? { accountCode: patch.bankCode } : {}),
+          ...(patch.accountNumber !== undefined ? { accountNumber: patch.accountNumber } : {}),
+          ...(patch.accountName   !== undefined ? { accountName: patch.accountName } : {}),
+        }))}
+      />
       <div style={row}><label style={lbl}>BVN</label>
         <input style={inp} placeholder="22334455666" maxLength={11} value={f.bvn}
           onChange={(e) => set("bvn", e.target.value.replace(/\D/g, "").slice(0, 11))} /></div>
-      <div style={row}><label style={lbl}>Account Code</label>
-        <input style={inp} placeholder="e.g. 123456" value={f.accountCode}
-          onChange={(e) => set("accountCode", e.target.value)} /></div>
     </div>
   );
 
   // Step 3 — Documents & Referral
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>
-        Upload documents and select the type for each.
-      </p>
-      <DocListPicker
+      <FixedDocSlots
+        slots={TAS_DOCUMENT_SLOTS}
         docs={f.documents}
         onChange={(docs) => set("documents", docs)}
-        typeOptions={TAS_DOC_TYPES}
       />
       <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: "14px" }}>
         <div style={row}><label style={lbl}>Referral Code (optional)</label>

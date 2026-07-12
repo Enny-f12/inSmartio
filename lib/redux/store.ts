@@ -30,6 +30,7 @@ import clientRefundReducer from "./clientrefundSlice";
 import expertPayoutReducer from "./expertpayoutSlice";
 import cloudReducer from "./cloudSlice";
 import subscriptionReducer from "./subscriptionSlice";
+import waitlistReducer from "./waitlistSlice";
 
 
 
@@ -66,6 +67,7 @@ export const store = configureStore({
     expertPayout:          expertPayoutReducer,
     cloud:                 cloudReducer,
     subscription:          subscriptionReducer,
+    waitlist:              waitlistReducer,
   },
 });
 

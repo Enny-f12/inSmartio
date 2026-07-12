@@ -13,6 +13,7 @@ export type SettingsView =
   | "admins"
   | "notificationSettings"
   | "changePassword"
+  | "waitlist"    
   | "subscription";     // ← new
 
 // ── Categories ───────────────────────────────────────────

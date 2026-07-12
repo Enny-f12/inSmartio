@@ -103,6 +103,9 @@ export interface Permissions {
   // Audit logs
   canViewAuditLogs:         boolean;
   canExportAuditLogs:       boolean;
+
+  //waitlist
+   canManageWaitlist: boolean; 
 }
 
 // ── Permission definitions per role ───────────────────────
@@ -153,6 +156,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           true,
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
+     canManageWaitlist: true,
   },
 
   // ── Verification Officer ──────────────────────────────
@@ -199,6 +203,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        false,
   },
 
   // ── Finance Admin ─────────────────────────────────────
@@ -245,6 +250,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           false,
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
+    canManageWaitlist:        false,
   },
 
   // ── Support Admin ─────────────────────────────────────
@@ -291,6 +297,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        true,
   },
 
   // ── View Only ─────────────────────────────────────────
@@ -337,6 +344,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        false,
   },
 };
 
