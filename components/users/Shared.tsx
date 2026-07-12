@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Upload, CheckCircle2, User } from "lucide-react";
+import { Upload, CheckCircle2, User, FileText } from "lucide-react";
+import { getBankList, resolveBankAccount, type BankListItem } from "@/lib/api/usersApi";
 
 // ── Styles ────────────────────────────────────────────────
 export const inp: React.CSSProperties = {
@@ -40,7 +41,23 @@ export const TAS_CATEGORIES = Object.keys(CATEGORIES);
 
 // ── Document type options ─────────────────────────────────
 export const EXPERT_DOC_TYPES = ["National ID", "Passport", "Utility Bill", "Driver's License", "Voter's Card"];
-export const TAS_DOC_TYPES    = ["National ID", "Utility Bill", "Driver's License", "Voter's Card", "BVN Consent", "Guarantor Form", "Police Clearance"];
+
+// TAS documents are fixed, named slots (mirroring the mobile app's "Required
+// Documents" screen), not a free-form add-any-type list. The backend rejects
+// registrations where the document count doesn't match the declared type
+// count, so exact type strings + a 1-file-per-slot UI matter here.
+export interface DocSlotDef { type: string; label: string; required: boolean; }
+
+export const TAS_DOCUMENT_SLOTS: DocSlotDef[] = [
+  { type: "NIN slip",         label: "NIN slip",         required: true },
+  { type: "BVN consent",      label: "BVN consent",      required: true },
+  { type: "Government ID",    label: "Government ID",    required: true },
+  { type: "Guarantor form",   label: "Guarantor form",   required: false },
+  { type: "Police clearance", label: "Police clearance", required: false },
+];
+
+// Kept for any code still referencing a flat list of TAS document types.
+export const TAS_DOC_TYPES = TAS_DOCUMENT_SLOTS.map((s) => s.type);
 
 // ── Document entry (file + type + idNumber) ───────────────
 export interface DocEntry { file: File; type: string; idNumber: string; }
@@ -125,6 +142,91 @@ export function DocListPicker({
           cursor: "pointer", width: "100%", boxSizing: "border-box" }}>
         <Upload size={13} /> Add Document
       </button>
+    </div>
+  );
+}
+
+/**
+ * Fixed set of named document upload slots (NIN slip, BVN consent, Government
+ * ID, plus optional Guarantor form / Police clearance for Tier 3), matching
+ * the mobile app's "Required Documents" screen. Unlike DocListPicker, the
+ * admin can't add arbitrary types or duplicates — each slot holds at most one
+ * file, so the resulting `documents` array is always exactly one entry per
+ * declared type, which is what the backend enforces.
+ */
+export function FixedDocSlots({
+  slots, docs, onChange,
+}: {
+  slots:    DocSlotDef[];
+  docs:     DocEntry[];
+  onChange: (docs: DocEntry[]) => void;
+}) {
+  const fileFor = (type: string) => docs.find((d) => d.type === type);
+
+  const setFile = (type: string, file: File) => {
+    onChange([...docs.filter((d) => d.type !== type), { file, type, idNumber: "" }]);
+  };
+
+  const removeFile = (type: string) => {
+    onChange(docs.filter((d) => d.type !== type));
+  };
+
+  let printedOptionalHeader = false;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {slots.map((slot, i) => {
+        const doc = fileFor(slot.type);
+        const inputId = `tas-doc-slot-${i}`;
+        const showOptionalHeader = !slot.required && !printedOptionalHeader;
+        // eslint-disable-next-line react-hooks/immutability
+        if (showOptionalHeader) printedOptionalHeader = true;
+
+        return (
+          <div key={slot.type}>
+            {showOptionalHeader && (
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: "4px 0 8px" }}>
+                Optional (for Tier 3 eligibility):
+              </p>
+            )}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+              border: "1px solid #D1D5DB", borderRadius: "10px", padding: "12px 14px",
+              backgroundColor: "var(--color-background)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                <FileText size={18} color={doc ? "#16a34a" : "#2563EB"} style={{ flexShrink: 0 }} />
+                <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  <span style={{ fontSize: "13px", color: "var(--color-text-main)" }}>
+                    {slot.label}{slot.required && <span style={{ color: "#dc2626" }}> *</span>}
+                  </span>
+                  {doc && (
+                    <span style={{ fontSize: "11px", color: "#15803d", overflow: "hidden",
+                      textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "180px" }}>
+                      {doc.file.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                <input id={inputId} type="file" accept="image/*,.pdf" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(slot.type, f); e.target.value = ""; }} />
+                <label htmlFor={inputId} style={{ display: "flex", alignItems: "center", gap: "6px",
+                  padding: "7px 12px", borderRadius: "8px", backgroundColor: "#EFF6FF",
+                  color: "#2563EB", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  <Upload size={13} /> {doc ? "Replace" : "Upload"}
+                </label>
+                {doc && (
+                  <button type="button" onClick={() => removeFile(slot.type)}
+                    style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#fee2e2",
+                      border: "none", cursor: "pointer", padding: 0, color: "#dc2626", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px" }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -270,6 +372,7 @@ function loadGoogleMaps(): Promise<void> {
 
 export interface LocationValue {
   address: string;
+  area?:    string;
   city?:    string;
   state?:   string;
   country?: string;
@@ -322,6 +425,10 @@ export function AddressAutocomplete({
 
       const loc: LocationValue = {
         address: place.formatted_address ?? inputRef.current?.value ?? "",
+        // "Area" (e.g. "Opebi", "Yaba") maps most closely to Google's
+        // sublocality / neighborhood components — there's no dedicated
+        // "area" type in the Places API.
+        area:    find("sublocality_level_1") || find("sublocality") || find("neighborhood"),
         city:    find("locality") || find("administrative_area_level_2"),
         state:   find("administrative_area_level_1"),
         country: find("country"),
@@ -349,5 +456,138 @@ export function AddressAutocomplete({
         onSelect({ address: e.target.value });
       }}
     />
+  );
+}
+
+// ── Bank details + account resolution ──────────────────────
+// Shared by any multi-step form (TAS, Expert…) that needs to collect bank
+// details and verify the account name via the backend's resolve-bank
+// endpoint, matching the mobile app's "Verify Account details" flow.
+
+export interface BankDetailsPatch {
+  bankName?:      string;
+  bankCode?:      string;
+  accountNumber?: string;
+  accountName?:   string;
+}
+
+interface BankDetailsFieldsProps {
+  bankName:      string;
+  bankCode?:     string;
+  accountNumber: string;
+  accountName:   string;
+  onChange:      (patch: BankDetailsPatch) => void;
+}
+
+export function BankDetailsFields({
+  bankCode, accountNumber, accountName, onChange,
+}: BankDetailsFieldsProps) {
+  const [banks, setBanks]           = useState<BankListItem[]>([]);
+  const [loadingBanks, setLoading]  = useState(true);
+  const [verifying, setVerifying]   = useState(false);
+  const [verified, setVerified]     = useState(!!accountName);
+  const [error, setError]           = useState<string | null>(null);
+  const isFirstRun = useRef(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBankList()
+      .then((list) => { if (!cancelled) setBanks(list); })
+      .catch(() => { /* dropdown just falls back to "Select Bank" only */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Any change to bank or account number invalidates a previous verification —
+  // mirrors the mobile app, where editing either field clears "Account Verified".
+  useEffect(() => {
+    if (isFirstRun.current) { isFirstRun.current = false; return; }
+    setVerified(false);
+    setError(null);
+    if (accountName) onChange({ accountName: "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bankCode, accountNumber]);
+
+  const canVerify = !!bankCode && accountNumber.length === 10 && !verifying;
+
+  const handleVerify = async () => {
+    if (!bankCode) return;
+    setVerifying(true);
+    setError(null);
+    try {
+      const resolved = await resolveBankAccount(accountNumber, bankCode);
+      if (!resolved.accountName) throw new Error("No account name returned");
+      onChange({ accountName: resolved.accountName });
+      setVerified(true);
+    } catch {
+      setError("Could not verify this account. Check the number and bank, then try again.");
+      setVerified(false);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div style={row}>
+        <label style={lbl}>Bank Name</label>
+        <select
+          style={inp}
+          value={bankCode ?? ""}
+          onChange={(e) => {
+            const code = e.target.value;
+            const bank = banks.find((b) => b.code === code);
+            onChange({ bankCode: code, bankName: bank?.name ?? "" });
+          }}
+        >
+          <option value="">{loadingBanks ? "Loading banks…" : "Select Bank"}</option>
+          {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+        </select>
+      </div>
+
+      <div style={row}>
+        <label style={lbl}>Account Number</label>
+        <input
+          style={inp}
+          placeholder="0123456789"
+          maxLength={10}
+          value={accountNumber}
+          onChange={(e) => onChange({ accountNumber: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+        />
+      </div>
+
+      {verified && accountName ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+          padding: "10px 14px", borderRadius: "10px", backgroundColor: "#DCFCE7",
+          color: "#15803d", fontSize: "13px", fontWeight: 600 }}>
+          <CheckCircle2 size={15} /> Account Verified
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={!canVerify}
+          onClick={handleVerify}
+          style={{ padding: "10px 14px", borderRadius: "10px", border: "none",
+            backgroundColor: canVerify ? "#EFF6FF" : "#F3F4F6",
+            color: canVerify ? "#2563EB" : "#9CA3AF",
+            fontSize: "13px", fontWeight: 600,
+            cursor: canVerify ? "pointer" : "not-allowed" }}
+        >
+          {verifying ? "Verifying…" : "Verify Account Details"}
+        </button>
+      )}
+
+      {error && <span style={{ fontSize: "12px", color: "#dc2626" }}>{error}</span>}
+
+      <div style={row}>
+        <label style={lbl}>Account Name</label>
+        <input
+          style={{ ...inp, backgroundColor: "#F3F4F6", color: "var(--color-text-muted)" }}
+          placeholder="Auto-filled after verification"
+          value={accountName}
+          readOnly
+        />
+      </div>
+    </div>
   );
 }

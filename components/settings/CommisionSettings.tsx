@@ -339,7 +339,7 @@ function CommissionCard() {
             </div>
             <SubLabel text="Expert" />
             <InfoRow label="Model 2 Commission Rate" value="10%" />
-            <InfoRow label="Model 1 Subscription Fee" value="₦50,000 / month" />
+            <InfoRow label="Model 1 Subscription Fee" value="₦3,000 / month" />
             <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
             <SubLabel text="TAS" />
             {/* Registration Bonus — rendered as inactive */}

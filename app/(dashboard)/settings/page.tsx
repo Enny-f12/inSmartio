@@ -14,6 +14,7 @@ import NotificationTemplates  from "@/components/settings/Notification";
 import NotificationSettings   from "@/components/settings/NotificationSettings";
 import AdminManagement        from "@/components/settings/AdminManagement";
 import SubscriptionManagement from "@/components/settings/SubscriptionManagement";
+import WaitlistManagement     from "@/components/settings/WaitlistManagement";
 import type { SettingsView }  from "@/components/settings/types";
 import { getPermissions }     from "@/lib/adminPermissions";
 import { useAppSelector }     from "@/hooks/redux";
@@ -58,6 +59,7 @@ function SettingsInner() {
   if (view === "notif-settings") return <NotificationSettings   onBack={() => setView("main")} />;
   if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />;
   if (view === "subscription")   return <SubscriptionManagement onBack={() => setView("main")} />;
+  if (view === "waitlist")       return <WaitlistManagement     onBack={() => setView("main")} />;
 
   // ── Permission-filtered menu items ────────────────────────────────────────
 
@@ -80,6 +82,7 @@ function SettingsInner() {
   const adminItems = [
     { label: "Admin Management",        view: "admins"        as ExtendedView, show: perms.canViewAdmins          },
     { label: "Subscription Management", view: "subscription"  as ExtendedView, show: perms.canManageSubscription  },
+    { label: "Waitlist Management",     view: "waitlist"      as ExtendedView, show: perms.canManageWaitlist      },
   ].filter((i) => i.show);
 
   // Hide entire groups that have no visible items
