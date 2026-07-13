@@ -6,6 +6,7 @@ import type { AppDispatch, RootState } from "@/lib/redux/store";
 import {
   fetchAllWaitlist,
   deleteWaitlistEntry,
+  exportWaitlist,
   clearError,
   type WaitlistEntry,
 } from "@/lib/redux/waitlistSlice";
@@ -197,7 +198,7 @@ interface Props {
 
 export default function WaitlistManagement({ onBack }: Props) {
   const dispatch = useDispatch<AppDispatch>();
-  const { entries, loading, actionLoading, error } = useSelector(
+  const { entries, loading, actionLoading, exportLoading, error } = useSelector(
     (s: RootState) => s.waitlist
   );
 
@@ -234,20 +235,19 @@ export default function WaitlistManagement({ onBack }: Props) {
     }
   };
 
-  const handleExportCsv = () => {
-    if (filteredEntries.length === 0) return;
-    const rows = [
-      ["Name", "Email", "Joined"],
-      ...filteredEntries.map((e) => [e.name, e.email, formatDate(e.createdAt)]),
-    ];
-    const csv = rows.map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "waitlist-entries.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleExportCsv = async () => {
+    const result = await dispatch(exportWaitlist());
+    if (exportWaitlist.fulfilled.match(result)) {
+      const blob = new Blob([result.payload], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `waitlist-entries-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } else {
+      showToast((result.payload as string) ?? "Failed to export waitlist entries.", "error");
+    }
   };
 
   return (
@@ -282,13 +282,19 @@ export default function WaitlistManagement({ onBack }: Props) {
           </div>
           <button
             onClick={handleExportCsv}
-            disabled={filteredEntries.length === 0}
-            className="btn-primary flex items-center gap-2 self-end sm:self-auto disabled:opacity-50"
+            disabled={entries.length === 0 || exportLoading}
+            className="btn-primary flex items-center gap-2 self-start sm:self-auto disabled:opacity-50"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth={2.5}>
-              <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12l4.5 4.5m0 0l4.5-4.5M12 16.5V3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Export CSV
+            {exportLoading ? (
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 animate-spin" stroke="currentColor" strokeWidth={2.5}>
+                <path d="M12 3a9 9 0 100 18" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth={2.5}>
+                <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12l4.5 4.5m0 0l4.5-4.5M12 16.5V3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+            {exportLoading ? "Exporting…" : "Export CSV"}
           </button>
         </div>
 
@@ -300,7 +306,7 @@ export default function WaitlistManagement({ onBack }: Props) {
           </div>
           <div className="bg-gray-50 rounded-2xl p-4 text-center">
             <p className="text-2xl font-bold text-gray-700">{filteredEntries.length}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Entries</p>
+            <p className="text-xs text-gray-500 mt-0.5">Matching Search</p>
           </div>
         </div>
 

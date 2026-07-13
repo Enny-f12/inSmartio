@@ -1,6 +1,8 @@
 // lib/api/commissionApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
+export type ActiveModel = "protected" | "unprotected" | "both";
+
 export interface ApiCommission {
   id:                   string;
   model2CommissionRate: number;
@@ -10,6 +12,7 @@ export interface ApiCommission {
   tasModel2Commission:  number;
   effectiveDate:        string; // ISO 8601 datetime e.g. "2026-05-19T14:30:00Z"
   status:               boolean;
+  activePaymentModel?:  ActiveModel; // this specific record's payment model (per-record scope, endpoint 4)
   createdAt?:           string;
   updatedAt?:           string;
 }
@@ -25,9 +28,12 @@ export interface CreateCommissionPayload {
 
 export type UpdateCommissionPayload = Partial<CreateCommissionPayload>;
 
-interface CommissionListResponse   { status: boolean; message: string; data: ApiCommission[];  }
-interface CommissionSingleResponse { status: boolean; message: string; data: ApiCommission;    }
-interface CommissionToggleResponse { status: boolean; message: string; data: ApiCommission;    }
+interface CommissionListResponse       { status: boolean; message: string; data: ApiCommission[];  }
+interface CommissionSingleResponse     { status: boolean; message: string; data: ApiCommission;    }
+interface CommissionToggleResponse     { status: boolean; message: string; data: ApiCommission;    }
+// Actual response shape observed for GET /settings/active-model — NOT the bare
+// string the original spec described. Wrapped as { activePaymentModel: "..." }.
+interface ActiveModelGetResponse       { status: boolean; message: string; data: { activePaymentModel: ActiveModel }; }
 
 // GET /api/settings/commission
 export const getAllCommissions = async (): Promise<ApiCommission[]> => {
@@ -82,6 +88,41 @@ export const deleteCommission = async (id: string): Promise<void> => {
 export const toggleCommissionStatus = async (id: string): Promise<ApiCommission> => {
   const { data } = await axiosInstance.patch<CommissionToggleResponse>(
     `/settings/commission/${id}/toggle-status`,
+  );
+  return data.data;
+};
+
+// ── Active payment model endpoints ──────────────────────────────────────────
+
+// GET /settings/active-model — public, no auth required
+export const getActiveModel = async (): Promise<ActiveModel> => {
+  const { data } = await axiosInstance.get<ActiveModelGetResponse>("/settings/active-model");
+  return data.data.activePaymentModel;
+};
+
+// PATCH /settings/commission/active-model — admin only, sets an explicit model
+export const setActiveModel = async (model: ActiveModel): Promise<ApiCommission> => {
+  const { data } = await axiosInstance.patch<CommissionSingleResponse>(
+    "/settings/commission/active-model",
+    { model },
+  );
+  return data.data;
+};
+
+// PATCH /settings/commission/active-model/toggle — admin only,
+// cycles both -> protected -> unprotected -> both
+export const toggleActiveModel = async (): Promise<ApiCommission> => {
+  const { data } = await axiosInstance.patch<CommissionSingleResponse>(
+    "/settings/commission/active-model/toggle",
+  );
+  return data.data;
+};
+
+// PATCH /settings/commission/{id}/active-model/toggle — admin only,
+// toggles the model for one specific commission settings record
+export const toggleCommissionActiveModel = async (id: string): Promise<ApiCommission> => {
+  const { data } = await axiosInstance.patch<CommissionSingleResponse>(
+    `/settings/commission/${id}/active-model/toggle`,
   );
   return data.data;
 };

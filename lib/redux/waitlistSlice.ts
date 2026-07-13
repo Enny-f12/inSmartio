@@ -2,11 +2,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import axios from "axios";
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-// NOTE: field names assumed as { id, name, email, createdAt } — the Swagger
-// "Example Value" for /api/waitlist wasn't expanded. Adjust this interface
-// (and the two `data?.data ?? data` normalizations below) if the real
-// response shape differs.
+
 
 export interface WaitlistEntry {
   id: string;
@@ -19,6 +15,7 @@ interface WaitlistState {
   entries: WaitlistEntry[];
   loading: boolean;       // list fetch
   actionLoading: boolean; // delete / single fetch
+  exportLoading: boolean; // CSV export
   error: string | null;
 }
 
@@ -26,6 +23,7 @@ const initialState: WaitlistState = {
   entries: [],
   loading: false,
   actionLoading: false,
+  exportLoading: false,
   error: null,
 };
 
@@ -71,6 +69,21 @@ export const deleteWaitlistEntry = createAsyncThunk<string, string, { rejectValu
       return id;
     } catch (err) {
       return rejectWithValue(extractErrorMessage(err, "Failed to remove waitlist entry."));
+    }
+  }
+);
+
+export const exportWaitlist = createAsyncThunk<Blob, void, { rejectValue: string }>(
+  "waitlist/export",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axiosInstance.get("/waitlist/export", {
+        responseType: "blob",
+        headers: { Accept: "text/csv" },
+      });
+      return response.data as Blob;
+    } catch (err) {
+      return rejectWithValue(extractErrorMessage(err, "Failed to export waitlist entries."));
     }
   }
 );
@@ -128,6 +141,19 @@ const waitlistSlice = createSlice({
       .addCase(deleteWaitlistEntry.rejected, (state, action) => {
         state.actionLoading = false;
         state.error = action.payload ?? "Failed to remove waitlist entry.";
+      })
+
+      // export
+      .addCase(exportWaitlist.pending, (state) => {
+        state.exportLoading = true;
+        state.error = null;
+      })
+      .addCase(exportWaitlist.fulfilled, (state) => {
+        state.exportLoading = false;
+      })
+      .addCase(exportWaitlist.rejected, (state, action) => {
+        state.exportLoading = false;
+        state.error = action.payload ?? "Failed to export waitlist entries.";
       });
   },
 });
