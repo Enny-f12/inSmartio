@@ -4,23 +4,34 @@ import axios from "axios";
 import {
   getAllCommissions, createCommission, updateCommission,
   deleteCommission, toggleCommissionStatus,
+  getActiveModel, setActiveModel, toggleActiveModel, toggleCommissionActiveModel,
   type ApiCommission, type CreateCommissionPayload, type UpdateCommissionPayload,
+  type ActiveModel,
 } from "@/lib/api/commissionApi";
 
 interface CommissionState {
-  list:         ApiCommission[];
-  listStatus:   "idle" | "loading" | "succeeded" | "failed";
-  listError:    string | null;
-  mutateStatus: "idle" | "loading" | "succeeded" | "failed";
-  mutateError:  string | null;
+  list:              ApiCommission[];
+  listStatus:        "idle" | "loading" | "succeeded" | "failed";
+  listError:         string | null;
+  mutateStatus:      "idle" | "loading" | "succeeded" | "failed";
+  mutateError:       string | null;
+
+  // Global active payment model (GET /settings/active-model, etc.)
+  activeModel:       ActiveModel | null;
+  activeModelStatus: "idle" | "loading" | "succeeded" | "failed";
+  activeModelError:  string | null;
 }
 
 const initialState: CommissionState = {
-  list:         [],
-  listStatus:   "idle",
-  listError:    null,
-  mutateStatus: "idle",
-  mutateError:  null,
+  list:              [],
+  listStatus:        "idle",
+  listError:         null,
+  mutateStatus:      "idle",
+  mutateError:       null,
+
+  activeModel:       null,
+  activeModelStatus: "idle",
+  activeModelError:  null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
@@ -75,6 +86,57 @@ export const toggleCommission = createAsyncThunk(
   }
 );
 
+// ── Active payment model thunks ─────────────────────────────────────────────
+
+// GET /settings/active-model — public
+export const fetchActiveModel = createAsyncThunk(
+  "commission/fetchActiveModel",
+  async (_, { rejectWithValue }) => {
+    try { return await getActiveModel(); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch active payment model")); }
+  }
+);
+
+// PATCH /settings/commission/active-model — admin only, explicit set
+export const updateActiveModel = createAsyncThunk(
+  "commission/updateActiveModel",
+  async (model: ActiveModel, { rejectWithValue }) => {
+    try { return await setActiveModel(model); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to update active payment model")); }
+  }
+);
+
+// PATCH /settings/commission/active-model/toggle — admin only, global cycle
+export const toggleGlobalActiveModel = createAsyncThunk(
+  "commission/toggleGlobalActiveModel",
+  async (_, { rejectWithValue }) => {
+    try { return await toggleActiveModel(); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to toggle active payment model")); }
+  }
+);
+
+// PATCH /settings/commission/{id}/active-model/toggle — admin only, per-record
+export const toggleRecordActiveModel = createAsyncThunk(
+  "commission/toggleRecordActiveModel",
+  async (id: string, { rejectWithValue }) => {
+    try { return await toggleCommissionActiveModel(id); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to toggle active payment model for this record")); }
+  }
+);
+
+// Shared handling for any thunk that resolves an ApiCommission representing
+// the "current" commission settings: merges it into `list` if its id is
+// present there, and syncs the global `activeModel` if the record carries one.
+function applyCommissionSettingsUpdate(state: CommissionState, commission: ApiCommission) {
+  const idx = state.list.findIndex((c) => sameId(c.id, commission.id));
+  if (idx !== -1) {
+    state.list[idx] = { ...state.list[idx], ...commission };
+  }
+  if (commission.activePaymentModel) {
+    state.activeModel = commission.activePaymentModel;
+  }
+}
+
 const commissionSlice = createSlice({
   name: "commission",
   initialState,
@@ -113,28 +175,39 @@ const commissionSlice = createSlice({
       .addCase(removeCommission.fulfilled, (s, a) => { s.mutateStatus = "succeeded"; s.list = s.list.filter((c) => !sameId(c.id, a.payload)); })
       .addCase(removeCommission.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
 
-    // toggle
+    // toggle status
     builder
       .addCase(toggleCommission.pending,   (s) => { s.mutateStatus = "loading"; s.mutateError = null; })
       .addCase(toggleCommission.fulfilled, (s, a) => {
         s.mutateStatus = "succeeded";
         const idx = s.list.findIndex((c) => sameId(c.id, a.payload.id));
-
-        // TEMP DEBUG — remove once toggling is confirmed working.
-        // If `idx` logs as -1, the ids genuinely don't match (check the
-        // console output against your fetched list ids). If `idx` is
-        // correct here but the UI still doesn't update, the bug is in
-        // the component/selector layer, not this slice.
-         
-        console.log("[toggleCommission] payload:", a.payload, "matched idx:", idx);
-
-        if (idx !== -1) {
-          // Merge rather than replace, so we never lose a field the
-          // toggle endpoint's response might omit.
-          s.list[idx] = { ...s.list[idx], ...a.payload };
-        }
+        if (idx !== -1) s.list[idx] = { ...s.list[idx], ...a.payload };
       })
       .addCase(toggleCommission.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
+
+    // fetch active model (public)
+    builder
+      .addCase(fetchActiveModel.pending,   (s) => { s.activeModelStatus = "loading"; s.activeModelError = null; })
+      .addCase(fetchActiveModel.fulfilled, (s, a) => { s.activeModelStatus = "succeeded"; s.activeModel = a.payload; })
+      .addCase(fetchActiveModel.rejected,  (s, a) => { s.activeModelStatus = "failed"; s.activeModelError = a.payload as string; });
+
+    // explicit set
+    builder
+      .addCase(updateActiveModel.pending,   (s) => { s.activeModelStatus = "loading"; s.activeModelError = null; })
+      .addCase(updateActiveModel.fulfilled, (s, a) => { s.activeModelStatus = "succeeded"; applyCommissionSettingsUpdate(s, a.payload); })
+      .addCase(updateActiveModel.rejected,  (s, a) => { s.activeModelStatus = "failed"; s.activeModelError = a.payload as string; });
+
+    // global cyclical toggle
+    builder
+      .addCase(toggleGlobalActiveModel.pending,   (s) => { s.activeModelStatus = "loading"; s.activeModelError = null; })
+      .addCase(toggleGlobalActiveModel.fulfilled, (s, a) => { s.activeModelStatus = "succeeded"; applyCommissionSettingsUpdate(s, a.payload); })
+      .addCase(toggleGlobalActiveModel.rejected,  (s, a) => { s.activeModelStatus = "failed"; s.activeModelError = a.payload as string; });
+
+    // per-record toggle
+    builder
+      .addCase(toggleRecordActiveModel.pending,   (s) => { s.mutateStatus = "loading"; s.mutateError = null; })
+      .addCase(toggleRecordActiveModel.fulfilled, (s, a) => { s.mutateStatus = "succeeded"; applyCommissionSettingsUpdate(s, a.payload); })
+      .addCase(toggleRecordActiveModel.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
   },
 });
 

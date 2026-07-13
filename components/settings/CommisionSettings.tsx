@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, Loader2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Pencil, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell } from "./SettingsShared";
@@ -10,8 +10,9 @@ import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 // Commission
 import {
   fetchCommissions, addCommission, editCommission, removeCommission, toggleCommission,
+  fetchActiveModel, updateActiveModel, toggleRecordActiveModel,
 } from "@/lib/redux/commissionSlice";
-import type { ApiCommission, CreateCommissionPayload } from "@/lib/api/commissionApi";
+import type { ApiCommission, CreateCommissionPayload, ActiveModel } from "@/lib/api/commissionApi";
 
 // Verification Settings
 import {
@@ -113,16 +114,60 @@ function InactiveInfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating }: {
+// Sliding on/off switch — visually distinct "on" (green, thumb right) vs
+// "off" (grey, thumb left) states, with a CSS transition on the thumb so
+// the change is obviously visible on click. Defaults to OFF whenever
+// `checked` isn't explicitly `true`.
+function ToggleSwitch({ checked, onChange, disabled, title }: {
+  checked?: boolean; onChange: () => void; disabled?: boolean; title?: string;
+}) {
+  const isOn = checked === true; // explicit — anything else (undefined/false) renders OFF
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      title={title ?? (isOn ? "On — click to turn off" : "Off — click to turn on")}
+      onClick={onChange}
+      disabled={disabled}
+      style={{
+        position: "relative",
+        width: "38px",
+        height: "22px",
+        borderRadius: "999px",
+        border: "none",
+        padding: 0,
+        flexShrink: 0,
+        cursor: disabled ? "not-allowed" : "pointer",
+        backgroundColor: isOn ? "#16a34a" : "#D1D5DB",
+        transition: "background-color 160ms ease",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: "2px",
+          left: isOn ? "18px" : "2px",
+          width: "18px",
+          height: "18px",
+          borderRadius: "50%",
+          backgroundColor: "#ffffff",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+          transition: "left 160ms ease",
+        }}
+      />
+    </button>
+  );
+}
+
+function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating, showToggle = true }: {
   onToggle: () => void; onEdit: () => void; onDelete: () => void;
-  isActive?: boolean; isMutating?: boolean;
+  isActive?: boolean; isMutating?: boolean; showToggle?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-      <button onClick={onToggle} disabled={isMutating} title={isActive ? "Disable" : "Enable"}
-        style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: isActive ? "#16a34a" : "#9CA3AF" }}>
-        {isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-      </button>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {showToggle && <ToggleSwitch checked={isActive} onChange={onToggle} disabled={isMutating} />}
       <button onClick={onEdit}
         style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
         <Pencil size={14} strokeWidth={1.8} />
@@ -206,6 +251,119 @@ function AddButton({ onClick }: { onClick: () => void }) {
 }
 
 const naira = (n: number | undefined | null) => n != null ? `₦${Number(n).toLocaleString()}` : "—";
+
+const ACTIVE_MODEL_COLORS: Record<ActiveModel, string> = {
+  protected:   "#2563eb",
+  unprotected: "#d97706",
+  both:        "#16a34a",
+};
+
+const ACTIVE_MODEL_LABELS: Record<ActiveModel, string> = {
+  protected:   "Model 1",
+  unprotected: "Model 2",
+  both:        "Both Models",
+};
+
+// Builds the model description from the actual current numbers instead of a
+// hardcoded example — so if the subscription fee or commission % changes,
+// this text updates automatically without needing a code change.
+function describeModel(model: ActiveModel, source?: Pick<ApiCommission, "modelISubscription" | "model2CommissionRate">): string {
+  const fee  = source?.modelISubscription ?? "the configured fee";
+  const rate = source?.model2CommissionRate != null ? `${source.model2CommissionRate}%` : "the configured rate";
+  switch (model) {
+    case "protected":
+      return `Subscription-based: experts pay ${fee} per month and keep 100% of their earnings.`;
+    case "unprotected":
+      return `Commission-based: experts pay no monthly subscription; ${rate} is deducted from each transaction instead.`;
+    case "both":
+      return `Both models available — Model 1 subscription (${fee}/month, 100% earnings) or Model 2 commission (${rate} per transaction).`;
+  }
+}
+
+// Global "active payment model" bar — shown at the top of the Commission
+// card. Renders as a dropdown so any of the three states can be selected
+// directly (calls the explicit-set endpoint), rather than cycling through
+// them one click at a time. Toggling is admin-only server-side; swap
+// `isAdmin` for your real role check (e.g. useAppSelector selecting
+// auth.user.role).
+function ActiveModelBar({ isAdmin = true }: { isAdmin?: boolean }) {
+  const dispatch = useAppDispatch();
+  const { activeModel, activeModelStatus, list } = useAppSelector((s) => s.commission);
+  const isLoading = activeModelStatus === "loading";
+
+  useEffect(() => {
+    if (activeModelStatus === "idle") dispatch(fetchActiveModel());
+  }, [dispatch, activeModelStatus]);
+
+  // Source live subscription fee / commission rate from whichever commission
+  // record is currently marked active (status: true); fall back to the
+  // first record if none is flagged active yet.
+  const sourceRecord = list.find((c) => c.status) ?? list[0];
+
+  const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!isAdmin) return;
+    const model = e.target.value as ActiveModel;
+    dispatch(updateActiveModel(model)).unwrap()
+      .then((updated) => toast.success(`Active payment model set to ${updated.activePaymentModel ?? model}`))
+      .catch((e: string) => toast.error(e));
+  };
+
+  const color = activeModel ? ACTIVE_MODEL_COLORS[activeModel] : "#9CA3AF";
+  const description = activeModel ? describeModel(activeModel, sourceRecord) : "";
+  const isInitialLoading = activeModelStatus === "loading" && !activeModel;
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: "6px",
+      padding: "10px 14px", borderRadius: "12px", border: "1px solid #E5E7EB",
+      backgroundColor: "#FAFAFA", marginBottom: "14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>Active Payment Model</span>
+        {isInitialLoading ? (
+          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#9CA3AF" }}>
+            <Loader2 size={13} className="animate-spin" /> Loading...
+          </span>
+        ) : isAdmin ? (
+          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+            <select
+              value={activeModel ?? ""}
+              onChange={handleSelect}
+              disabled={isLoading || !activeModel}
+              style={{
+                ...SELECT, width: "auto", minWidth: "170px", fontWeight: 700, color,
+                borderColor: `${color}40`, backgroundColor: `${color}0d`,
+                paddingRight: isLoading ? "34px" : SELECT.paddingRight,
+              }}
+            >
+              {(["protected", "unprotected", "both"] as ActiveModel[]).map((m) => (
+                <option key={m} value={m}>{ACTIVE_MODEL_LABELS[m]}</option>
+              ))}
+            </select>
+            {isLoading && (
+              <Loader2 size={14} className="animate-spin" style={{ position: "absolute", right: "10px", color }} />
+            )}
+          </div>
+        ) : (
+          <span style={{
+            fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px",
+            color, backgroundColor: `${color}14`, border: `1px solid ${color}30`,
+          }}>
+            {activeModel ? ACTIVE_MODEL_LABELS[activeModel] : "Loading..."}
+          </span>
+        )}
+      </div>
+      {isLoading && !isInitialLoading && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+          <Loader2 size={11} className="animate-spin" /> Updating...
+        </p>
+      )}
+      {description && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, lineHeight: 1.5 }}>{description}</p>
+      )}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMISSION
@@ -342,6 +500,8 @@ function CommissionCard() {
           <AddButton onClick={() => setShowAdd(true)} />
         </div>
 
+        <ActiveModelBar />
+
         {listStatus === "loading" && <CardLoader />}
 
         {(listStatus === "succeeded" || listStatus === "failed") && list.length === 0 && (
@@ -350,10 +510,7 @@ function CommissionCard() {
               <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Default Settings
               </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                <button disabled title="Enable" style={{ padding: "4px", background: "none", border: "none", cursor: "not-allowed", color: "#9CA3AF" }}>
-                  <ToggleLeft size={20} />
-                </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <button onClick={() => setShowAdd(true)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
                   <Pencil size={14} strokeWidth={1.8} />
                 </button>
@@ -377,16 +534,37 @@ function CommissionCard() {
               <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Effective {c.effectiveDate ? new Date(c.effectiveDate).toLocaleDateString("en-NG") : "—"}
               </span>
-              <RecordActions
-                isActive={c.status} isMutating={isMutating}
-                onToggle={() =>
-                  dispatch(toggleCommission(c.id)).unwrap()
-                    .then((updated) => toast.success(`Commission ${updated.status ? "enabled" : "disabled"}`))
-                    .catch((e: string) => toast.error(e))
-                }
-                onEdit={() => setEditItem(c)}
-                onDelete={() => setDeleteItem(c)}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {c.activePaymentModel && (
+                  <button
+                    onClick={() =>
+                      dispatch(toggleRecordActiveModel(c.id)).unwrap()
+                        .then((updated) => toast.success(`Model set to ${updated.activePaymentModel ?? "—"}`))
+                        .catch((e: string) => toast.error(e))
+                    }
+                    disabled={isMutating}
+                    title={describeModel(c.activePaymentModel, c)}
+                    style={{
+                      fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px",
+                      color: ACTIVE_MODEL_COLORS[c.activePaymentModel], backgroundColor: `${ACTIVE_MODEL_COLORS[c.activePaymentModel]}14`,
+                      border: `1px solid ${ACTIVE_MODEL_COLORS[c.activePaymentModel]}30`, cursor: isMutating ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {ACTIVE_MODEL_LABELS[c.activePaymentModel]}
+                  </button>
+                )}
+                <RecordActions
+                  isActive={c.status} isMutating={isMutating}
+                  showToggle={false}
+                  onToggle={() =>
+                    dispatch(toggleCommission(c.id)).unwrap()
+                      .then((updated) => toast.success(`Commission ${updated.status ? "enabled" : "disabled"}`))
+                      .catch((e: string) => toast.error(e))
+                  }
+                  onEdit={() => setEditItem(c)}
+                  onDelete={() => setDeleteItem(c)}
+                />
+              </div>
             </div>
             <SubLabel text="Expert" />
             <InfoRow label="Model 2 Commission Rate" value={`${c.model2CommissionRate}%`} />
