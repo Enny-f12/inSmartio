@@ -10,7 +10,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 // Commission
 import {
   fetchCommissions, addCommission, editCommission, removeCommission, toggleCommission,
-  fetchActiveModel, updateActiveModel, toggleRecordActiveModel,
+  fetchActiveModel, updateActiveModel,
 } from "@/lib/redux/commissionSlice";
 import type { ApiCommission, CreateCommissionPayload, ActiveModel } from "@/lib/api/commissionApi";
 
@@ -535,24 +535,6 @@ function CommissionCard() {
                 Effective {c.effectiveDate ? new Date(c.effectiveDate).toLocaleDateString("en-NG") : "—"}
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                {c.activePaymentModel && (
-                  <button
-                    onClick={() =>
-                      dispatch(toggleRecordActiveModel(c.id)).unwrap()
-                        .then((updated) => toast.success(`Model set to ${updated.activePaymentModel ?? "—"}`))
-                        .catch((e: string) => toast.error(e))
-                    }
-                    disabled={isMutating}
-                    title={describeModel(c.activePaymentModel, c)}
-                    style={{
-                      fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px",
-                      color: ACTIVE_MODEL_COLORS[c.activePaymentModel], backgroundColor: `${ACTIVE_MODEL_COLORS[c.activePaymentModel]}14`,
-                      border: `1px solid ${ACTIVE_MODEL_COLORS[c.activePaymentModel]}30`, cursor: isMutating ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {ACTIVE_MODEL_LABELS[c.activePaymentModel]}
-                  </button>
-                )}
                 <RecordActions
                   isActive={c.status} isMutating={isMutating}
                   showToggle={false}
