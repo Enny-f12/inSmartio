@@ -26,6 +26,10 @@ const initialState: CommissionState = {
 const errMsg = (err: unknown, fallback: string) =>
   axios.isAxiosError(err) ? err.response?.data?.message ?? fallback : fallback;
 
+// Defensive equality check — guards against id type drift (e.g. "1" vs 1,
+// or trailing whitespace from one endpoint but not another).
+const sameId = (a: unknown, b: unknown) => String(a).trim() === String(b).trim();
+
 // GET /api/settings/commission
 export const fetchCommissions = createAsyncThunk(
   "commission/fetchAll",
@@ -98,7 +102,7 @@ const commissionSlice = createSlice({
       .addCase(editCommission.pending,   (s) => { s.mutateStatus = "loading"; s.mutateError = null; })
       .addCase(editCommission.fulfilled, (s, a) => {
         s.mutateStatus = "succeeded";
-        const idx = s.list.findIndex((c) => c.id === a.payload.id);
+        const idx = s.list.findIndex((c) => sameId(c.id, a.payload.id));
         if (idx !== -1) s.list[idx] = a.payload;
       })
       .addCase(editCommission.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
@@ -106,7 +110,7 @@ const commissionSlice = createSlice({
     // remove
     builder
       .addCase(removeCommission.pending,   (s) => { s.mutateStatus = "loading"; s.mutateError = null; })
-      .addCase(removeCommission.fulfilled, (s, a) => { s.mutateStatus = "succeeded"; s.list = s.list.filter((c) => c.id !== a.payload); })
+      .addCase(removeCommission.fulfilled, (s, a) => { s.mutateStatus = "succeeded"; s.list = s.list.filter((c) => !sameId(c.id, a.payload)); })
       .addCase(removeCommission.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
 
     // toggle
@@ -114,8 +118,21 @@ const commissionSlice = createSlice({
       .addCase(toggleCommission.pending,   (s) => { s.mutateStatus = "loading"; s.mutateError = null; })
       .addCase(toggleCommission.fulfilled, (s, a) => {
         s.mutateStatus = "succeeded";
-        const idx = s.list.findIndex((c) => c.id === a.payload.id);
-        if (idx !== -1) s.list[idx] = a.payload;
+        const idx = s.list.findIndex((c) => sameId(c.id, a.payload.id));
+
+        // TEMP DEBUG — remove once toggling is confirmed working.
+        // If `idx` logs as -1, the ids genuinely don't match (check the
+        // console output against your fetched list ids). If `idx` is
+        // correct here but the UI still doesn't update, the bug is in
+        // the component/selector layer, not this slice.
+         
+        console.log("[toggleCommission] payload:", a.payload, "matched idx:", idx);
+
+        if (idx !== -1) {
+          // Merge rather than replace, so we never lose a field the
+          // toggle endpoint's response might omit.
+          s.list[idx] = { ...s.list[idx], ...a.payload };
+        }
       })
       .addCase(toggleCommission.rejected,  (s, a) => { s.mutateStatus = "failed"; s.mutateError = a.payload as string; });
   },

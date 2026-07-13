@@ -53,6 +53,15 @@ const INP: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+// Same visual language as INP, but tuned for native <select> elements
+// (adds room for the dropdown arrow and normalizes cross-browser appearance)
+const SELECT: React.CSSProperties = {
+  ...INP,
+  paddingRight: "32px",
+  appearance: "auto",
+  cursor: "pointer",
+};
+
 const LABEL_STYLE: React.CSSProperties = {
   display: "block",
   fontSize: "12px",
@@ -60,6 +69,9 @@ const LABEL_STYLE: React.CSSProperties = {
   color: "#6B7280",
   marginBottom: "6px",
 };
+
+// 0–100 inclusive, used for percentage dropdown fields
+const PERCENT_OPTIONS = Array.from({ length: 101 }, (_, i) => i);
 
 // ── Shared display atoms ──────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
@@ -213,7 +225,7 @@ function CommissionModal({ item, onClose, onSave, saving }: {
   );
 
   // tasRegistrationBonus is inactive — not shown in form, sent as 0
-  const valid = model2Rate && model1Sub && tasModel1 && tasModel2 && effDate;
+  const valid = model2Rate !== "" && model1Sub && tasModel1 && tasModel2 !== "" && effDate;
 
   return (
     <Modal open onClose={onClose} title={item ? "Edit Commission Settings" : "Add Commission Settings"}
@@ -234,8 +246,13 @@ function CommissionModal({ item, onClose, onSave, saving }: {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           <div>
             <label style={LABEL_STYLE}>Model 2 Commission Rate (%)</label>
-            <input style={INP} type="number" placeholder="e.g. 10" value={model2Rate}
-              onChange={(e) => setModel2Rate(e.target.value)} />
+            <select style={SELECT} value={model2Rate}
+              onChange={(e) => setModel2Rate(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={LABEL_STYLE}>Model 1 Subscription</label>
@@ -265,8 +282,13 @@ function CommissionModal({ item, onClose, onSave, saving }: {
           </div>
           <div>
             <label style={LABEL_STYLE}>Model 2 Commission (%)</label>
-            <input style={INP} type="number" placeholder="e.g. 1" value={tasModel2}
-              onChange={(e) => setTasModel2(e.target.value)} />
+            <select style={SELECT} value={tasModel2}
+              onChange={(e) => setTasModel2(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -359,7 +381,7 @@ function CommissionCard() {
                 isActive={c.status} isMutating={isMutating}
                 onToggle={() =>
                   dispatch(toggleCommission(c.id)).unwrap()
-                    .then(() => toast.success(`Commission ${c.status ? "disabled" : "enabled"}`))
+                    .then((updated) => toast.success(`Commission ${updated.status ? "enabled" : "disabled"}`))
                     .catch((e: string) => toast.error(e))
                 }
                 onEdit={() => setEditItem(c)}
