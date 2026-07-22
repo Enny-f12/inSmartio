@@ -35,8 +35,6 @@ function initials(name: string) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-// Same pattern as SubscriptionManagement's Modal — kept local to this file to
-// match the existing convention in components/settings/*.
 
 interface ModalProps {
   open: boolean;
@@ -198,9 +196,19 @@ interface Props {
 
 export default function WaitlistManagement({ onBack }: Props) {
   const dispatch = useDispatch<AppDispatch>();
-  const { entries, loading, actionLoading, exportLoading, error } = useSelector(
-    (s: RootState) => s.waitlist
-  );
+  
+  // 1. Destructure the new pagination variables from Redux state
+  const { 
+    entries, 
+    loading, 
+    actionLoading, 
+    exportLoading, 
+    error,
+    page,
+    totalPages,
+    totalEntries,
+    limit
+  } = useSelector((s: RootState) => s.waitlist);
 
   const [search, setSearch] = useState("");
   const [viewEntry, setViewEntry] = useState<WaitlistEntry | null>(null);
@@ -212,10 +220,12 @@ export default function WaitlistManagement({ onBack }: Props) {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  // 2. Pass current slice page details when executing side-effects
   useEffect(() => {
-    dispatch(fetchAllWaitlist());
-  }, [dispatch]);
+    dispatch(fetchAllWaitlist({ page, limit: 10 }));
+  }, [dispatch, page]);
 
+  // Client-side visual search still applies down to your active fetched array batch
   const filteredEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return entries;
@@ -230,6 +240,8 @@ export default function WaitlistManagement({ onBack }: Props) {
     if (deleteWaitlistEntry.fulfilled.match(result)) {
       showToast("Waitlist entry removed.");
       setDeleteEntryState(null);
+      // Optional: Refresh the active page to safely catch updates or shifted records
+      dispatch(fetchAllWaitlist({ page, limit: 10 }));
     } else {
       showToast((result.payload as string) ?? "Removal failed.", "error");
     }
@@ -247,6 +259,19 @@ export default function WaitlistManagement({ onBack }: Props) {
       URL.revokeObjectURL(url);
     } else {
       showToast((result.payload as string) ?? "Failed to export waitlist entries.", "error");
+    }
+  };
+
+  // 3. Simple pagination event handlers
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      dispatch(fetchAllWaitlist({ page: page + 1, limit }));
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (page > 1) {
+      dispatch(fetchAllWaitlist({ page: page - 1, limit }));
     }
   };
 
@@ -298,15 +323,15 @@ export default function WaitlistManagement({ onBack }: Props) {
           </button>
         </div>
 
-        {/* Stats Strip */}
+        {/* Stats Strip — Updated to show global totalEntries from backend meta data */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           <div className="bg-blue-50 rounded-2xl p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600">{entries.length}</p>
+            <p className="text-2xl font-bold text-blue-600">{totalEntries}</p>
             <p className="text-xs text-gray-500 mt-0.5">Total on Waitlist</p>
           </div>
           <div className="bg-gray-50 rounded-2xl p-4 text-center">
             <p className="text-2xl font-bold text-gray-700">{filteredEntries.length}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Matching Search</p>
+            <p className="text-xs text-gray-500 mt-0.5">Matching on Page</p>
           </div>
         </div>
 
@@ -323,7 +348,7 @@ export default function WaitlistManagement({ onBack }: Props) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email…"
+            placeholder="Search on current page…"
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -365,30 +390,55 @@ export default function WaitlistManagement({ onBack }: Props) {
           </div>
         )}
 
-        {/* Table */}
+        {/* Table & Pagination */}
         {!loading && filteredEntries.length > 0 && (
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50/70 border-b border-gray-100">
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Name</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Email</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Joined</th>
-                    <th className="px-5 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEntries.map((entry) => (
-                    <EntryRow
-                      key={entry.id}
-                      entry={entry}
-                      onView={setViewEntry}
-                      onDelete={setDeleteEntryState}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          <div className="space-y-4">
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50/70 border-b border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Name</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Email</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Joined</th>
+                      <th className="px-5 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEntries.map((entry) => (
+                      <EntryRow
+                        key={entry.id}
+                        entry={entry}
+                        onView={setViewEntry}
+                        onDelete={setDeleteEntryState}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 4. Pagination Interface Controls */}
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="text-xs text-gray-500">
+                Page {page} of {totalPages || 1} — Showing {entries.length} items
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={handleNextPage}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         )}

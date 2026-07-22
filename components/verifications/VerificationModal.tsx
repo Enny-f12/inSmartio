@@ -306,8 +306,16 @@ const TYPE_LABEL: Record<string, string> = {
 
 const normaliseKey = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "");
 
+// Tier 1 & 2 required documents. "bvnconsent" is included here because the
+// backend now sends it for Tier 2 applicants — without it in this set,
+// parseDocs() silently dropped it from the modal entirely, so the admin
+// never saw it or had a way to verify it, even though the list page's
+// status computation (which reads the raw, unfiltered document array) still
+// counted it as an unverified document. That mismatch is what made a Tier 2
+// applicant look "approved" in the modal but "pending" in the table.
 const TIER12_KEYS = new Set([
   "ninslip",
+  "bvnconsent",
   "governmentid",
   "profilephoto",
   "addressproof",
@@ -372,16 +380,21 @@ function RequestInfoLink({ mailtoHref, style }: { mailtoHref?: string; style?: R
 // Approve/Reject here are read-only status checks — no API call. They just
 // tell the admin whether the condition ("all verified" / "any rejected") is
 // currently met, based on the same per-document checkboxes above.
-function Footer({ onClose, mailtoHref, status, verifiedCount, total }: {
+function Footer({ onClose, mailtoHref, status, verifiedCount, total, pendingNames }: {
   onClose:       () => void;
   mailtoHref?:   string;
   status:        ComputedStatus;
   verifiedCount: number;
   total:         number;
+  pendingNames:  string[];
 }) {
   const checkApprove = () => {
     if (status === "approved") {
       toast.success("All documents are verified — this application is Approved.");
+    } else if (pendingNames.length > 0) {
+      toast.warning(
+        `Go back and verify the remaining document${pendingNames.length === 1 ? "" : "s"} before approving: ${pendingNames.join(", ")}.`
+      );
     } else {
       toast.warning(`Not yet approved — ${verifiedCount}/${total} documents verified.`);
     }
@@ -441,6 +454,7 @@ function Tier12Modal({
   const verifiedCount = docs.filter(d => d.verified).length;
   const status = computeStatus(docs);
   const mailtoHref = buildMailto(expert.email, expert.name, tier);
+  const pendingNames = docs.filter(d => !d.verified && !d.rejected).map(d => d.name);
 
   const rowStyle: React.CSSProperties = {
     display: "flex", alignItems: "center", gap: "8px",
@@ -453,7 +467,7 @@ function Tier12Modal({
       open
       onClose={onClose}
       title="Verification Detail"
-      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} />}
+      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} pendingNames={pendingNames} />}
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
@@ -539,13 +553,14 @@ function Tier3Modal({
   const verifiedCount = docs.filter(d => d.verified).length;
   const status = computeStatus(docs); // count/status includes ALL docs, incl. guarantor form + police clearance
   const mailtoHref = buildMailto(expert.email, expert.name, "tier3");
+  const pendingNames = docs.filter(d => !d.verified && !d.rejected).map(d => d.name);
 
   return (
     <Modal
       open
       onClose={onClose}
       title="Verification Detail (Tier 3 – TAS)"
-      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} />}
+      footer={<Footer onClose={onClose} mailtoHref={mailtoHref} status={status} verifiedCount={verifiedCount} total={docs.length} pendingNames={pendingNames} />}
       size="md"
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
