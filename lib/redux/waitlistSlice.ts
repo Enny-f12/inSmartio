@@ -2,8 +2,6 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import axios from "axios";
 import axiosInstance from "@/lib/api/axiosInstance";
 
-
-
 export interface WaitlistEntry {
   id: string;
   name: string;
@@ -11,12 +9,18 @@ export interface WaitlistEntry {
   createdAt: string;
 }
 
+// 1. Update state interface to track pagination metadata
 interface WaitlistState {
   entries: WaitlistEntry[];
   loading: boolean;       // list fetch
   actionLoading: boolean; // delete / single fetch
   exportLoading: boolean; // CSV export
   error: string | null;
+  // Pagination State
+  page: number;
+  limit: number;
+  totalEntries: number;
+  totalPages: number;
 }
 
 const initialState: WaitlistState = {
@@ -25,7 +29,28 @@ const initialState: WaitlistState = {
   actionLoading: false,
   exportLoading: false,
   error: null,
+  page: 1,
+  limit: 10,
+  totalEntries: 0,
+  totalPages: 1,
 };
+
+// Interface for what our paginated API endpoint returns
+interface PaginatedResponse {
+  data: WaitlistEntry[];
+  meta: {
+    page: number;
+    limit: number;
+    totalEntries: number;
+    totalPages: number;
+  };
+}
+
+// Interface for the thunk input arguments
+interface FetchAllArgs {
+  page: number;
+  limit?: number;
+}
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
@@ -36,13 +61,26 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
-export const fetchAllWaitlist = createAsyncThunk<WaitlistEntry[], void, { rejectValue: string }>(
+// 2. Updated to accept { page, limit } arguments
+export const fetchAllWaitlist = createAsyncThunk<PaginatedResponse, FetchAllArgs, { rejectValue: string }>(
   "waitlist/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async ({ page, limit = 10 }, { rejectWithValue }) => {
     try {
-      const { data } = await axiosInstance.get("/waitlist");
-      // Some endpoints in this API return a raw array, others wrap in { data }.
-      return Array.isArray(data) ? data : (data?.data ?? []);
+      const { data } = await axiosInstance.get("/waitlist", {
+        params: { page, limit },
+      });
+      
+      // Normalizing format assuming your backend returns structured paginated data.
+      // Adjust the fallback mapping below if your backend payload matches a different pattern.
+      return {
+        data: data.data ?? data.entries ?? [],
+        meta: {
+          page: data.meta?.page ?? page,
+          limit: data.meta?.limit ?? limit,
+          totalEntries: data.meta?.totalEntries ?? data.meta?.total ?? 0,
+          totalPages: data.meta?.totalPages ?? 1,
+        },
+      };
     } catch (err) {
       return rejectWithValue(extractErrorMessage(err, "Failed to load waitlist entries."));
     }
@@ -100,14 +138,18 @@ const waitlistSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // fetchAll
+      // 3. Update fetchAll handlers to save paginated data structure
       .addCase(fetchAllWaitlist.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchAllWaitlist.fulfilled, (state, action: PayloadAction<WaitlistEntry[]>) => {
+      .addCase(fetchAllWaitlist.fulfilled, (state, action: PayloadAction<PaginatedResponse>) => {
         state.loading = false;
-        state.entries = action.payload;
+        state.entries = action.payload.data;
+        state.page = action.payload.meta.page;
+        state.limit = action.payload.meta.limit;
+        state.totalEntries = action.payload.meta.totalEntries;
+        state.totalPages = action.payload.meta.totalPages;
       })
       .addCase(fetchAllWaitlist.rejected, (state, action) => {
         state.loading = false;
@@ -137,6 +179,8 @@ const waitlistSlice = createSlice({
       .addCase(deleteWaitlistEntry.fulfilled, (state, action: PayloadAction<string>) => {
         state.actionLoading = false;
         state.entries = state.entries.filter((e) => e.id !== action.payload);
+        // Note: Depending on UI preference, deleting an item might mean you want to decrement totalEntries
+        if (state.totalEntries > 0) state.totalEntries -= 1;
       })
       .addCase(deleteWaitlistEntry.rejected, (state, action) => {
         state.actionLoading = false;

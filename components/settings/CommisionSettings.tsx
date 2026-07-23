@@ -318,20 +318,20 @@ function ActiveModelBar({ isAdmin = true }: { isAdmin?: boolean }) {
       padding: "10px 14px", borderRadius: "12px", border: "1px solid #E5E7EB",
       backgroundColor: "#FAFAFA", marginBottom: "14px",
     }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", rowGap: "8px" }}>
         <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>Active Payment Model</span>
         {isInitialLoading ? (
           <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#9CA3AF" }}>
             <Loader2 size={13} className="animate-spin" /> Loading...
           </span>
         ) : isAdmin ? (
-          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <div style={{ position: "relative", display: "flex", alignItems: "center", flex: "1 1 160px", minWidth: "140px", maxWidth: "100%" }}>
             <select
               value={activeModel ?? ""}
               onChange={handleSelect}
               disabled={isLoading || !activeModel}
               style={{
-                ...SELECT, width: "auto", minWidth: "170px", fontWeight: 700, color,
+                ...SELECT, width: "100%", boxSizing: "border-box", fontWeight: 700, color,
                 borderColor: `${color}40`, backgroundColor: `${color}0d`,
                 paddingRight: isLoading ? "34px" : SELECT.paddingRight,
               }}
