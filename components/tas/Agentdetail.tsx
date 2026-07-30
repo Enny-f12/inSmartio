@@ -84,14 +84,8 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   const availableBalance = fmtMoney(ext.availableBalance as number | undefined);
   const pendingBalance   = fmtMoney(ext.pendingBalance   as number | undefined);
 
-  const bank = (ext.bankDetails ?? ext.account) as {
-    bankName?: string; accountNumber?: string; accountName?: string;
-  } | null;
-
-  const loc = ext.location as { city?: string; state?: string; country?: string } | null;
-  const locationStr = loc ? [loc.city, loc.state, loc.country].filter(Boolean).join(", ") : null;
-
-  const commissions = (ext.commissions ?? ext.commissionsGiven ?? []) as {
+  const rawCommissions = ext.commissions ?? ext.commissionsGiven;
+  const commissions = (Array.isArray(rawCommissions) ? rawCommissions : []) as {
     id?: string;
     expertId?: string;
     modelType?: string;
@@ -101,9 +95,42 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
     successfulReferrals?: number;
     status?: string;
     createdAt?: string;
+    metadata?: { expertEmail?: string; expertId?: string; reason?: string };
   }[];
 
-  const recruitedExperts = (expertsObj as { experts?: { id?: string; name?: string; email?: string; status?: string }[] } | null)?.experts ?? [];
+  type ExpertRow = {
+    key:     string;
+    name?:   string;
+    model?:  string;
+    status?: string;
+    payout?: number;
+    notes?:  string;
+  };
+
+  const rawExperts = (expertsObj as { experts?: unknown } | null)?.experts;
+  const rawRecruitedExperts = (Array.isArray(rawExperts) ? rawExperts : []) as { id?: string; name?: string; status?: string }[];
+
+  // TEMP FALLBACK: backend's `expertCount.experts` is currently always empty
+  // even when a TAS has real recruits (confirmed via `commissions`). Until
+  // that's fixed server-side, derive rows from `commissions` — the only field
+  // that's actually populated right now. Remove this once `expertCount.experts`
+  // is populated correctly by the backend with real names.
+  const recruitedExperts: ExpertRow[] = rawRecruitedExperts.length > 0
+    ? rawRecruitedExperts.map((e) => ({
+        // eslint-disable-next-line react-hooks/purity
+        key:    e.id ?? e.name ?? Math.random().toString(),
+        name:   e.name,
+        status: e.status,
+      }))
+    : commissions.map((c) => ({
+        // eslint-disable-next-line react-hooks/purity
+        key:    c.id ?? c.expertId ?? Math.random().toString(),
+        name:   undefined, // real name not available from commissions — see backend note
+        model:  c.modelType,
+        status: "active",
+        payout: c.commissionAmount,
+        notes:  "Earned for TAS",
+      }));
 
   const handleSuspend = () => {
     const isSuspended = String(agent.status ?? "").toLowerCase() === "suspended";
@@ -156,7 +183,7 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
           display: "flex", flexDirection: "column", gap: 16,
         }}>
 
-          {/* ── Agent Info ── */}
+          {/* ── Agent Info — matches design spec fields exactly ── */}
           <div style={{ backgroundColor: "#fff", borderRadius: 16, border: "1px solid #E5E7EB", overflow: "hidden" }}>
             <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Agent Information</p>
@@ -164,10 +191,8 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
               <InfoRow label="TAS ID:" value={(ext.applicationCode as string) ?? agent.id} />
               <InfoRow label="Phone:"  value={ext.phone as string} />
               <InfoRow label="Email:"  value={ext.email as string} />
-              <InfoRow label="Gender:" value={ext.gender as string} />
-              <InfoRow label="Tier:"   value={`${tierNum} – ${getTierLabel(tierNum).replace(`Tier ${tierNum} (`, "").replace(")", "")}`} />
+              <InfoRow label="Tier:"   value={`${tierNum} (${getTierLabel(tierNum).replace(`Tier ${tierNum} (`, "").replace(")", "")})`} />
               <InfoRow label="Bonus:"  value={getTierBonus(tierNum)} />
-              {locationStr && <InfoRow label="Location:" value={locationStr} />}
               <InfoRow label="Joined:" value={new Date(agent.createdAt).toLocaleDateString("en-GB")} />
               <div style={{
                 display: "flex",
@@ -181,20 +206,12 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
               </div>
             </div>
 
-            {/* ── Bank Details ── */}
-            {bank?.bankName && (
-              <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
-                <p style={sectionLabel}>Bank Details</p>
-                <InfoRow label="Bank Name:"      value={bank.bankName} />
-                <InfoRow label="Account Name:"   value={bank.accountName} />
-                <InfoRow label="Account Number:" value={bank.accountNumber} />
-              </div>
-            )}
-
             {/* ── Performance ── */}
             <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Performance Metrics</p>
-              <InfoRow label="Total Experts Recruited:" value={expertsObj?.total  != null ? String(expertsObj.total)  : "—"} />
+              <InfoRow label="Total Experts Recruited:" value={
+                expertsObj?.total ? String(expertsObj.total) : String(recruitedExperts.length)
+              } />
               <InfoRow label="Active Experts:"          value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
               <InfoRow label="Total Earnings:"          value={totalEarnings} />
               <InfoRow label="This Month:"              value={thisMonth} />
@@ -202,83 +219,52 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
               <InfoRow label="Pending Balance:"         value={pendingBalance} />
             </div>
 
-            {/* ── Recruited Experts ── */}
-            {recruitedExperts.length > 0 && (
-              <div style={{ overflowX: "auto" }}>
-                <p style={{ ...sectionLabel, padding: isMobile ? "16px 16px 0" : "20px 28px 0" }}>
-                  Recruited Experts
-                </p>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      {["Expert ID", "Name", "Email", "Status"].map((h) => (
-                        <th key={h} style={{
-                          textAlign: "left", padding: "12px 20px", fontSize: 12,
-                          fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap",
-                        }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recruitedExperts.map((e, i) => (
-                      <tr key={e.id ?? i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.id ?? "—"}</td>
+            {/* ── Recruited Experts (always shown, with empty state) ── */}
+            <div style={{ overflowX: "auto" }}>
+              <p style={{ ...sectionLabel, padding: isMobile ? "16px 16px 0" : "20px 28px 0" }}>
+                Recruited Experts
+              </p>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                    {["Recruited Expert", "Earning History", "Sub-TAS", "Payout", "Notes"].map((h) => (
+                      <th key={h} style={{
+                        textAlign: "left", padding: "12px 20px", fontSize: 12,
+                        fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap",
+                      }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recruitedExperts.length > 0 ? (
+                    recruitedExperts.map((e) => (
+                      <tr key={e.key} style={{ borderBottom: "1px solid #F3F4F6" }}>
                         <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>{e.name ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{e.email ?? "—"}</td>
-                        <td style={{ padding: "13px 20px" }}>{statusBadge(e.status ?? "active")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* ── Commissions ── */}
-            {commissions.length > 0 && (
-              <div style={{ overflowX: "auto" }}>
-                <p style={{ ...sectionLabel, padding: isMobile ? "16px 16px 0" : "20px 28px 0" }}>
-                  Commission History
-                </p>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      {["Expert ID", "Model", "Contract Value", "Rate", "Commission", "Referrals", "Status", "Date"].map((h) => (
-                        <th key={h} style={{
-                          textAlign: "left", padding: "12px 20px", fontSize: 12,
-                          fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap",
-                        }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commissions.map((c, i) => (
-                      <tr key={c.id ?? i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", fontFamily: "monospace", whiteSpace: "nowrap" }}>{c.expertId ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>{c.modelType ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>{fmtMoney(c.contractValue)}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{c.commissionRate != null ? `${c.commissionRate}%` : "—"}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>{fmtMoney(c.commissionAmount)}</td>
-                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", textAlign: "center", whiteSpace: "nowrap" }}>{c.successfulReferrals ?? "—"}</td>
-                        <td style={{ padding: "13px 20px", whiteSpace: "nowrap" }}>{statusBadge(c.status ?? "—")}</td>
                         <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
-                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB") : "—"}
+                          {e.model ? (e.model === "model1" ? "Model 1" : e.model === "model2" ? "Model 2" : e.model) : "—"}
                         </td>
+                        <td style={{ padding: "13px 20px" }}>{statusBadge(e.status ?? "active")}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>
+                          {e.payout != null ? fmtMoney(e.payout) : "—"}
+                        </td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{e.notes ?? "—"}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {commissions.length === 0 && recruitedExperts.length === 0 && (
-              <div style={{ padding: "32px 28px", textAlign: "center" }}>
-                <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>No commission history yet.</p>
-              </div>
-            )}
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} style={{
+                        padding: isMobile ? "16px" : "20px 28px",
+                        textAlign: "center", fontSize: 13, color: "#9CA3AF", fontStyle: "italic",
+                      }}>
+                        No experts yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

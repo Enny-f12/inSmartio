@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, Eye, Download, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Loader2, Eye, Download, X, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useAppSelector } from "@/hooks/redux";
 import { verifyTas } from "@/lib/api/tasApi";
@@ -349,7 +349,6 @@ inSmartio Team`;
         padding: isMobile ? "16px 16px 0" : "20px 32px 0",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
         gap: 8,
         flexWrap: "wrap",
       }}>
@@ -360,32 +359,14 @@ inSmartio Team`;
           }}>
           <ArrowLeft size={16} /> TAS Applications
         </button>
-        <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#111827" }}>{name}</span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={checkApprove}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: isMobile ? "8px 12px" : "9px 16px",
-              borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
-              fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>
-            <CheckCircle2 size={14} /> Approve
-          </button>
-          <button onClick={checkReject}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: isMobile ? "8px 12px" : "9px 16px",
-              borderRadius: 10, border: "1.5px solid #fecaca", backgroundColor: "#fff",
-              color: "#dc2626", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>
-            <XCircle size={14} /> Reject
-          </button>
-        </div>
+        <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#111827", marginLeft: 4 }}>
+          {name}
+        </span>
       </div>
 
       {/* ── Scrollable body ── */}
       <div style={{
-        padding: isMobile ? "16px 12px 100px" : "20px 32px 100px",
+        padding: isMobile ? "16px 12px 96px" : "20px 32px 96px",
         flex: 1, overflowY: "auto",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
@@ -564,21 +545,61 @@ inSmartio Team`;
             })}
           </div>
         </div>
+      </div>
 
-        {/* ── Request more info ── */}
-        <div style={{ ...card, padding: isMobile ? "16px" : "20px 24px", display: "flex", alignItems: "center" }}>
-          {hasValidEmail ? (
-            <a href={mailHref}
-              style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, textDecoration: "none" }}>
-              Request More Info
-            </a>
-          ) : (
-            <span title="No email on file for this applicant"
-              style={{ fontSize: 13, color: "#D1D5DB", fontWeight: 500, cursor: "not-allowed" }}>
-              Request More Info
-            </span>
-          )}
-        </div>
+      {/* ── Bottom action bar — Approve, Reject, Request More Info grouped together, left-aligned ── */}
+      <div style={{
+        position: "sticky",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: "wrap",
+        padding: isMobile ? "12px 16px" : "14px 32px",
+        backgroundColor: "#fff",
+        borderTop: "1px solid #E5E7EB",
+      }}>
+        <button onClick={checkApprove}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: isMobile ? "8px 12px" : "9px 16px",
+            borderRadius: 10, border: "none", backgroundColor: "#16a34a", color: "#fff",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>
+          <CheckCircle2 size={14} /> Approve
+        </button>
+        <button onClick={checkReject}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: isMobile ? "8px 12px" : "9px 16px",
+            borderRadius: 10, border: "1.5px solid #fecaca", backgroundColor: "#fff",
+            color: "#dc2626", fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>
+          <XCircle size={14} /> Reject
+        </button>
+        {hasValidEmail ? (
+          <a href={mailHref}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: isMobile ? "8px 12px" : "9px 16px",
+              borderRadius: 10, border: "1px solid #E5E7EB", backgroundColor: "#fff",
+              color: "#374151", fontSize: 13, fontWeight: 600, textDecoration: "none",
+            }}>
+            <Mail size={14} /> Request More Info
+          </a>
+        ) : (
+          <span title="No email on file for this applicant"
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: isMobile ? "8px 12px" : "9px 16px",
+              borderRadius: 10, border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+              color: "#D1D5DB", fontSize: 13, fontWeight: 600, cursor: "not-allowed",
+            }}>
+            <Mail size={14} /> Request More Info
+          </span>
+        )}
       </div>
     </div>
   );
