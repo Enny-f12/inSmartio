@@ -25,7 +25,16 @@ function getAppStatus(a: ApiTas, override?: ComputedStatus): ComputedStatus {
 
 function getNetwork(a: ApiTas): string {
   const re = (a as Record<string, unknown>).recruitExpectations as Record<string, unknown> | null;
-  return re?.networkSize ? `${re.networkSize}+` : "—";
+  const raw = re?.networkSize as string | undefined;
+  if (!raw) return "—";
+
+  // Pull out all numbers in the string (e.g. "5 - 10" -> [5, 10], "20+" -> [20])
+  // and use the highest one as a single approximate figure.
+  const numbers = raw.match(/\d+/g)?.map(Number) ?? [];
+  if (numbers.length === 0) return "—";
+
+  const max = Math.max(...numbers);
+  return `${max}+`;
 }
 
 export default function ApplicationsTab({ agents }: Props) {

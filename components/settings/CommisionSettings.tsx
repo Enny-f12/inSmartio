@@ -717,14 +717,19 @@ const TIER_LABELS: Record<TierKey, string> = {
   tier4: "Tier 4", tier5: "Tier 5", tier6: "Tier 6",
 };
 
+// CONFIRMED backend field names (from live console inspection):
+//   { name: "Bronze", benefits: [...], minReferrals: 0, commissionRate: 5 }
+// `maxReferrals` is CONFIRMED NOT PRESENT on the backend — it's a frontend-only
+// addition so the UI can capture/display a max value. It will NOT persist
+// across a refresh until the backend adds this field. Flag to backend dev.
 function emptyTiers(): Record<TierKey, TierConfig> {
   return {
-    tier1: { experts: 0,    bonus: 0  },
-    tier2: { experts: 50,   bonus: 5  },
-    tier3: { experts: 200,  bonus: 10 },
-    tier4: { experts: 500,  bonus: 12 },
-    tier5: { experts: 1000, bonus: 15 },
-    tier6: { experts: 2500, bonus: 20 },
+    tier1: { minReferrals: 0,    maxReferrals: 49,   commissionRate: 0  },
+    tier2: { minReferrals: 50,   maxReferrals: 199,  commissionRate: 5  },
+    tier3: { minReferrals: 200,  maxReferrals: 499,  commissionRate: 10 },
+    tier4: { minReferrals: 500,  maxReferrals: 999,  commissionRate: 12 },
+    tier5: { minReferrals: 1000, maxReferrals: 2499, commissionRate: 15 },
+    tier6: { minReferrals: 2500, maxReferrals: undefined, commissionRate: 20 },
   };
 }
 
@@ -742,7 +747,7 @@ function TasTierModal({ item, onClose, onSave, saving }: {
   });
 
   const setField = (key: TierKey, field: keyof TierConfig, val: string) =>
-    setTiers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: Number(val) } }));
+    setTiers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: val === "" ? undefined : Number(val) } }));
 
   return (
     <Modal open onClose={onClose} title={item ? "Edit TAS Tier Settings" : "Add TAS Tier Settings"}
@@ -757,16 +762,21 @@ function TasTierModal({ item, onClose, onSave, saving }: {
                   {TIER_LABELS[key]}
                 </span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
                 <div>
                   <label style={LABEL_STYLE}>Min Experts</label>
-                  <input style={INP} type="number" value={tiers[key].experts}
-                    onChange={(e) => setField(key, "experts", e.target.value)} />
+                  <input style={INP} type="number" value={tiers[key].minReferrals ?? ""}
+                    onChange={(e) => setField(key, "minReferrals", e.target.value)} />
                 </div>
                 <div>
-                  <label style={LABEL_STYLE}>Bonus (%)</label>
-                  <input style={INP} type="number" value={tiers[key].bonus}
-                    onChange={(e) => setField(key, "bonus", e.target.value)} />
+                  <label style={LABEL_STYLE}>Max Experts</label>
+                  <input style={INP} type="number" placeholder="No limit" value={tiers[key].maxReferrals ?? ""}
+                    onChange={(e) => setField(key, "maxReferrals", e.target.value)} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Commission Rate (%)</label>
+                  <input style={INP} type="number" value={tiers[key].commissionRate ?? ""}
+                    onChange={(e) => setField(key, "commissionRate", e.target.value)} />
                 </div>
               </div>
             </div>
@@ -824,7 +834,13 @@ function TasTierCard() {
                 isActive={t.status} isMutating={loading}
                 onToggle={() =>
                   dispatch(toggleTasTierStatus(t.id)).unwrap()
-                    .then(() => toast.success(`TAS tier ${t.status ? "disabled" : "enabled"}`))
+                    .then(() => {
+                      toast.success(`TAS tier ${t.status ? "disabled" : "enabled"}`);
+                      // Re-fetch to guarantee the switch reflects the true server
+                      // state, in case the toggle endpoint's own response doesn't
+                      // include the full/updated tier record.
+                      dispatch(fetchTasTiers());
+                    })
                     .catch((e: string) => toast.error(e))
                 }
                 onEdit={() => setEditItem(t)}
@@ -834,16 +850,19 @@ function TasTierCard() {
             {TIER_KEYS.map((key) => {
               const color = TIER_COLORS[key];
               const tier  = t[key] as TierConfig;
+              const min   = tier?.minReferrals ?? 0;
+              const max   = tier?.maxReferrals;
+              const rangeLabel = max != null ? `${min.toLocaleString()}–${max.toLocaleString()}` : `${min.toLocaleString()}+`;
               return (
                 <div key={key} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", marginBottom: "6px" }}>
                   <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 9px", borderRadius: "999px", whiteSpace: "nowrap", flexShrink: 0, color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}>
                     {TIER_LABELS[key]}
                   </span>
                   <span style={{ fontSize: "13px", color: "#374151", flex: 1 }}>
-                    {(tier?.experts ?? 0).toLocaleString()}+ experts
+                    {rangeLabel} experts
                   </span>
                   <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                    {tier?.bonus ?? 0}% bonus
+                    {tier?.commissionRate ?? 0}%
                   </span>
                 </div>
               );
