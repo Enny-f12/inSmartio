@@ -27,6 +27,11 @@ export interface UserJob {
   };
 }
 
+export interface UserCategory {
+  name?: string;
+  sub?:  string[];
+}
+
 export interface User {
   id:                   string;
   avatarSeed:           number;
@@ -42,7 +47,9 @@ export interface User {
   gender?:              string;
   bio?:                 string;
   verification?:        string;
-  category?:            Record<string, unknown> | string[];
+  // Category can arrive as an array of { name, sub } objects (current API shape),
+  // a single legacy object, or a flat string array for TAS users.
+  category?:            UserCategory[] | Record<string, unknown> | string[];
   skill?:               Record<string, unknown>;
   services?:            unknown;
   bankDetails?:         Record<string, unknown>;
@@ -76,6 +83,26 @@ const getInitials = (name: string) =>
   (name ?? "?").split(" ").map((n) => n?.[0] ?? "").join("").toUpperCase().slice(0, 2) || "?";
 const getColor = (seed: number) => AVATAR_COLORS[(seed ?? 0) % AVATAR_COLORS.length];
 const fmtMoney = (n: number) => `₦${n.toLocaleString()}`;
+
+// Normalizes `category` (array of {name, sub}, a single legacy object, or undefined)
+// into a consistent array of { name, sub } for rendering.
+function normalizeCategories(category: User["category"]): UserCategory[] {
+  if (!category) return [];
+
+  if (Array.isArray(category)) {
+    // Could be UserCategory[] (objects) or string[] (legacy flat list)
+    return (category as unknown[])
+      .map((c) => {
+        if (typeof c === "string") return { name: c };
+        const r = c as Record<string, unknown>;
+        return { name: r.name as string, sub: r.sub as string[] };
+      })
+      .filter((c) => c.name || (c.sub && c.sub.length > 0));
+  }
+
+  const r = category as Record<string, unknown>;
+  return r.name || r.sub ? [{ name: r.name as string, sub: r.sub as string[] }] : [];
+}
 
 // ─────────────────────────────────────────────────────────
 // Shared small components
@@ -165,14 +192,43 @@ function DocumentsSection({ document }: { document?: Record<string, unknown> | u
 }
 
 // ─────────────────────────────────────────────────────────
+// Category section (shared render for a normalized category list)
+// ─────────────────────────────────────────────────────────
+function CategorySection({ categories }: { categories: UserCategory[] }) {
+  if (categories.length === 0) return null;
+
+  return (
+    <>
+      <SectionTitle text="Category" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {categories.map((c, i) => (
+          <div key={i} style={{
+            padding: "10px 14px", borderRadius: "10px",
+            backgroundColor: "#F9FAFB", border: "1px solid #F3F4F6",
+          }}>
+            <InfoRow label="Name:" value={c.name} />
+            {Array.isArray(c.sub) && c.sub.length > 0 && (
+              <InfoRow label="Sub-categories:" value={c.sub.join(", ")} />
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // Per-type info rows
 // ─────────────────────────────────────────────────────────
 function ExpertRows({ user }: { user: User }) {
   const loc   = user.location;
   const loc2  = loc ? [loc.area, loc.city, loc.state, loc.country].filter(Boolean).join(", ") : undefined;
   const skill = user.skill as Record<string, unknown> | undefined;
-  const cat   = user.category as Record<string, unknown> | undefined;
   const bank  = user.bankDetails as Record<string, unknown> | undefined;
+
+  // `user.category` arrives as an array of { name, sub } objects — normalize defensively
+  // so this keeps working even if the API ever sends a single legacy object.
+  const categories = normalizeCategories(user.category);
 
   const verificationLabel = user.verification
     ? user.verification.replace("tier", "Tier ").replace(/(\d)/, " $1").trim()
@@ -202,15 +258,7 @@ function ExpertRows({ user }: { user: User }) {
         </>
       )}
 
-      {cat && (
-        <>
-          <SectionTitle text="Category" />
-          <InfoRow label="Name:" value={cat.name as string} />
-          {Array.isArray(cat.sub) && cat.sub.length > 0 && (
-            <InfoRow label="Sub-categories:" value={(cat.sub as string[]).join(", ")} />
-          )}
-        </>
-      )}
+      <CategorySection categories={categories} />
 
       <DocumentsSection document={user.document} />
 

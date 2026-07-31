@@ -183,32 +183,33 @@ export default function DashboardPage() {
   }
 
   // ── Top Cities ────────────────────────────────────────────────────────────
+  // Merge "Unknown"/blank entries into "Lagos" using a Map keyed by normalized
+  // city name, so it doesn't matter which order the entries arrive in — there
+  // will only ever be a single "Lagos" bucket, never a duplicate.
   const isCitiesLoading = topCitiesStatus === "loading" || topCitiesStatus === "idle";
   const cityBars = (() => {
     if (!topCitiesData?.cities?.length) return FALLBACK_CITIES;
 
-    // Merge "Unknown" (and blank) entries into "Lagos"
-    const merged = topCitiesData.cities.reduce(
-      (acc: { city: string; pct: number }[], c) => {
-        const label = c.city?.trim();
-        const pct   = Math.round(c.totalUsersInCityPercentageOfOverall);
-        if (!label || label.toLowerCase() === "unknown") {
-          const lagos = acc.find((x) => x.city.toLowerCase() === "lagos");
-          if (lagos) {
-            lagos.pct += pct;
-          } else {
-            // Lagos not encountered yet — add it
-            acc.push({ city: "Lagos", pct });
-          }
-        } else {
-          acc.push({ city: label, pct });
-        }
-        return acc;
-      },
-      []
-    );
+    const buckets = new Map<string, { city: string; pct: number }>();
 
-    return merged
+    for (const c of topCitiesData.cities) {
+      const raw = c.city?.trim();
+
+      // Drop unknown/blank entries entirely rather than folding them elsewhere.
+      if (!raw || raw.toLowerCase() === "unknown") continue;
+
+      const pct = Math.round(c.totalUsersInCityPercentageOfOverall);
+      const key = raw.toLowerCase();
+
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.pct += pct;
+      } else {
+        buckets.set(key, { city: raw, pct });
+      }
+    }
+
+    return Array.from(buckets.values())
       .sort((a, b) => b.pct - a.pct)
       .slice(0, 5);
   })();
