@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, Loader2, ArrowLeft, Download, SlidersHorizontal, ChevronDown, UserPlus } from "lucide-react";
+import { Eye, Loader2, ArrowLeft, Download, SlidersHorizontal, ChevronDown, UserPlus, Users, Briefcase, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import { PageLoader } from "@/components/ui/Loader";
@@ -97,6 +97,59 @@ function StatusPill({ status }: { status: string }) {
       whiteSpace: "nowrap", color, backgroundColor: bg, border }}>
       {s}
     </span>
+  );
+}
+
+// ── Stats cards ───────────────────────────────────────────
+interface StatCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+  bg: string;
+}
+
+function StatCard({ label, value, icon, color, bg }: StatCardProps) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: "14px",
+      padding: "18px 20px", borderRadius: "14px",
+      border: "1px solid #E5E7EB", backgroundColor: "#fff",
+      minWidth: 0,
+    }}>
+      <div style={{
+        width: "44px", height: "44px", borderRadius: "12px",
+        backgroundColor: bg, color,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: "12px", color: "#6B7280", margin: "0 0 3px", whiteSpace: "nowrap" }}>{label}</p>
+        <p style={{ fontSize: "20px", fontWeight: 700, color: "#111827", margin: 0 }}>{value.toLocaleString()}</p>
+      </div>
+    </div>
+  );
+}
+
+function UserStats({ users }: { users: User[] }) {
+  const counts = users.reduce(
+    (acc, u) => {
+      if (u.type === "Expert") acc.expert += 1;
+      else if (u.type === "Client") acc.client += 1;
+      else if (u.type === "TAS") acc.tas += 1;
+      return acc;
+    },
+    { expert: 0, client: 0, tas: 0 }
+  );
+
+  return (
+    <div className="users-stats-grid" style={{ marginBottom: "20px" }}>
+      <StatCard label="Experts" value={counts.expert} icon={<Briefcase size={20} />} color="#2563eb" bg="#EFF6FF" />
+      <StatCard label="Clients" value={counts.client} icon={<Users size={20} />} color="#16a34a" bg="#F0FDF4" />
+      <StatCard label="TAS" value={counts.tas} icon={<UserCog size={20} />} color="#7c3aed" bg="#F5F3FF" />
+    </div>
   );
 }
 
@@ -311,6 +364,14 @@ export default function UsersPage() {
           .users-cards { display: none; }
           .users-pgn { flex-direction: row; align-items: center; }
         }
+        .users-stats-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+        @media (min-width: 560px) {
+          .users-stats-grid { grid-template-columns: repeat(3, 1fr); }
+        }
       `}</style>
 
       <div className="users-wrap" style={{ flex: 1 }}>
@@ -328,6 +389,9 @@ export default function UsersPage() {
             <UserPlus size={14} /> Add User
           </button>
         </div>
+
+        {/* Stats cards */}
+        <UserStats users={users} />
 
         <div style={{ backgroundColor: "#fff", borderRadius: "16px",
           border: "1px solid #E5E7EB", overflow: "hidden" }}>
