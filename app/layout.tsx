@@ -11,7 +11,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "HelpMe NG – Admin Dashboard",
+  title: "inSmartio – Admin Dashboard",
   description: "Internal admin dashboard for managing professionals, jobs, and platform operations.",
   robots: {
     index: false,

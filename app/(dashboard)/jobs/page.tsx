@@ -1,63 +1,286 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 // app/(dashboard)/jobs/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Eye, SlidersHorizontal, Loader2 } from "lucide-react";
+import {
+  Download, Eye, SlidersHorizontal, Loader2,
+  UserPlus, XCircle, ChevronDown, ChevronUp,
+} from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
 import { StatusBadge } from "@/components/ui/Badge";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchJobs, fetchJobById, clearSelectedJob } from "@/lib/redux/jobSlice";
+import { downloadReport } from "@/lib/api/reportApi";
+import { toast } from "sonner";
 import type { ApiJob } from "@/lib/api/jobApi";
+import JobDetailView, { deriveStatus } from "@/components/jobs/Jobdetails";
 
+// ─────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────
 type StatusVariant = "green" | "yellow" | "purple" | "red" | "gray";
 
+// ─────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────
 const getStatusVariant = (status: string): StatusVariant => {
   const map: Record<string, StatusVariant> = {
-    completed: "green", inprogress: "yellow", in_progress: "yellow",
-    active: "yellow", bidding: "purple", open: "purple",
-    disputed: "red", cancelled: "gray", closed: "gray",
+    completed:   "green",
+    inprogress:  "yellow",
+    in_progress: "yellow",
+    active:      "yellow",
+    biding:      "purple",
+    bidding:     "purple",
+    open:        "purple",
+    disputed:    "red",
+    cancelled:   "gray",
+    closed:      "gray",
   };
   return map[status?.toLowerCase()] ?? "gray";
 };
 
-const STATUS_OPTIONS = ["All", "completed", "inprogress", "bidding", "disputed", "cancelled"] as const;
+const STATUS_OPTIONS = ["All", "completed", "inprogress", "biding", "disputed", "cancelled"] as const;
 const MONTH_OPTIONS  = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const MONTH_MAP: Record<string, number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
 const val = (job: ApiJob, ...keys: string[]): string => {
   for (const key of keys) {
     const v = job[key];
-    if (v !== undefined && v !== null) return String(v);
+    if (v !== undefined && v !== null && v !== "") return String(v);
   }
   return "—";
 };
 
+const fmtMoney = (amount?: number | null, fallback = "—") =>
+  amount != null ? `₦${amount.toLocaleString()}` : fallback;
+
+// ─────────────────────────────────────────────────────────
+// Assign to Expert Modal
+// ─────────────────────────────────────────────────────────
+function AssignModal({ count, onClose, onConfirm }: {
+  count: number; onClose: () => void; onConfirm: (expertId: string) => void;
+}) {
+  const [expertId, setExpertId] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "28px 32px",
+        width: "420px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+        <p style={{ fontSize: "16px", fontWeight: 700, color: "#111827", marginBottom: "6px" }}>
+          Assign to Expert
+        </p>
+        <p style={{ fontSize: "13px", color: "#6B7280", marginBottom: "20px" }}>
+          Assign {count} selected job{count > 1 ? "s" : ""} to an expert.
+        </p>
+        <input
+          type="text"
+          placeholder="Enter Expert ID"
+          value={expertId}
+          onChange={e => setExpertId(e.target.value)}
+          style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
+            border: "1px solid #E5E7EB", fontSize: "13px", outline: "none",
+            boxSizing: "border-box", marginBottom: "20px" }}
+        />
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose}
+            style={{ padding: "9px 18px", borderRadius: "10px", border: "1px solid #E5E7EB",
+              fontSize: "13px", fontWeight: 500, color: "#6B7280", background: "none", cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(expertId)} disabled={!expertId.trim()}
+            style={{ padding: "9px 18px", borderRadius: "10px", border: "none",
+              fontSize: "13px", fontWeight: 600, backgroundColor: "#2563EB", color: "#fff",
+              cursor: expertId.trim() ? "pointer" : "not-allowed", opacity: expertId.trim() ? 1 : 0.5 }}>
+            Assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Main List Page
+// ─────────────────────────────────────────────────────────
 export default function JobsPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected, selectedStatus } = useAppSelector((s) => s.jobs);
+  const { list, listStatus, listError, selected, selectedStatus } =
+    useAppSelector((s) => s.jobs);
 
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [monthFilter,  setMonthFilter]  = useState("All");
-  const [search,       setSearch]       = useState("");
+  // Basic filters
+  const [categoryFilter, setCategoryFilter] = useState("All Jobs");
+  const [statusFilter,   setStatusFilter]   = useState("All");
+  const [monthFilter,    setMonthFilter]    = useState("All");
+  const [search,         setSearch]         = useState("");
+  const [downloading,    setDownloading]    = useState(false);
+
+  // Advanced filters
+  const [locationFilter, setLocationFilter] = useState("All");
+  const [dateFrom,       setDateFrom]       = useState("");
+  const [dateTo,         setDateTo]         = useState("");
+  const [amountMin,      setAmountMin]      = useState("");
+  const [amountMax,      setAmountMax]      = useState("");
+  const [showAdvanced,   setShowAdvanced]   = useState(false);
+
+  // Bulk selection
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
+  const categoryOptions = [
+    "All Jobs",
+    ...Array.from(new Set(list.map((j: ApiJob) => val(j, "category")).filter((c) => c !== "—"))),
+  ];
+
+  const locationOptions = [
+    "All",
+    ...Array.from(new Set(
+      list.map((j: ApiJob) => {
+        const loc = j["location"] as { city?: string; state?: string } | undefined;
+        return loc?.city ?? loc?.state ?? null;
+      }).filter(Boolean) as string[]
+    )),
+  ];
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchJobs());
   }, [dispatch, listStatus]);
 
-  useEffect(() => {
-    if (listStatus === "succeeded" && list.length > 0) console.log("📋 Jobs API response shape:", list[0]);
-  }, [listStatus, list]);
+  // ── Filtering ─────────────────────────────────────────
+  const filtered = list.filter((j: ApiJob) => {
+    const status   = deriveStatus(j);
+    const category = val(j, "category");
+    const title    = val(j, "title", "description").toLowerCase();
 
-  useEffect(() => {
-    if (selectedStatus === "succeeded" && selected) console.log("📋 Job detail API response shape:", selected);
-  }, [selectedStatus, selected]);
+    const matchCategory = categoryFilter === "All Jobs" || category === categoryFilter;
+    const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
+    const matchSearch   = !search || title.includes(search.toLowerCase());
 
-  // ── Detail loading ──
+    const locObj = j["location"] as { city?: string; state?: string } | undefined;
+    const locStr = locObj ? `${locObj.city ?? ""} ${locObj.state ?? ""}`.toLowerCase() : "";
+    const matchLocation = locationFilter === "All" || locStr.includes(locationFilter.toLowerCase());
+
+    let matchMonth = true;
+    if (monthFilter !== "All") {
+      const created = j["createdAt"] as string | undefined;
+      if (created) {
+        matchMonth = new Date(created).getMonth() === MONTH_MAP[monthFilter];
+      } else {
+        matchMonth = false;
+      }
+    }
+
+    let matchDateRange = true;
+    if (dateFrom || dateTo) {
+      const created = j["createdAt"] as string | undefined;
+      if (created) {
+        const d = new Date(created).getTime();
+        if (dateFrom && d < new Date(dateFrom).getTime()) matchDateRange = false;
+        if (dateTo   && d > new Date(dateTo + "T23:59:59").getTime()) matchDateRange = false;
+      } else {
+        matchDateRange = false;
+      }
+    }
+
+    let matchAmount = true;
+    const amt = j["finalAmount"] as number | undefined;
+    if (amountMin && amt != null && amt < Number(amountMin)) matchAmount = false;
+    if (amountMax && amt != null && amt > Number(amountMax)) matchAmount = false;
+
+    return matchCategory && matchStatus && matchSearch && matchLocation && matchMonth && matchDateRange && matchAmount;
+  });
+
+  // ── Selection helpers ─────────────────────────────────
+  const filteredIds  = filtered.map((j: ApiJob) => String(j.id));
+  const allSelected  = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const someSelected = filteredIds.some(id => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => { const next = new Set(prev); filteredIds.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSelectedIds(prev => new Set([...prev, ...filteredIds]));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectedCount = [...selectedIds].filter(id => filteredIds.includes(id)).length;
+
+  // ── Advanced filter reset ─────────────────────────────
+  const resetAdvancedFilters = () => {
+    setLocationFilter("All");
+    setDateFrom("");
+    setDateTo("");
+    setAmountMin("");
+    setAmountMax("");
+  };
+
+  const hasActiveAdvancedFilters =
+    locationFilter !== "All" || dateFrom !== "" || dateTo !== "" || amountMin !== "" || amountMax !== "";
+
+  // ── Bulk actions ──────────────────────────────────────
+  const handleCancelSelected = () => {
+    toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} cancelled`);
+    setSelectedIds(new Set());
+  };
+
+  const handleExportSelected = async () => {
+    setDownloading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const url   = await downloadReport({ reportType: "jobs", type: "pdf", fromDate: "2024-01-01", toDate: today });
+      const a     = document.createElement("a");
+      a.href      = url;
+      a.download  = `jobs_export_${today}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${selectedCount} job${selectedCount > 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Failed to export");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleAssignConfirm = (expertId: string) => {
+    toast.success(`${selectedCount} job${selectedCount > 1 ? "s" : ""} assigned to ${expertId}`);
+    setShowAssignModal(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleExport = async () => {
+    setDownloading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const url   = await downloadReport({ reportType: "jobs", type: "pdf", fromDate: "2024-01-01", toDate: today });
+      const a     = document.createElement("a");
+      a.href      = url;
+      a.download  = `jobs_report_${today}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Jobs report downloaded");
+    } catch {
+      toast.error("Failed to download jobs report");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // ── Detail view ───────────────────────────────────────
   if (selectedStatus === "loading") {
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-        <Topbar title="Jobs" />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: "10px", color: "var(--color-text-muted)" }}>
+        <Topbar title="Jobs Management" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+          flex: 1, gap: "10px", color: "#9CA3AF" }}>
           <Loader2 size={18} className="animate-spin" />
           <span style={{ fontSize: "13px" }}>Loading job...</span>
         </div>
@@ -65,45 +288,34 @@ export default function JobsPage() {
     );
   }
 
-  // ── Detail view ──
   if (selectedStatus === "succeeded" && selected) {
-    return (
-      <div className="flex flex-col flex-1">
-        <Topbar title="Jobs" />
-        <main className="flex-1 overflow-y-auto" style={{ padding: "16px" }}>
-          <style>{`@media(min-width:640px){ .job-detail-main{ padding: 24px 32px !important; } }`}</style>
-          <button onClick={() => dispatch(clearSelectedJob())} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px" }}>
-            ← Jobs
-          </button>
-          <div className="bg-surface rounded-2xl border border-border p-6">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-4">Job Details</p>
-            <div className="space-y-2">
-              {Object.entries(selected).map(([key, value]) => (
-                <div key={key} style={{ display: "flex", gap: "12px", fontSize: "13px", flexWrap: "wrap" }}>
-                  <span style={{ minWidth: "140px", flexShrink: 0, fontWeight: 500, color: "var(--color-text-muted)", textTransform: "capitalize" }}>{key}:</span>
-                  <span className="text-text-main" style={{ wordBreak: "break-word", flex: 1 }}>
-                    {typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
-      </div>
-    );
+    const raw    = selected as unknown as Record<string, unknown>;
+    const rawJob = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
+    const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
+
+    const enrichedJob: ApiJob = {
+      ...(listJob ?? {}),
+      ...rawJob,
+      client:      (listJob?.["client"]      ?? rawJob["client"])      as ApiJob[string],
+      expert:      (listJob?.["expert"]      ?? rawJob["expert"])      as ApiJob[string],
+      finalAmount: (listJob?.["finalAmount"] ?? rawJob["finalAmount"]) as ApiJob[string],
+    } as ApiJob;
+
+    return <JobDetailView job={enrichedJob} onBack={() => dispatch(clearSelectedJob())} />;
   }
 
-  const filtered = list.filter((j: ApiJob) => {
-    const status = val(j, "status");
-    const title  = val(j, "title", "description", "jobTitle").toLowerCase();
-    const matchStatus = statusFilter === "All" || status.toLowerCase() === statusFilter.toLowerCase();
-    const matchSearch = !search || title.includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
-
+  // ─────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col flex-1">
-      <Topbar title="Jobs" />
+    <div className="flex flex-col flex-1" style={{ backgroundColor: "#F4F5F7" }}>
+      <Topbar title="Jobs Management" />
+
+      {showAssignModal && (
+        <AssignModal
+          count={selectedCount}
+          onClose={() => setShowAssignModal(false)}
+          onConfirm={handleAssignConfirm}
+        />
+      )}
 
       <style>{`
         .jobs-header { padding: 16px !important; }
@@ -121,137 +333,365 @@ export default function JobsPage() {
           .jobs-cards  { display: none !important; }
           .jobs-pagination { flex-direction: row !important; align-items: center !important; }
         }
+        .bulk-btn {
+          display: flex; align-items: center; gap: 6px;
+          padding: 7px 14px; border-radius: 8px; font-size: 12.5px;
+          font-weight: 600; cursor: pointer; border: 1px solid transparent;
+          transition: opacity 0.15s;
+        }
+        .bulk-btn:hover { opacity: 0.85; }
+        .bulk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .row-cb { width: 16px; height: 16px; accent-color: #2563EB; cursor: pointer; }
+        .adv-input {
+          padding: 7px 10px; border-radius: 8px; border: 1px solid #E5E7EB;
+          font-size: 12px; outline: none; color: #111827; background: #fff;
+          transition: border-color 0.15s;
+        }
+        .adv-input:focus { border-color: #2563EB; }
       `}</style>
 
-      {/* Sub-header */}
-      <div className="jobs-header flex items-center justify-between">
-        <p className="text-sm font-semibold text-text-main">
-          {listStatus === "succeeded" ? `${list.length} jobs total` : "Jobs List"}
-        </p>
-        <button className="btn-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
-          <Download size={15} /> Export
-        </button>
+      {/* ── Sub-header ── */}
+      <div className="jobs-header flex items-center justify-between" style={{ gap: "12px", flexWrap: "wrap" }}>
+        <p style={{ fontSize: "16px", fontWeight: 600, color: "#111827", margin: 0 }}>Jobs List</p>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginLeft: "auto" }}>
+          {selectedCount > 0 && (
+            <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, marginRight: "4px" }}>
+              {selectedCount} selected
+            </span>
+          )}
+
+          <button
+            className="bulk-btn"
+            onClick={() => setShowAssignModal(true)}
+            disabled={selectedCount === 0}
+            style={{
+              backgroundColor: selectedCount > 0 ? "#2563EB" : "#E5E7EB",
+              color: selectedCount > 0 ? "#fff" : "#9CA3AF",
+              borderColor: selectedCount > 0 ? "#2563EB" : "#E5E7EB",
+            }}>
+            <UserPlus size={13} /> Assign to Expert
+          </button>
+
+          <button
+            className="bulk-btn"
+            onClick={handleCancelSelected}
+            disabled={selectedCount === 0}
+            style={{
+              backgroundColor: selectedCount > 0 ? "#FEF2F2" : "#F9FAFB",
+              color: selectedCount > 0 ? "#DC2626" : "#9CA3AF",
+              borderColor: selectedCount > 0 ? "#FECACA" : "#E5E7EB",
+            }}>
+            <XCircle size={13} /> Cancel Selected
+          </button>
+
+          <button
+            className="bulk-btn"
+            onClick={selectedCount > 0 ? handleExportSelected : handleExport}
+            disabled={downloading}
+            style={{
+              backgroundColor: "#2563EB", color: "#ffffff", borderColor: "#2563EB",
+              opacity: downloading ? 0.7 : 1,
+            }}>
+            {downloading
+              ? <><Loader2 size={13} className="animate-spin" /> Exporting...</>
+              : <><Download size={13} /> {selectedCount > 0 ? "Export Selected" : "Export"}</>}
+          </button>
+        </div>
       </div>
 
       <main className="jobs-main flex-1">
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px",
+          overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
 
-          {/* Filter toolbar */}
-          <div style={{ padding: "16px", borderBottom: "1px solid var(--color-border)" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <SlidersHorizontal size={15} className="text-text-muted" />
-              <span className="text-sm font-semibold text-text-main">Filter</span>
-            </div>
-            <div className="jobs-filter-row flex">
-              {/* Search */}
-              <div className="relative" style={{ flex: 1 }}>
-                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input
-                  type="text"
-                  placeholder="Search jobs..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[13px] outline-none border border-border bg-background text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-                />
+          {/* ── Filter toolbar ── */}
+          <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <SlidersHorizontal size={15} style={{ color: "#6B7280" }} />
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Filter</span>
+                {hasActiveAdvancedFilters && (
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#2563EB",
+                    color: "#fff", fontSize: "10px", fontWeight: 700 }}>
+                    ✓
+                  </span>
+                )}
               </div>
-              {/* Dropdowns */}
-              <div className="jobs-filter-dropdowns">
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Status:</span>
+              <button
+                onClick={() => setShowAdvanced(p => !p)}
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px",
+                  fontWeight: 600, color: showAdvanced ? "#2563EB" : "#6B7280",
+                  background: "none", border: "none", cursor: "pointer", padding: "4px 8px",
+                  borderRadius: "8px", backgroundColor: showAdvanced ? "#EFF6FF" : "transparent",
+                  transition: "all 0.15s" }}>
+                {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                Advanced Filters
+              </button>
+            </div>
+
+            {/* Basic filters */}
+            <div className="jobs-filter-row flex" style={{ gap: "12px" }}>
+              <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+                <svg style={{ position: "absolute", left: "14px", top: "50%",
+                  transform: "translateY(-50%)", color: "#9CA3AF" }}
+                  width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" placeholder="Search name..."
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px",
+                    paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px",
+                    fontSize: "13px", outline: "none", border: "1px solid #E5E7EB",
+                    backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
+              </div>
+              <div className="jobs-filter-dropdowns" style={{ gap: "12px" }}>
+                <FilterDropdown value={categoryFilter} options={categoryOptions} onChange={setCategoryFilter} />
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Status:</span>
                   <FilterDropdown value={statusFilter} options={STATUS_OPTIONS} onChange={setStatusFilter} />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Date:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Date:</span>
                   <FilterDropdown value={monthFilter} options={MONTH_OPTIONS} onChange={setMonthFilter} />
                 </div>
               </div>
             </div>
+
+            {/* Advanced filters panel */}
+            {showAdvanced && (
+              <div style={{ marginTop: "16px", padding: "20px", borderRadius: "12px",
+                backgroundColor: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+                <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.07em", color: "#9CA3AF", margin: "0 0 16px" }}>
+                  Advanced Filters
+                </p>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Location</span>
+                    <FilterDropdown value={locationFilter} options={locationOptions} onChange={setLocationFilter} />
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Date Range</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input type="date" className="adv-input" value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input type="date" className="adv-input" value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Amount Range (₦)</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input type="number" placeholder="Min" className="adv-input" value={amountMin}
+                        onChange={e => setAmountMin(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }} />
+                      <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
+                      <input type="number" placeholder="Max" className="adv-input" value={amountMax}
+                        onChange={e => setAmountMax(e.target.value)}
+                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
+                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
+                          color: "#111827", backgroundColor: "#ffffff" }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", marginLeft: "auto", alignSelf: "flex-end" }}>
+                    <button onClick={resetAdvancedFilters}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                        color: "#6B7280", cursor: "pointer", transition: "all 0.15s" }}>
+                      Reset
+                    </button>
+                    <button onClick={() => setShowAdvanced(false)}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "12.5px",
+                        fontWeight: 600, border: "none", backgroundColor: "#2563EB",
+                        color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}>
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Loading */}
+          {/* ── Loading / Error ── */}
           {listStatus === "loading" && (
-            <div className="flex items-center justify-center py-16 gap-3 text-text-muted">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "64px", gap: "10px", color: "#9CA3AF" }}>
               <Loader2 size={18} className="animate-spin" />
-              <span className="text-[13px]">Loading jobs...</span>
+              <span style={{ fontSize: "13px" }}>Loading jobs...</span>
             </div>
           )}
-
-          {/* Error */}
           {listStatus === "failed" && (
-            <p className="text-center py-16 text-[13px] text-red-500">{listError}</p>
+            <p style={{ textAlign: "center", padding: "64px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
 
           {listStatus === "succeeded" && (
             <>
-              {/* Desktop table */}
-              <div className="jobs-table overflow-x-auto">
-                <table className="w-full">
+              {/* ── Desktop table ── */}
+              <div className="jobs-table" style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr className="border-b border-border bg-background">
-                      {["Job ID", "Title", "Client", "Expert", "Amount", "Status", "Actions"].map((h) => (
-                        <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
+                    <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                      <th style={{ padding: "12px 16px 12px 24px", width: "40px" }}>
+                        <input
+                          type="checkbox"
+                          className="row-cb"
+                          checked={allSelected}
+                          ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                          onChange={toggleAll}
+                        />
+                      </th>
+                      {["Job ID", "Client", "Expert", "Amount", "Status", "Actions"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "12px 20px 12px 0", fontSize: "11px",
+                          fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B7280" }}>
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center py-14 text-sm text-text-muted">
+                      <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px",
+                        fontSize: "14px", color: "#9CA3AF" }}>
                         {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
                       </td></tr>
-                    ) : filtered.map((job: ApiJob) => (
-                      <tr key={job.id} className="hover:bg-background transition-colors">
-                        <td className="px-6 py-4 text-[13px] font-semibold text-text-main">{val(job, "id", "jobId")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted max-w-45 truncate">{val(job, "title", "jobTitle", "description")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted">{val(job, "client", "clientName", "userId")}</td>
-                        <td className="px-6 py-4 text-[13px] text-text-muted">{val(job, "expert", "expertName", "assignedTo")}</td>
-                        <td className="px-6 py-4 text-[13px] font-medium text-text-main">{val(job, "amount", "budget", "price", "finalPrice")}</td>
-                        <td className="px-6 py-4"><StatusBadge label={val(job, "status")} variant={getStatusVariant(val(job, "status"))} /></td>
-                        <td className="px-6 py-4">
-                          <button onClick={() => dispatch(fetchJobById(job.id))} className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-background transition-colors" title="View job">
-                            <Eye size={17} strokeWidth={1.8} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    ) : filtered.map((job: ApiJob) => {
+                      const jobId              = String(job.id);
+                      const finalAmountDisplay = fmtMoney(job["finalAmount"] as number | undefined);
+                      const clientObj          = job["client"] as { name?: string } | undefined;
+                      const expertObj          = job["expert"] as { name?: string } | undefined;
+                      const clientName         = clientObj?.name ?? val(job, "postedBy");
+                      const expertName         = expertObj?.name ?? "—";
+                      const status             = deriveStatus(job);
+                      const isChecked          = selectedIds.has(jobId);
+
+                      return (
+                        <tr key={jobId}
+                          style={{
+                            borderBottom: "1px solid #F3F4F6",
+                            backgroundColor: isChecked ? "#EFF6FF" : "transparent",
+                            transition: "background 0.1s",
+                          }}
+                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.backgroundColor = "#F9FAFB"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = isChecked ? "#EFF6FF" : "transparent"; }}>
+
+                          <td style={{ padding: "14px 16px 14px 24px" }}>
+                            <input type="checkbox" className="row-cb"
+                              checked={isChecked} onChange={() => toggleOne(jobId)} />
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "12px",
+                            fontFamily: "monospace", color: "#6B7280" }}>
+                            {jobId.slice(0, 14)}
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", color: "#111827" }}>
+                            {clientName}
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", color: "#111827" }}>
+                            {expertName}
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
+                            {finalAmountDisplay}
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0" }}>
+                            <StatusBadge label={status} variant={getStatusVariant(status)} />
+                          </td>
+                          <td style={{ padding: "14px 20px 14px 0" }}>
+                            <button onClick={() => dispatch(fetchJobById(jobId))}
+                              style={{ padding: "6px", borderRadius: "8px", border: "none",
+                                background: "none", cursor: "pointer", color: "#9CA3AF",
+                                display: "flex", alignItems: "center" }}
+                              title="View job">
+                              <Eye size={17} strokeWidth={1.8} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Mobile cards */}
+              {/* ── Mobile cards ── */}
               <div className="jobs-cards">
                 {filtered.length === 0 ? (
-                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>
-                    {list.length === 0 ? "No jobs have been posted yet." : "No jobs match your filter."}
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF" }}>
+                    {list.length === 0 ? "No jobs posted yet." : "No jobs match your filter."}
                   </p>
-                ) : filtered.map((job: ApiJob) => (
-                  <div key={job.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {val(job, "title", "jobTitle", "description")}
-                      </p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                        <StatusBadge label={val(job, "status")} variant={getStatusVariant(val(job, "status"))} />
-                        <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{val(job, "client", "clientName")}</span>
-                        <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-main)" }}>{val(job, "amount", "budget", "price")}</span>
+                ) : filtered.map((job: ApiJob) => {
+                  const jobId      = String(job.id);
+                  const clientObj  = job["client"] as { name?: string } | undefined;
+                  const expertObj  = job["expert"] as { name?: string } | undefined;
+                  const finalAmt   = fmtMoney(job["finalAmount"] as number | undefined);
+                  const clientName = clientObj?.name ?? val(job, "postedBy");
+                  const expertName = expertObj?.name ?? "—";
+                  const status     = deriveStatus(job);
+                  const isChecked  = selectedIds.has(jobId);
+
+                  return (
+                    <div key={jobId}
+                      style={{ padding: "14px 16px", borderRadius: "12px",
+                        border: `1px solid ${isChecked ? "#BFDBFE" : "#E5E7EB"}`,
+                        backgroundColor: isChecked ? "#EFF6FF" : "#ffffff",
+                        display: "flex", alignItems: "center", gap: "12px" }}>
+                      <input type="checkbox" className="row-cb"
+                        checked={isChecked} onChange={() => toggleOne(jobId)} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827",
+                          marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {clientName}
+                          {expertName !== "—" && (
+                            <span style={{ fontWeight: 400, color: "#6B7280" }}> → {expertName}</span>
+                          )}
+                        </p>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <StatusBadge label={status} variant={getStatusVariant(status)} />
+                          <span style={{ fontSize: "12px", fontWeight: 600, color: "#111827" }}>{finalAmt}</span>
+                        </div>
                       </div>
+                      <button onClick={() => dispatch(fetchJobById(jobId))}
+                        style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB",
+                          background: "none", cursor: "pointer", color: "#9CA3AF",
+                          flexShrink: 0, display: "flex", alignItems: "center" }}>
+                        <Eye size={16} strokeWidth={1.8} />
+                      </button>
                     </div>
-                    <button onClick={() => dispatch(fetchJobById(job.id))} style={{ padding: "8px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)", flexShrink: 0 }}>
-                      <Eye size={16} strokeWidth={1.8} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
 
-          {/* Pagination */}
+          {/* ── Pagination ── */}
           {listStatus === "succeeded" && (
-            <div className="jobs-pagination flex items-center justify-between px-4 py-4 border-t border-border bg-background">
-              <p className="text-[12px] text-text-muted">Showing {filtered.length} of {list.length} jobs</p>
-              <div className="flex items-center gap-1.5">
-                <button className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted opacity-40 cursor-not-allowed">Prev</button>
-                <button className="w-8 h-8 rounded-lg text-[12px] font-medium btn-primary">1</button>
-                <button className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-text-muted hover:bg-background">Next</button>
+            <div className="jobs-pagination"
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+              <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
+                Showing 1 to {filtered.length} of {list.length} results
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                  fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                  color: "#6B7280", cursor: "not-allowed", opacity: 0.4 }}>Previous</button>
+                <button style={{ width: "32px", height: "32px", borderRadius: "8px",
+                  fontSize: "12px", fontWeight: 600, border: "none",
+                  backgroundColor: "#2563EB", color: "#ffffff", cursor: "pointer" }}>1</button>
+                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                  fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                  color: "#6B7280", cursor: "pointer" }}>Next</button>
               </div>
             </div>
           )}

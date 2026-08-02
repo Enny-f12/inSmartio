@@ -1,86 +1,117 @@
-// components/tas/Adjusttiermodal.tsx
+// components/tas/AdjustTierModal.tsx
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import Modal from "@/components/ui/Modal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { adjustTier } from "@/lib/redux/tasSlice";
-import type { ActiveAgent } from "@/components/tas/types";
-import { TAS_TIERS } from "@/components/tas/types";
+import { adjustTier, resetMutateStatus } from "@/lib/redux/tasSlice";
+import type { ApiTas, AdjustTierPayload } from "@/lib/api/tasApi";
+import { TAS_TIERS } from "./shared";
 
-interface AdjustTierModalProps {
-  agent:   ActiveAgent | null;
+interface Props {
+  agent:   ApiTas;
   onClose: () => void;
 }
 
-export default function AdjustTierModal({ agent, onClose }: AdjustTierModalProps) {
-  const dispatch = useAppDispatch();
+export default function AdjustTierModal({ agent, onClose }: Props) {
+  const dispatch    = useAppDispatch();
   const { mutateStatus } = useAppSelector((s) => s.tas);
-
-  const [selected, setSelected] = useState(String(agent?.tier ?? "1"));
-  const [reason,   setReason]   = useState("");
-
-  const isLoading = mutateStatus === "loading";
-
-  if (!agent) return null;
+  const currentTier = Number(agent.tier ?? 1);
+  const [selectedTier, setSelectedTier] = useState(currentTier);
+  const [reason,       setReason]       = useState("");
+  const isMutating = mutateStatus === "loading";
 
   const handleConfirm = () => {
-    dispatch(adjustTier({ id: agent.id, payload: { newTier: selected } }))
+    dispatch(adjustTier({ id: agent.id, payload: { newTier: selectedTier } as AdjustTierPayload }))
       .unwrap()
-      .then(() => { toast.success(`Tier adjusted to ${selected} for ${agent.name}`); onClose(); })
+      .then(() => {
+        toast.success("Tier updated successfully");
+        dispatch(resetMutateStatus());
+        onClose();
+      })
       .catch((err: string) => toast.error("Failed to adjust tier", { description: err }));
   };
 
-  const footer = (
-    <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-      <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", fontSize: "13px", cursor: "pointer", color: "var(--color-text-muted)" }}>
-        Cancel
-      </button>
-      <button onClick={handleConfirm} disabled={isLoading} className="btn-primary"
-        style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: isLoading ? 0.7 : 1 }}>
-        {isLoading ? <><Loader2 size={14} className="animate-spin" /> Adjusting...</> : "Confirm Adjustment"}
-      </button>
-    </div>
-  );
-
   return (
-    <Modal open={!!agent} onClose={onClose} title="Adjust TAS Tier" size="sm" footer={footer}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div style={{
+      position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 60,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div style={{ backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 420, overflow: "hidden" }}>
 
-        {/* Current info */}
-        <div style={{ fontSize: "13px", color: "var(--color-text-muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
-          <p style={{ margin: 0 }}><span style={{ fontWeight: 500, color: "var(--color-text-main)" }}>TAS:</span> {agent.fullName} ({agent.tasId})</p>
-          <p style={{ margin: 0 }}><span style={{ fontWeight: 500, color: "var(--color-text-main)" }}>Current Tier:</span> {agent.tier} ({agent.tierLabel})</p>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "18px 24px", borderBottom: "1px solid #E5E7EB",
+        }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: 0 }}>Adjust TAS Tier</p>
+          <button onClick={onClose}
+            style={{ border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex" }}>
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Tier selection */}
-        <div>
-          <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "10px" }}>New Tier:</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {TAS_TIERS.map(tier => (
-              <label key={tier} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "var(--color-text-main)" }}>
-                <input type="radio" name="tier" value={tier} checked={selected === tier}
-                  onChange={() => setSelected(tier)}
-                  style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", flexShrink: 0 }} />
-                {tier} {tier === String(agent.tier) ? <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>— Current</span> : ""}
+        {/* Body */}
+        <div style={{ padding: "20px 24px" }}>
+          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 4px" }}>
+            <span style={{ color: "#6B7280" }}>TAS: </span>
+            {agent.name} ({(agent.applicationCode as string) ?? agent.id})
+          </p>
+          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 16px" }}>
+            <span style={{ color: "#6B7280" }}>Current Tier: </span>{currentTier}
+          </p>
+
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 10px" }}>New Tier:</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+            {TAS_TIERS.map((t) => (
+              <label key={t.value}
+                style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#374151", cursor: "pointer" }}>
+                <input
+                  type="radio" name="tier" value={t.value}
+                  checked={selectedTier === t.value}
+                  onChange={() => setSelectedTier(t.value)}
+                  style={{ accentColor: "#2563eb", width: 15, height: 15 }}
+                />
+                {t.label} {t.value === currentTier ? "– Current" : ""}
               </label>
             ))}
           </div>
-        </div>
 
-        {/* Reason */}
-        <div>
-          <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "8px" }}>
-            Reason <span style={{ fontWeight: 400, color: "var(--color-text-muted)", fontSize: "12px" }}>(optional)</span>
-          </p>
-          <textarea rows={3} placeholder="Enter reason for adjustment..." value={reason}
-            onChange={e => setReason(e.target.value)}
-            style={{ width: "100%", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", outline: "none", resize: "none", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", boxSizing: "border-box" }}
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 8px" }}>Reason:</p>
+          <textarea
+            value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="Enter reason…" rows={3}
+            style={{
+              width: "100%", borderRadius: 8, border: "1px solid #E5E7EB",
+              padding: "10px 12px", fontSize: 13, color: "#111827",
+              resize: "none", outline: "none", boxSizing: "border-box", backgroundColor: "#F9FAFB",
+            }}
           />
         </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", gap: 10, padding: "14px 24px", borderTop: "1px solid #E5E7EB" }}>
+          <button onClick={onClose}
+            style={{
+              flex: 1, padding: 10, borderRadius: 10, border: "1px solid #E5E7EB",
+              backgroundColor: "#fff", fontSize: 13, cursor: "pointer", color: "#6B7280",
+            }}>
+            Cancel
+          </button>
+          <button onClick={handleConfirm} disabled={isMutating}
+            style={{
+              flex: 2, padding: 10, borderRadius: 10, border: "none",
+              backgroundColor: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600,
+              cursor: isMutating ? "not-allowed" : "pointer", opacity: isMutating ? 0.7 : 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}>
+            {isMutating
+              ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+              : "Confirm Adjustment"}
+          </button>
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }

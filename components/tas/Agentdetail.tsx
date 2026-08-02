@@ -1,227 +1,443 @@
-// components/tas/Agentdetail.tsx
+// components/tas/AgentDetail.tsx
 "use client";
 
-import { useState } from "react";
-import {
-  ArrowLeft, User, Hash, Phone, Mail, Layers, Percent,
-  CalendarDays, ShieldCheck, Users, TrendingUp, Wallet,
-  Clock, PiggyBank, Hourglass,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Loader2, X, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
-import { AgentBadge } from "./Tasbadges";
-import AdjustTierModal from "./Adjusttiermodal";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { suspendTasThunk, activateTasThunk } from "@/lib/redux/tasSlice";
-import type { ActiveAgent } from "./types";
+import {
+  fetchTasById, suspendTasThunk, activateTasThunk, clearSelectedTas,
+} from "@/lib/redux/tasSlice";
+import type { ApiTas } from "@/lib/api/tasApi";
+import AdjustTierModal from "./Adjusttiermodal";
+import { sectionLabel, statusBadge, fmtMoney, getTierLabel, getTierBonus } from "./shared";
 
-interface AgentDetailProps {
-  agent:  ActiveAgent;
-  onBack: () => void;
+interface Props {
+  agentId:  string;
+  fallback: ApiTas;
+  onBack:   () => void;
 }
 
-function SectionLabel({ text }: { text: string }) {
+// Full expert profile shape, as returned in `data.experts[]` / `expertCount.activeExperts[]`
+interface FullExpert {
+  id?:                   string;
+  name?:                 string;
+  email?:                string;
+  phone?:                string;
+  avatar?:               string | null;
+  bio?:                  string;
+  gender?:               string;
+  rating?:               number;
+  status?:               string;
+  verify?:               string;
+  tier?:                 number;
+  currentMode?:          string;
+  subscriptionActive?:   boolean;
+  subscriptionExpiresAt?: string;
+  createdAt?:            string;
+  location?:             { area?: string; city?: string; state?: string; country?: string };
+  category?:             { name?: string; sub?: string[] }[];
+  skill?:                { area?: string; role?: string[]; experience?: number };
+}
+
+// ── Mobile-aware InfoRow ──────────────────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
   return (
-    <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#6B7280", margin: "0 0 12px" }}>
-      {text}
-    </p>
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: isMobile ? "2px" : "8px",
+      fontSize: 13,
+      marginBottom: 10,
+    }}>
+      <span style={{
+        minWidth: isMobile ? "unset" : "200px",
+        flexShrink: 0,
+        fontWeight: 500,
+        color: "#6B7280",
+      }}>
+        {label}
+      </span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>
+        {value ?? "—"}
+      </span>
+    </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value, children }: { icon: React.ElementType; label: string; value?: string | number; children?: React.ReactNode }) {
+// ── Expert Detail Modal ────────────────────────────────────────────────────
+function ExpertDetailModal({ expert, onClose }: { expert: FullExpert; onClose: () => void }) {
+  const categories = (expert.category ?? [])
+    .map((c) => [c.name, ...(c.sub ?? [])].filter(Boolean).join(": "))
+    .filter(Boolean);
+
+  const location = [expert.location?.area, expert.location?.city, expert.location?.state]
+    .filter(Boolean)
+    .join(", ");
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "10px" }}>
-      <Icon size={14} style={{ color: "#9CA3AF", marginTop: "2px", flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p className="inforow-label">{label}</p>
-        {children ?? <p className="inforow-value">{value}</p>}
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, backgroundColor: "rgba(17,24,39,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16, zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 480,
+          maxHeight: "85vh", overflowY: "auto",
+        }}
+      >
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px", borderBottom: "1px solid #E5E7EB", position: "sticky", top: 0,
+          backgroundColor: "#fff",
+        }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>
+            Expert Details
+          </p>
+          <button onClick={onClose} style={{
+            border: "none", background: "none", cursor: "pointer",
+            color: "#6B7280", display: "flex",
+          }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{ padding: "20px 24px" }}>
+          <InfoRow label="Name:"     value={expert.name} />
+          <InfoRow label="Expert ID:" value={expert.id} />
+          <InfoRow label="Email:"    value={expert.email} />
+          <InfoRow label="Phone:"    value={expert.phone} />
+          <InfoRow label="Gender:"   value={expert.gender} />
+          <InfoRow label="Location:" value={location || "—"} />
+          <InfoRow label="Categories:" value={categories.length ? categories.join(" · ") : "—"} />
+          <InfoRow label="Experience:" value={
+            expert.skill?.experience != null ? `${expert.skill.experience} yrs` : "—"
+          } />
+          <InfoRow label="Rating:"   value={expert.rating != null ? `${expert.rating} / 5` : "—"} />
+          <InfoRow label="Tier:"     value={expert.tier != null ? getTierLabel(expert.tier) : "—"} />
+          <InfoRow label="Verification:" value={expert.verify} />
+          <InfoRow label="Subscription:" value={
+            expert.subscriptionActive
+              ? `Active${expert.subscriptionExpiresAt
+                  ? ` (expires ${new Date(expert.subscriptionExpiresAt).toLocaleDateString("en-GB")})`
+                  : ""}`
+              : "Inactive"
+          } />
+          <InfoRow label="Joined:"   value={
+            expert.createdAt ? new Date(expert.createdAt).toLocaleDateString("en-GB") : "—"
+          } />
+          <div style={{ display: "flex", gap: 8, fontSize: 13, marginBottom: 10, alignItems: "center" }}>
+            <span style={{ minWidth: 200, color: "#6B7280", fontWeight: 500 }}>Status:</span>
+            {statusBadge(expert.status ?? "active")}
+          </div>
+          {expert.bio && (
+            <div style={{ marginTop: 8, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 4px" }}>Bio</p>
+              <p style={{ fontSize: 13, color: "#374151", margin: 0, lineHeight: 1.5 }}>{expert.bio}</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-export default function AgentDetail({ agent, onBack }: AgentDetailProps) {
+export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   const dispatch = useAppDispatch();
-  const { mutateStatus } = useAppSelector((s) => s.tas);
+  const { selected, selectedStatus, mutateStatus } = useAppSelector((s) => s.tas);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [selectedExpert, setSelectedExpert] = useState<FullExpert | null>(null);
+  const [showAllExperts, setShowAllExperts] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : false
+  );
+  const isMutating = mutateStatus === "loading";
 
-  const [adjustTierAgent, setAdjustTierAgent] = useState<ActiveAgent | null>(null);
+  useEffect(() => {
+    dispatch(fetchTasById({ id: agentId, fallback }));
+    return () => { dispatch(clearSelectedTas()); };
+  }, [agentId, dispatch, fallback]);
 
-  const isSuspended = agent.status === "Suspended";
-  const isMutating  = mutateStatus === "loading";
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
-  const handleSuspendToggle = () => {
-    if (isSuspended) {
-      dispatch(activateTasThunk(agent.id))
-        .unwrap()
-        .then(() => toast.success(`${agent.name} reinstated`))
-        .catch((err: string) => toast.error("Failed to reinstate", { description: err }));
-    } else {
-      dispatch(suspendTasThunk(agent.id))
-        .unwrap()
-        .then(() => toast.success(`${agent.name} suspended`))
-        .catch((err: string) => toast.error("Failed to suspend", { description: err }));
-    }
+  const agent     = selected ?? fallback;
+  const isLoading = selectedStatus === "loading";
+  const tierNum   = Number(agent.tier ?? 1);
+
+  const ext              = agent as Record<string, unknown>;
+  const expertsObj       = ext.expertCount as { total?: number; active?: number } | null
+                        ?? ext.experts as { total?: number; active?: number } | null;
+  const totalEarnings    = fmtMoney(ext.totalEarnings    as number | undefined);
+  const thisMonth        = fmtMoney(ext.thisMonth        as number | undefined);
+  const availableBalance = fmtMoney(ext.availableBalance as number | undefined);
+  const pendingBalance   = fmtMoney(ext.pendingBalance   as number | undefined);
+
+  const rawCommissions = ext.commissions ?? ext.commissionsGiven;
+  const commissions = (Array.isArray(rawCommissions) ? rawCommissions : []) as {
+    id?: string;
+    expertId?: string;
+    modelType?: string;
+    contractValue?: number;
+    commissionRate?: number;
+    commissionAmount?: number;
+    successfulReferrals?: number;
+    status?: string;
+    createdAt?: string;
+    metadata?: { expertEmail?: string; expertId?: string; reason?: string };
+  }[];
+
+  type ExpertRow = {
+    key:     string;
+    name?:   string;
+    model?:  string;
+    status?: string;
+    payout?: number;
+    notes?:  string;
+    expert?: FullExpert; // full profile for the detail modal, when available
   };
 
-  const mailtoHref = `mailto:${agent.email}?subject=TAS%20Account%20-%20Action%20Required&body=Dear%20${encodeURIComponent(agent.fullName)}%2C%0A%0A`;
+  // Full expert profiles live at `data.experts[]` (all recruits) — this is the
+  // richest source and what the detail modal needs. Fall back to
+  // `expertCount.activeExperts[]`, then finally to commissions-derived rows
+  // (no name available from commissions alone).
+  const topLevelExperts  = ext.experts as FullExpert[] | undefined;
+  const activeExpertsArr = (expertsObj as { activeExperts?: FullExpert[] } | null)?.activeExperts;
+  const rawFullExperts: FullExpert[] =
+    (Array.isArray(topLevelExperts) && topLevelExperts.length > 0)
+      ? topLevelExperts
+      : (Array.isArray(activeExpertsArr) ? activeExpertsArr : []);
+
+  const recruitedExperts: ExpertRow[] = rawFullExperts.length > 0
+    ? rawFullExperts.map((e) => ({
+        // eslint-disable-next-line react-hooks/purity
+        key:    e.id ?? e.name ?? Math.random().toString(),
+        name:   e.name,
+        model:  e.currentMode,
+        status: e.status,
+        notes:  e.category?.[0]?.name,
+        expert: e,
+      }))
+    : commissions.map((c) => ({
+        // eslint-disable-next-line react-hooks/purity
+        key:    c.id ?? c.expertId ?? Math.random().toString(),
+        name:   undefined, // real name not available from commissions alone
+        model:  c.modelType,
+        status: "active",
+        payout: c.commissionAmount,
+        notes:  "Earned for TAS",
+      }));
+
+  const VISIBLE_LIMIT = 5;
+  const visibleExperts = showAllExperts ? recruitedExperts : recruitedExperts.slice(0, VISIBLE_LIMIT);
+  const hasMoreExperts = recruitedExperts.length > VISIBLE_LIMIT;
+
+  const handleSuspend = () => {
+    const isSuspended = String(agent.status ?? "").toLowerCase() === "suspended";
+    dispatch((isSuspended ? activateTasThunk : suspendTasThunk)(agent.id))
+      .unwrap()
+      .then(() => toast.success(isSuspended ? "TAS agent reinstated" : "TAS agent suspended"))
+      .catch((err: string) => toast.error("Action failed", { description: err }));
+  };
+
+  const actionBtn: React.CSSProperties = {
+    flex: "1 1 auto",
+    padding: "13px 8px",
+    borderRadius: 10,
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#fff",
+    color: "#374151",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    textAlign: "center",
+  };
+
+  const sectionPad = isMobile ? "16px" : "24px 28px";
 
   return (
-    <>
-      <style>{`
-        .inforow-label { font-size: 13px; font-weight: 500; color: #6B7280; margin: 0 0 1px; }
-        .inforow-value { font-size: 13px; color: #111827; word-break: break-word; margin: 0; }
-        .ad-section { padding: 20px 24px; }
-        .experts-desktop { display: none !important; }
-        .experts-mobile  { display: flex !important; flex-direction: column; gap: 10px; }
-        .ad-action-bar { display: grid; grid-template-columns: repeat(2, 1fr); }
-        .ad-act-btn {
-          padding: 16px 10px; font-size: 13px; font-weight: 500;
-          border: none; border-right: 1px solid #E5E7EB; border-top: 1px solid #E5E7EB;
-          cursor: pointer; background: #ffffff; color: #6B7280;
-          transition: background 0.15s; text-decoration: none;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .ad-act-btn:hover { background: #F9FAFB; }
-        .ad-act-btn:nth-child(2n) { border-right: none; }
-        .ad-act-btn:nth-child(1) { background: #2563eb; color: #fff; font-weight: 600; border-right: none; }
-        .ad-act-btn:nth-child(1):hover { background: #1d4ed8; }
-        @media (min-width: 480px) {
-          .inforow-label { display: inline-block; width: 200px; }
-          .inforow-value { display: inline; }
-        }
-        @media (min-width: 640px) {
-          .ad-section { padding: 24px 32px; }
-          .experts-desktop { display: block !important; }
-          .experts-mobile  { display: none !important; }
-          .ad-action-bar { display: flex; grid-template-columns: none; }
-          .ad-act-btn { border-right: 1px solid #E5E7EB !important; flex: 1; }
-          .ad-act-btn:last-child { border-right: none !important; }
-          .ad-act-btn:nth-child(2n) { border-right: 1px solid #E5E7EB !important; }
-        }
-      `}</style>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, backgroundColor: "#F4F5F7" }}>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
-        {/* Back */}
+      {/* Back */}
+      <div style={{ padding: isMobile ? "16px 16px 0" : "20px 32px 0" }}>
         <button onClick={onBack}
-          style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#111827", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          style={{
+            display: "flex", alignItems: "center", gap: 8, border: "none",
+            background: "none", cursor: "pointer", fontSize: 14, color: "#111827", fontWeight: 600,
+          }}>
           <ArrowLeft size={16} /> Active TAS Agents
         </button>
-
-        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
-
-          {/* Job Information */}
-          <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Job Information" />
-            <InfoRow icon={User}         label="Name"   value={agent.fullName} />
-            <InfoRow icon={Hash}         label="TAS ID" value={agent.tasId} />
-            <InfoRow icon={Phone}        label="Phone"  value={agent.phone} />
-            <InfoRow icon={Mail}         label="Email"  value={agent.email} />
-            <InfoRow icon={Layers}       label="Tier"   value={`${agent.tier} (${agent.tierLabel})`} />
-            <InfoRow icon={Percent}      label="Bonus"  value={agent.bonus} />
-            <InfoRow icon={CalendarDays} label="Joined" value={agent.joined} />
-            <InfoRow icon={ShieldCheck}  label="Status">
-              <AgentBadge status={agent.status} />
-            </InfoRow>
-          </div>
-
-          {/* Performance Metrics */}
-          <div className="ad-section" style={{ borderBottom: "1px solid #E5E7EB" }}>
-            <SectionLabel text="Performance Metrics" />
-            <InfoRow icon={Users}      label="Total Experts Recruited"      value={agent.experts} />
-            <InfoRow icon={TrendingUp} label="Active Experts (3-month avg)" value={agent.activeExperts} />
-            <InfoRow icon={Wallet}     label="Total Earnings"               value={agent.totalEarnings} />
-            <InfoRow icon={Clock}      label="This Month"                   value={agent.thisMonth} />
-            <InfoRow icon={PiggyBank}  label="Available Balance"            value={agent.availableBalance} />
-            <InfoRow icon={Hourglass}  label="Pending Balance"              value={agent.pendingBalance} />
-          </div>
-
-          {/* Recruited Experts */}
-          <div className="ad-section">
-            <SectionLabel text="Recruited Experts" />
-
-            {agent.recruitedExperts.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No recruited experts yet.</p>
-            ) : (
-              <>
-                {/* Mobile cards */}
-                <div className="experts-mobile">
-                  {agent.recruitedExperts.map((expert, i) => (
-                    <div key={i} style={{ padding: "12px 14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: 0 }}>{expert.name}</p>
-                        <AgentBadge status={expert.subTas} />
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px" }}>
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}><span style={{ fontWeight: 500, color: "#111827" }}>Earnings: </span>{expert.earningsHistory}</span>
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}><span style={{ fontWeight: 500, color: "#111827" }}>Payouts: </span>{expert.payouts}</span>
-                        {expert.notes && <span style={{ fontSize: "12px", color: "#6B7280", width: "100%", marginTop: "2px" }}><span style={{ fontWeight: 500, color: "#111827" }}>Notes: </span>{expert.notes}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Desktop table */}
-                <div className="experts-desktop">
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #E5E7EB" }}>
-                        {["Recruited Experts", "Earnings History", "Sub-TAS", "Payouts", "Notes"].map((h) => (
-                          <th key={h} style={{ textAlign: "left", paddingBottom: "12px", paddingRight: "24px", fontSize: "12px", fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agent.recruitedExperts.map((expert, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#111827" }}>{expert.name}</td>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#6B7280" }}>{expert.earningsHistory}</td>
-                          <td style={{ padding: "14px 24px 14px 0" }}><AgentBadge status={expert.subTas} /></td>
-                          <td style={{ padding: "14px 24px 14px 0", fontSize: "13.5px", color: "#111827" }}>{expert.payouts}</td>
-                          <td style={{ padding: "14px 0", fontSize: "13.5px", color: "#6B7280" }}>{expert.notes}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-
-            <button style={{ marginTop: "16px", fontSize: "13px", fontWeight: 500, color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: 0, display: "block" }}>
-              View All {agent.experts} Experts
-            </button>
-          </div>
-
-          {/* Action bar */}
-          <div className="ad-action-bar" style={{ borderTop: "1px solid #E5E7EB" }}>
-
-            {/* Adjust Tier — blue, always first */}
-            <button onClick={() => setAdjustTierAgent(agent)} disabled={isMutating} className="ad-act-btn">
-              Adjust Tier
-            </button>
-
-            {/* Suspend / Reinstate — toggles based on status */}
-            <button
-              onClick={handleSuspendToggle}
-              disabled={isMutating}
-              className="ad-act-btn"
-              style={{ color: isSuspended ? "#16a34a" : "#d97706" }}
-            >
-              {isMutating ? "Please wait…" : isSuspended ? "Reinstate TAS" : "Suspend TAS"}
-            </button>
-
-            {/* Force Payout */}
-            <button className="ad-act-btn">Force Payout</button>
-
-            {/* Request More Info — opens mailto */}
-            <a href={mailtoHref} className="ad-act-btn">
-              Request Info
-            </a>
-
-          </div>
-        </div>
       </div>
 
-      <AdjustTierModal agent={adjustTierAgent} onClose={() => setAdjustTierAgent(null)} />
-    </>
+      {isLoading ? (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 64, gap: 8, color: "#9CA3AF", fontSize: 14,
+        }}>
+          <Loader2 size={18} className="animate-spin" /> Loading agent…
+        </div>
+      ) : (
+        <div style={{
+          padding: isMobile ? "16px 12px 120px" : "20px 32px 120px",
+          flex: 1, overflowY: "auto",
+          display: "flex", flexDirection: "column", gap: 16,
+        }}>
+
+          {/* ── Agent Info ── */}
+          <div style={{ backgroundColor: "#fff", borderRadius: 16, border: "1px solid #E5E7EB", overflow: "hidden" }}>
+            <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
+              <p style={sectionLabel}>Agent Information</p>
+              <InfoRow label="Name:"   value={agent.name} />
+              <InfoRow label="TAS ID:" value={(ext.applicationCode as string) ?? agent.id} />
+              <InfoRow label="Phone:"  value={ext.phone as string} />
+              <InfoRow label="Email:"  value={ext.email as string} />
+              <InfoRow label="Tier:"   value={`${tierNum} (${getTierLabel(tierNum).replace(`Tier ${tierNum} (`, "").replace(")", "")})`} />
+              <InfoRow label="Bonus:"  value={getTierBonus(tierNum)} />
+              <InfoRow label="Joined:" value={new Date(agent.createdAt).toLocaleDateString("en-GB")} />
+              <div style={{
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                gap: isMobile ? "2px" : "8px",
+                fontSize: 13,
+                alignItems: isMobile ? "flex-start" : "center",
+              }}>
+                <span style={{ minWidth: isMobile ? "unset" : 200, color: "#6B7280", fontWeight: 500 }}>Status:</span>
+                {statusBadge(agent.status ?? "active")}
+              </div>
+            </div>
+
+            {/* ── Performance ── */}
+            <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
+              <p style={sectionLabel}>Performance Metrics</p>
+              <InfoRow label="Total Experts Recruited:" value={
+                expertsObj?.total ? String(expertsObj.total) : String(recruitedExperts.length)
+              } />
+              <InfoRow label="Active Experts:"          value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
+              <InfoRow label="Total Earnings:"          value={totalEarnings} />
+              <InfoRow label="This Month:"              value={thisMonth} />
+              <InfoRow label="Available Balance:"       value={availableBalance} />
+              <InfoRow label="Pending Balance:"         value={pendingBalance} />
+            </div>
+
+            {/* ── Recruited Experts (max 5, expandable; click row for details) ── */}
+            <div style={{ overflowX: "auto" }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: isMobile ? "16px 16px 0" : "20px 28px 0",
+              }}>
+                <p style={{ ...sectionLabel, margin: 0 }}>Recruited Experts</p>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
+                    {["Recruited Expert", "Earning History", "Sub-TAS", "Payout", "Notes"].map((h) => (
+                      <th key={h} style={{
+                        textAlign: "left", padding: "12px 20px", fontSize: 12,
+                        fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap",
+                      }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleExperts.length > 0 ? (
+                    visibleExperts.map((e) => (
+                      <tr
+                        key={e.key}
+                        onClick={() => e.expert && setSelectedExpert(e.expert)}
+                        style={{
+                          borderBottom: "1px solid #F3F4F6",
+                          cursor: e.expert ? "pointer" : "default",
+                        }}
+                        onMouseEnter={(ev) => { if (e.expert) ev.currentTarget.style.backgroundColor = "#F9FAFB"; }}
+                        onMouseLeave={(ev) => { ev.currentTarget.style.backgroundColor = "transparent"; }}
+                      >
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>{e.name ?? "—"}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
+                          {e.model ? (e.model === "model1" ? "Model 1" : e.model === "model2" ? "Model 2" : e.model) : "—"}
+                        </td>
+                        <td style={{ padding: "13px 20px" }}>{statusBadge(e.status ?? "active")}</td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap" }}>
+                          {e.payout != null ? fmtMoney(e.payout) : "—"}
+                        </td>
+                        <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{e.notes ?? "—"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} style={{
+                        padding: isMobile ? "16px" : "20px 28px",
+                        textAlign: "center", fontSize: 13, color: "#9CA3AF", fontStyle: "italic",
+                      }}>
+                        No experts yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {hasMoreExperts && (
+                <div style={{ padding: isMobile ? "12px 16px 20px" : "12px 28px 24px" }}>
+                  <button
+                    onClick={() => setShowAllExperts((v) => !v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      border: "none", background: "none", cursor: "pointer",
+                      fontSize: 13, fontWeight: 600, color: "#2563eb", padding: 0,
+                    }}
+                  >
+                    {showAllExperts
+                      ? <>Show less <ChevronUp size={14} /></>
+                      : <>Show all {recruitedExperts.length} experts <ChevronDown size={14} /></>}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Action bar ── */}
+      <div style={{
+        position: "sticky", bottom: 0, backgroundColor: "#F4F5F7",
+        borderTop: "1px solid #E5E7EB",
+        padding: isMobile ? "12px" : "16px 32px",
+        display: "flex", gap: isMobile ? 8 : 12, flexWrap: "wrap",
+      }}>
+        <button onClick={() => setShowAdjust(true)}
+          style={{ ...actionBtn, backgroundColor: "#2563eb", color: "#fff", border: "none", fontWeight: 600 }}>
+          Adjust Tier
+        </button>
+        <button onClick={handleSuspend} disabled={isMutating}
+          style={{ ...actionBtn, opacity: isMutating ? 0.6 : 1 }}>
+          {String(agent.status ?? "").toLowerCase() === "suspended" ? "Reinstate TAS" : "Suspend TAS"}
+        </button>
+        <button style={actionBtn}>Force Payout</button>
+        <button style={actionBtn}>Add Note</button>
+      </div>
+
+      {showAdjust && <AdjustTierModal agent={agent} onClose={() => setShowAdjust(false)} />}
+      {selectedExpert && (
+        <ExpertDetailModal expert={selectedExpert} onClose={() => setSelectedExpert(null)} />
+      )}
+    </div>
   );
 }

@@ -1,11 +1,83 @@
-// components/settings/CommissionSettings.tsx
 "use client";
 
-import { SubPageShell, SaveButton } from "./SettingsShared";
+import { useEffect, useState } from "react";
+import { Pencil, Plus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import Modal from "@/components/ui/Modal";
+import { SubPageShell } from "./SettingsShared";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 
+// Commission
+import {
+  fetchCommissions, addCommission, editCommission, removeCommission, toggleCommission,
+  fetchActiveModel, updateActiveModel,
+} from "@/lib/redux/commissionSlice";
+import type { ApiCommission, CreateCommissionPayload, ActiveModel } from "@/lib/api/commissionApi";
+
+// Verification Settings
+import {
+  fetchVerificationSettings,
+  createVerificationSettings,
+  updateVerificationSettings,
+  deleteVerificationSettings,
+  toggleVerificationSettingsStatus,
+} from "@/lib/redux/verificationSettingsSlice";
+import type { VerificationSettings, VerificationSettingsData } from "@/lib/api/verificationSettingsApi";
+
+// TAS Tier
+import {
+  fetchTasTiers,
+  createTasTier,
+  updateTasTier,
+  deleteTasTier,
+  toggleTasTierStatus,
+} from "@/lib/redux/tastierSlice";
+import type { TasTier, TasTierData, TierConfig } from "@/lib/api/tastierApi";
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+const CARD: React.CSSProperties = {
+  borderRadius: "16px",
+  border: "1px solid #E5E7EB",
+  backgroundColor: "#ffffff",
+  padding: "20px",
+};
+
+const INP: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "10px",
+  border: "1px solid #E5E7EB",
+  backgroundColor: "#F9FAFB",
+  fontSize: "13px",
+  color: "#111827",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+// Same visual language as INP, but tuned for native <select> elements
+// (adds room for the dropdown arrow and normalizes cross-browser appearance)
+const SELECT: React.CSSProperties = {
+  ...INP,
+  paddingRight: "32px",
+  appearance: "auto",
+  cursor: "pointer",
+};
+
+const LABEL_STYLE: React.CSSProperties = {
+  display: "block",
+  fontSize: "12px",
+  fontWeight: 500,
+  color: "#6B7280",
+  marginBottom: "6px",
+};
+
+// 0–100 inclusive, used for percentage dropdown fields
+const PERCENT_OPTIONS = Array.from({ length: 101 }, (_, i) => i);
+
+// ── Shared display atoms ──────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
   return (
-    <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", marginBottom: "12px" }}>
+    <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#6B7280", margin: "0" }}>
       {text}
     </p>
   );
@@ -13,101 +85,822 @@ function SectionLabel({ text }: { text: string }) {
 
 function SubLabel({ text }: { text: string }) {
   return (
-    <p style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)", marginBottom: "8px" }}>
+    <p style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#9CA3AF", marginBottom: "8px", marginTop: "4px" }}>
       {text}
     </p>
   );
 }
 
-// Label left, value right — both on one row, value never wraps off screen
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", marginBottom: "8px" }}>
-      <span style={{ fontSize: "13px", color: "var(--color-text-muted)", flex: 1, minWidth: 0 }}>{label}</span>
-      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", flexShrink: 0, textAlign: "right" }}>{value}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 12px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", marginBottom: "6px" }}>
+      <span style={{ fontSize: "13px", color: "#6B7280", flex: 1 }}>{label}</span>
+      <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>{value}</span>
     </div>
   );
 }
 
-function TierRow({ text, index }: { text: string; index: number }) {
-  const match = text.match(/^(Tier \d+)/);
-  const tier  = match?.[1] ?? "";
-  const rest  = match ? text.slice(tier.length + 1).trim() : text;
-  const colors = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#db2777", "#0891b2"];
-  const color  = colors[index % colors.length];
+// ── Inactive row — greyed out with badge ──────────────────────────────────────
+// line 91 — change value: string → value?: string
+function InactiveInfoRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 12px", borderRadius: "10px", border: "1px dashed #E5E7EB", backgroundColor: "#F9FAFB", marginBottom: "6px", opacity: 0.6 }}>
+      <span style={{ fontSize: "13px", color: "#9CA3AF", flex: 1 }}>{label}</span>
+      <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", backgroundColor: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: "999px", padding: "2px 8px" }}>
+        Inactive
+      </span>
+      <span style={{ fontSize: "13px", fontWeight: 600, color: "#9CA3AF" }}>{value}</span>
+    </div>
+  );
+}
+
+// Sliding on/off switch — visually distinct "on" (green, thumb right) vs
+// "off" (grey, thumb left) states, with a CSS transition on the thumb so
+// the change is obviously visible on click. Defaults to OFF whenever
+// `checked` isn't explicitly `true`.
+function ToggleSwitch({ checked, onChange, disabled, title }: {
+  checked?: boolean; onChange: () => void; disabled?: boolean; title?: string;
+}) {
+  const isOn = checked === true; // explicit — anything else (undefined/false) renders OFF
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      title={title ?? (isOn ? "On — click to turn off" : "Off — click to turn on")}
+      onClick={onChange}
+      disabled={disabled}
+      style={{
+        position: "relative",
+        width: "38px",
+        height: "22px",
+        borderRadius: "999px",
+        border: "none",
+        padding: 0,
+        flexShrink: 0,
+        cursor: disabled ? "not-allowed" : "pointer",
+        backgroundColor: isOn ? "#16a34a" : "#D1D5DB",
+        transition: "background-color 160ms ease",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: "2px",
+          left: isOn ? "18px" : "2px",
+          width: "18px",
+          height: "18px",
+          borderRadius: "50%",
+          backgroundColor: "#ffffff",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+          transition: "left 160ms ease",
+        }}
+      />
+    </button>
+  );
+}
+
+function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating, showToggle = true }: {
+  onToggle: () => void; onEdit: () => void; onDelete: () => void;
+  isActive?: boolean; isMutating?: boolean; showToggle?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {showToggle && <ToggleSwitch checked={isActive} onChange={onToggle} disabled={isMutating} />}
+      <button onClick={onEdit}
+        style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
+        <Pencil size={14} strokeWidth={1.8} />
+      </button>
+      <button onClick={onDelete} disabled={isMutating}
+        style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}>
+        <Trash2 size={14} strokeWidth={1.8} />
+      </button>
+    </div>
+  );
+}
+
+function EmptyState({ label, onAdd }: { label: string; onAdd: () => void }) {
+  return (
+    <div style={{ textAlign: "center", padding: "28px 16px", border: "1px dashed #E5E7EB", borderRadius: "12px", color: "#9CA3AF" }}>
+      <p style={{ fontSize: "13px", marginBottom: "12px" }}>No {label} configured yet.</p>
+      <button onClick={onAdd} className="btn-primary"
+        style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}>
+        <Plus size={13} /> Add {label}
+      </button>
+    </div>
+  );
+}
+
+function CardLoader() {
+  return (
+    <div style={{ textAlign: "center", padding: "32px", color: "#9CA3AF", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+      <Loader2 size={15} className="animate-spin" /> Loading...
+    </div>
+  );
+}
+
+function ModalFooter({ onClose, onSave, saving, disabled }: {
+  onClose: () => void; onSave: () => void; saving: boolean; disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+      <button onClick={onClose}
+        style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: "pointer" }}>
+        Cancel
+      </button>
+      <button onClick={onSave} disabled={saving || disabled} className="btn-primary"
+        style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", cursor: saving ? "not-allowed" : "pointer", opacity: saving || disabled ? 0.7 : 1 }}>
+        {saving ? <><Loader2 size={13} className="animate-spin" /> Saving...</> : "Save"}
+      </button>
+    </div>
+  );
+}
+
+function DeleteModal({ name, onClose, onConfirm, saving }: {
+  name: string; onClose: () => void; onConfirm: () => void; saving: boolean;
+}) {
+  return (
+    <Modal open onClose={onClose} title="Confirm Delete" size="sm"
+      footer={
+        <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", fontSize: "13px", cursor: "pointer", color: "#6B7280" }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={saving}
+            style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: saving ? 0.7 : 1 }}>
+            {saving ? <><Loader2 size={14} className="animate-spin" /> Deleting...</> : "Delete"}
+          </button>
+        </div>
+      }>
+      <p style={{ fontSize: "13px", color: "#6B7280", lineHeight: 1.6 }}>
+        Are you sure you want to delete <strong style={{ color: "#111827" }}>{name}</strong>? This cannot be undone.
+      </p>
+    </Modal>
+  );
+}
+
+function AddButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="btn-primary"
+      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer" }}>
+      <Plus size={13} /> Add
+    </button>
+  );
+}
+
+const naira = (n: number | undefined | null) => n != null ? `₦${Number(n).toLocaleString()}` : "—";
+
+const ACTIVE_MODEL_COLORS: Record<ActiveModel, string> = {
+  protected:   "#2563eb",
+  unprotected: "#d97706",
+  both:        "#16a34a",
+};
+
+const ACTIVE_MODEL_LABELS: Record<ActiveModel, string> = {
+  protected:   "Model 1",
+  unprotected: "Model 2",
+  both:        "Both Models",
+};
+
+// Builds the model description from the actual current numbers instead of a
+// hardcoded example — so if the subscription fee or commission % changes,
+// this text updates automatically without needing a code change.
+function describeModel(model: ActiveModel, source?: Pick<ApiCommission, "modelISubscription" | "model2CommissionRate">): string {
+  const fee  = source?.modelISubscription ?? "the configured fee";
+  const rate = source?.model2CommissionRate != null ? `${source.model2CommissionRate}%` : "the configured rate";
+  switch (model) {
+    case "protected":
+      return `Subscription-based: experts pay ${fee} per month and keep 100% of their earnings.`;
+    case "unprotected":
+      return `Commission-based: experts pay no monthly subscription; ${rate} is deducted from each transaction instead.`;
+    case "both":
+      return `Both models available — Model 1 subscription (${fee}/month, 100% earnings) or Model 2 commission (${rate} per transaction).`;
+  }
+}
+
+// Global "active payment model" bar — shown at the top of the Commission
+// card. Renders as a dropdown so any of the three states can be selected
+// directly (calls the explicit-set endpoint), rather than cycling through
+// them one click at a time. Toggling is admin-only server-side; swap
+// `isAdmin` for your real role check (e.g. useAppSelector selecting
+// auth.user.role).
+function ActiveModelBar({ isAdmin = true }: { isAdmin?: boolean }) {
+  const dispatch = useAppDispatch();
+  const { activeModel, activeModelStatus, list } = useAppSelector((s) => s.commission);
+  const isLoading = activeModelStatus === "loading";
+
+  useEffect(() => {
+    if (activeModelStatus === "idle") dispatch(fetchActiveModel());
+  }, [dispatch, activeModelStatus]);
+
+  // Source live subscription fee / commission rate from whichever commission
+  // record is currently marked active (status: true); fall back to the
+  // first record if none is flagged active yet.
+  const sourceRecord = list.find((c) => c.status) ?? list[0];
+
+  const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!isAdmin) return;
+    const model = e.target.value as ActiveModel;
+    dispatch(updateActiveModel(model)).unwrap()
+      .then((updated) => toast.success(`Active payment model set to ${updated.activePaymentModel ?? model}`))
+      .catch((e: string) => toast.error(e));
+  };
+
+  const color = activeModel ? ACTIVE_MODEL_COLORS[activeModel] : "#9CA3AF";
+  const description = activeModel ? describeModel(activeModel, sourceRecord) : "";
+  const isInitialLoading = activeModelStatus === "loading" && !activeModel;
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", marginBottom: "8px" }}>
-      <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px", whiteSpace: "nowrap", flexShrink: 0, color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}>
-        {tier}
-      </span>
-      <span style={{ fontSize: "13px", color: "var(--color-text-main)", lineHeight: 1.5 }}>{rest}</span>
+    <div style={{
+      display: "flex", flexDirection: "column", gap: "6px",
+      padding: "10px 14px", borderRadius: "12px", border: "1px solid #E5E7EB",
+      backgroundColor: "#FAFAFA", marginBottom: "14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", rowGap: "8px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>Active Payment Model</span>
+        {isInitialLoading ? (
+          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#9CA3AF" }}>
+            <Loader2 size={13} className="animate-spin" /> Loading...
+          </span>
+        ) : isAdmin ? (
+          <div style={{ position: "relative", display: "flex", alignItems: "center", flex: "1 1 160px", minWidth: "140px", maxWidth: "100%" }}>
+            <select
+              value={activeModel ?? ""}
+              onChange={handleSelect}
+              disabled={isLoading || !activeModel}
+              style={{
+                ...SELECT, width: "100%", boxSizing: "border-box", fontWeight: 700, color,
+                borderColor: `${color}40`, backgroundColor: `${color}0d`,
+                paddingRight: isLoading ? "34px" : SELECT.paddingRight,
+              }}
+            >
+              {(["protected", "unprotected", "both"] as ActiveModel[]).map((m) => (
+                <option key={m} value={m}>{ACTIVE_MODEL_LABELS[m]}</option>
+              ))}
+            </select>
+            {isLoading && (
+              <Loader2 size={14} className="animate-spin" style={{ position: "absolute", right: "10px", color }} />
+            )}
+          </div>
+        ) : (
+          <span style={{
+            fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px",
+            color, backgroundColor: `${color}14`, border: `1px solid ${color}30`,
+          }}>
+            {activeModel ? ACTIVE_MODEL_LABELS[activeModel] : "Loading..."}
+          </span>
+        )}
+      </div>
+      {isLoading && !isInitialLoading && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+          <Loader2 size={11} className="animate-spin" /> Updating...
+        </p>
+      )}
+      {description && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, lineHeight: 1.5 }}>{description}</p>
+      )}
     </div>
   );
 }
 
-const CARD: React.CSSProperties = {
-  borderRadius: "16px",
-  border: "1px solid var(--color-border)",
-  backgroundColor: "#ffffff",
-  padding: "16px",
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMMISSION
+// ═══════════════════════════════════════════════════════════════════════════════
+function CommissionModal({ item, onClose, onSave, saving }: {
+  item: ApiCommission | null;
+  onClose: () => void;
+  onSave: (p: CreateCommissionPayload) => void;
+  saving: boolean;
+}) {
+  const [model2Rate, setModel2Rate] = useState(String(item?.model2CommissionRate ?? ""));
+  const [model1Sub,  setModel1Sub]  = useState(item?.modelISubscription ?? "");
+  const [tasModel1,  setTasModel1]  = useState(String(item?.tasModel1Commission ?? ""));
+  const [tasModel2,  setTasModel2]  = useState(String(item?.tasModel2Commission ?? ""));
+  const [effDate,    setEffDate]    = useState(
+    item?.effectiveDate ? new Date(item.effectiveDate).toISOString().slice(0, 10) : ""
+  );
+
+  // tasRegistrationBonus is inactive — not shown in form, sent as 0
+  const valid = model2Rate !== "" && model1Sub && tasModel1 && tasModel2 !== "" && effDate;
+
+  return (
+    <Modal open onClose={onClose} title={item ? "Edit Commission Settings" : "Add Commission Settings"}
+      footer={
+        <ModalFooter onClose={onClose} saving={saving} disabled={!valid}
+          onSave={() => onSave({
+            model2CommissionRate: Number(model2Rate),
+            modelISubscription:   model1Sub,
+            tasRegistrationBonus: 0,          // inactive — not configurable for now
+            tasModel1Commission:  Number(tasModel1),
+            tasModel2Commission:  Number(tasModel2),
+            effectiveDate:        new Date(effDate).toISOString().replace("Z", "+00:00"),
+          })}
+        />
+      }>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <SubLabel text="Expert" />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div>
+            <label style={LABEL_STYLE}>Model 2 Commission Rate (%)</label>
+            <select style={SELECT} value={model2Rate}
+              onChange={(e) => setModel2Rate(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={LABEL_STYLE}>Model 1 Subscription</label>
+            <input style={INP} placeholder="e.g. ₦50,000 / month" value={model1Sub}
+              onChange={(e) => setModel1Sub(e.target.value)} />
+          </div>
+        </div>
+
+        <SubLabel text="TAS" />
+
+        {/* Registration Bonus — shown as inactive, not editable */}
+        <div style={{ padding: "10px 14px", borderRadius: "10px", border: "1px dashed #E5E7EB", backgroundColor: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ fontSize: "12px", fontWeight: 500, color: "#9CA3AF", marginBottom: "2px" }}>Registration Bonus (₦)</p>
+            <p style={{ fontSize: "12px", color: "#9CA3AF" }}>Not configurable at this time</p>
+          </div>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "#9CA3AF", backgroundColor: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap" }}>
+            Inactive
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div>
+            <label style={LABEL_STYLE}>Model 1 Commission (₦/month)</label>
+            <input style={INP} type="number" placeholder="e.g. 1000" value={tasModel1}
+              onChange={(e) => setTasModel1(e.target.value)} />
+          </div>
+          <div>
+            <label style={LABEL_STYLE}>Model 2 Commission (%)</label>
+            <select style={SELECT} value={tasModel2}
+              onChange={(e) => setTasModel2(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label style={LABEL_STYLE}>Effective Date</label>
+          <input style={INP} type="date" value={effDate} onChange={(e) => setEffDate(e.target.value)} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CommissionCard() {
+  const dispatch = useAppDispatch();
+  const { list, listStatus, mutateStatus } = useAppSelector((s) => s.commission);
+  const isMutating = mutateStatus === "loading";
+  const [editItem,   setEditItem]   = useState<ApiCommission | null>(null);
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [deleteItem, setDeleteItem] = useState<ApiCommission | null>(null);
+
+  useEffect(() => {
+    if (listStatus === "idle") dispatch(fetchCommissions());
+  }, [dispatch, listStatus]);
+
+  const handleSave = (payload: CreateCommissionPayload) => {
+    const action = editItem
+      ? dispatch(editCommission({ id: editItem.id, payload }))
+      : dispatch(addCommission(payload));
+
+    action.unwrap()
+      .then(() => {
+        toast.success(editItem ? "Commission updated" : "Commission created");
+        setEditItem(null);
+        setShowAdd(false);
+      })
+      .catch((err: string) => toast.error("Failed to save", { description: err }));
+  };
+
+  const handleDelete = () => {
+    if (!deleteItem) return;
+    dispatch(removeCommission(deleteItem.id)).unwrap()
+      .then(() => { toast.success("Deleted"); setDeleteItem(null); })
+      .catch((err: string) => { toast.error("Failed to delete", { description: err }); setDeleteItem(null); });
+  };
+
+  return (
+    <>
+      <div style={CARD}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <SectionLabel text="Commission Settings" />
+          <AddButton onClick={() => setShowAdd(true)} />
+        </div>
+
+        <ActiveModelBar />
+
+        {listStatus === "loading" && <CardLoader />}
+
+        {(listStatus === "succeeded" || listStatus === "failed") && list.length === 0 && (
+          <div style={{ marginBottom: "10px", padding: "14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Default Settings
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button onClick={() => setShowAdd(true)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
+                  <Pencil size={14} strokeWidth={1.8} />
+                </button>
+              </div>
+            </div>
+            <SubLabel text="Expert" />
+            <InfoRow label="Model 2 Commission Rate" value="10%" />
+            <InfoRow label="Model 1 Subscription Fee" value="₦3,000 / month" />
+            <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
+            <SubLabel text="TAS" />
+            {/* Registration Bonus — rendered as inactive */}
+            <InactiveInfoRow label="Registration Bonus" value="₦7,000" />
+            <InfoRow label="Model 2 Commission" value="1%" />
+            <InfoRow label="Model 1 Commission" value="₦1,000 / month" />
+          </div>
+        )}
+
+        {list.map((c) => (
+          <div key={c.id} style={{ marginBottom: "10px", padding: "14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Effective {c.effectiveDate ? new Date(c.effectiveDate).toLocaleDateString("en-NG") : "—"}
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <RecordActions
+                  isActive={c.status} isMutating={isMutating}
+                  showToggle={false}
+                  onToggle={() =>
+                    dispatch(toggleCommission(c.id)).unwrap()
+                      .then((updated) => toast.success(`Commission ${updated.status ? "enabled" : "disabled"}`))
+                      .catch((e: string) => toast.error(e))
+                  }
+                  onEdit={() => setEditItem(c)}
+                  onDelete={() => setDeleteItem(c)}
+                />
+              </div>
+            </div>
+            <SubLabel text="Expert" />
+            <InfoRow label="Model 2 Commission Rate" value={`${c.model2CommissionRate}%`} />
+            <InfoRow label="Model 1 Subscription Fee" value={c.modelISubscription ?? "—"} />
+            <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
+            <SubLabel text="TAS" />
+            {/* Registration Bonus — always inactive */}
+            <InactiveInfoRow label="Registration Bonus" />
+            <InfoRow label="Model 2 Commission" value={`${c.tasModel2Commission}%`} />
+            <InfoRow label="Model 1 Commission" value={`${naira(c.tasModel1Commission)} / month`} />
+          </div>
+        ))}
+      </div>
+
+      {(showAdd || editItem) && (
+        <CommissionModal
+          item={editItem}
+          onClose={() => { setShowAdd(false); setEditItem(null); }}
+          onSave={handleSave}
+          saving={isMutating}
+        />
+      )}
+      {deleteItem && (
+        <DeleteModal
+          name={`commission (effective ${deleteItem.effectiveDate ? new Date(deleteItem.effectiveDate).toISOString().slice(0, 10) : ""})`}
+          onClose={() => setDeleteItem(null)}
+          onConfirm={handleDelete}
+          saving={isMutating}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFICATION TIER
+// ═══════════════════════════════════════════════════════════════════════════════
+function VerificationModal({ item, onClose, onSave, saving }: {
+  item: VerificationSettings | null;
+  onClose: () => void;
+  onSave: (p: VerificationSettingsData) => void;
+  saving: boolean;
+}) {
+  const [t1, setT1] = useState(String(item?.tier1MaxJobValue ?? ""));
+  const [t2, setT2] = useState(String(item?.tier2MaxJobValue ?? ""));
+  const [t3, setT3] = useState(String(item?.tier3MinJobValue ?? ""));
+  const valid = t1 && t2 && t3;
+
+  return (
+    <Modal open onClose={onClose} title={item ? "Edit Verification Tier" : "Add Verification Tier"}
+      footer={
+        <ModalFooter onClose={onClose} saving={saving} disabled={!valid}
+          onSave={() => onSave({ tier1MaxJobValue: Number(t1), tier2MaxJobValue: Number(t2), tier3MinJobValue: Number(t3) })}
+        />
+      }>
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div>
+          <label style={LABEL_STYLE}>Tier 1 Max Job Value (₦)</label>
+          <input style={INP} type="number" placeholder="e.g. 20000" value={t1} onChange={(e) => setT1(e.target.value)} />
+        </div>
+        <div>
+          <label style={LABEL_STYLE}>Tier 2 Max Job Value (₦)</label>
+          <input style={INP} type="number" placeholder="e.g. 100000" value={t2} onChange={(e) => setT2(e.target.value)} />
+        </div>
+        <div>
+          <label style={LABEL_STYLE}>Tier 3 Verification Fee (₦)</label>
+          <input style={INP} type="number" placeholder="e.g. 5000" value={t3} onChange={(e) => setT3(e.target.value)} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function VerificationCard() {
+  const dispatch = useAppDispatch();
+  const { settings, loading } = useAppSelector((s) => s.verificationSettings);
+  const [editItem,   setEditItem]   = useState<VerificationSettings | null>(null);
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [deleteItem, setDeleteItem] = useState<VerificationSettings | null>(null);
+
+  useEffect(() => { dispatch(fetchVerificationSettings()); }, [dispatch]);
+
+  const handleSave = (payload: VerificationSettingsData) => {
+    const action = editItem
+      ? dispatch(updateVerificationSettings({ id: editItem.id, data: payload }))
+      : dispatch(createVerificationSettings(payload));
+
+    action.unwrap()
+      .then(() => { toast.success(editItem ? "Updated" : "Created"); setEditItem(null); setShowAdd(false); })
+      .catch((err: string) => toast.error("Failed to save", { description: err }));
+  };
+
+  const handleDelete = () => {
+    if (!deleteItem) return;
+    dispatch(deleteVerificationSettings(deleteItem.id)).unwrap()
+      .then(() => { toast.success("Deleted"); setDeleteItem(null); })
+      .catch((err: string) => { toast.error("Failed to delete", { description: err }); setDeleteItem(null); });
+  };
+
+  return (
+    <>
+      <div style={CARD}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <SectionLabel text="Verification Tier Settings" />
+          <AddButton onClick={() => setShowAdd(true)} />
+        </div>
+
+        {loading && <CardLoader />}
+
+        {!loading && settings.length === 0 && (
+          <EmptyState label="verification tier" onAdd={() => setShowAdd(true)} />
+        )}
+
+        {settings.map((v: VerificationSettings) => (
+          <div key={v.id} style={{ marginBottom: "10px", padding: "14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+              <RecordActions
+                isActive={v.status} isMutating={loading}
+                onToggle={() =>
+                  dispatch(toggleVerificationSettingsStatus(v.id)).unwrap()
+                    .then(() => toast.success(`Verification tier ${v.status ? "disabled" : "enabled"}`))
+                    .catch((e: string) => toast.error(e))
+                }
+                onEdit={() => setEditItem(v)}
+                onDelete={() => setDeleteItem(v)}
+              />
+            </div>
+            <InfoRow label="Tier 1 Max Job Value"    value={naira(v.tier1MaxJobValue)} />
+            <InfoRow label="Tier 2 Max Job Value"    value={naira(v.tier2MaxJobValue)} />
+            <InfoRow label="Tier 3 Verification Fee" value={naira(v.tier3MinJobValue)} />
+          </div>
+        ))}
+      </div>
+
+      {(showAdd || editItem) && (
+        <VerificationModal
+          item={editItem}
+          onClose={() => { setShowAdd(false); setEditItem(null); }}
+          onSave={handleSave}
+          saving={loading}
+        />
+      )}
+      {deleteItem && (
+        <DeleteModal
+          name="verification tier record"
+          onClose={() => setDeleteItem(null)}
+          onConfirm={handleDelete}
+          saving={loading}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAS TIER
+// ═══════════════════════════════════════════════════════════════════════════════
+const TIER_KEYS = ["tier1", "tier2", "tier3", "tier4", "tier5", "tier6"] as const;
+type TierKey = typeof TIER_KEYS[number];
+
+const TIER_COLORS: Record<TierKey, string> = {
+  tier1: "#2563eb", tier2: "#16a34a", tier3: "#d97706",
+  tier4: "#7c3aed", tier5: "#db2777", tier6: "#0891b2",
 };
 
-const DIVIDER: React.CSSProperties = {
-  borderTop: "1px solid var(--color-border)",
-  paddingTop: "14px",
-  marginTop: "6px",
-  marginBottom: "14px",
+const TIER_LABELS: Record<TierKey, string> = {
+  tier1: "Tier 1", tier2: "Tier 2", tier3: "Tier 3",
+  tier4: "Tier 4", tier5: "Tier 5", tier6: "Tier 6",
 };
 
+// CONFIRMED backend field names (from live console inspection):
+//   { name: "Bronze", benefits: [...], minReferrals: 0, commissionRate: 5 }
+// `maxReferrals` is CONFIRMED NOT PRESENT on the backend — it's a frontend-only
+// addition so the UI can capture/display a max value. It will NOT persist
+// across a refresh until the backend adds this field. Flag to backend dev.
+function emptyTiers(): Record<TierKey, TierConfig> {
+  return {
+    tier1: { minReferrals: 0,    maxReferrals: 49,   commissionRate: 0  },
+    tier2: { minReferrals: 50,   maxReferrals: 199,  commissionRate: 5  },
+    tier3: { minReferrals: 200,  maxReferrals: 499,  commissionRate: 10 },
+    tier4: { minReferrals: 500,  maxReferrals: 999,  commissionRate: 12 },
+    tier5: { minReferrals: 1000, maxReferrals: 2499, commissionRate: 15 },
+    tier6: { minReferrals: 2500, maxReferrals: undefined, commissionRate: 20 },
+  };
+}
+
+function TasTierModal({ item, onClose, onSave, saving }: {
+  item: TasTier | null;
+  onClose: () => void;
+  onSave: (p: TasTierData) => void;
+  saving: boolean;
+}) {
+  const [tiers, setTiers] = useState<Record<TierKey, TierConfig>>(() => {
+    if (item) {
+      return { tier1: item.tier1, tier2: item.tier2, tier3: item.tier3, tier4: item.tier4, tier5: item.tier5, tier6: item.tier6 };
+    }
+    return emptyTiers();
+  });
+
+  const setField = (key: TierKey, field: keyof TierConfig, val: string) =>
+    setTiers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: val === "" ? undefined : Number(val) } }));
+
+  return (
+    <Modal open onClose={onClose} title={item ? "Edit TAS Tier Settings" : "Add TAS Tier Settings"}
+      footer={<ModalFooter onClose={onClose} saving={saving} onSave={() => onSave(tiers)} />}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {TIER_KEYS.map((key) => {
+          const color = TIER_COLORS[key];
+          return (
+            <div key={key}>
+              <div style={{ marginBottom: "8px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px", color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}>
+                  {TIER_LABELS[key]}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={LABEL_STYLE}>Min Experts</label>
+                  <input style={INP} type="number" value={tiers[key].minReferrals ?? ""}
+                    onChange={(e) => setField(key, "minReferrals", e.target.value)} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Max Experts</label>
+                  <input style={INP} type="number" placeholder="No limit" value={tiers[key].maxReferrals ?? ""}
+                    onChange={(e) => setField(key, "maxReferrals", e.target.value)} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Commission Rate (%)</label>
+                  <input style={INP} type="number" value={tiers[key].commissionRate ?? ""}
+                    onChange={(e) => setField(key, "commissionRate", e.target.value)} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+function TasTierCard() {
+  const dispatch = useAppDispatch();
+  const { tiers, loading } = useAppSelector((s) => s.tastier);
+  const [editItem,   setEditItem]   = useState<TasTier | null>(null);
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [deleteItem, setDeleteItem] = useState<TasTier | null>(null);
+
+  useEffect(() => { dispatch(fetchTasTiers()); }, [dispatch]);
+
+  const handleSave = (payload: TasTierData) => {
+    const action = editItem
+      ? dispatch(updateTasTier({ id: editItem.id, data: payload }))
+      : dispatch(createTasTier(payload));
+
+    action.unwrap()
+      .then(() => { toast.success(editItem ? "Updated" : "Created"); setEditItem(null); setShowAdd(false); })
+      .catch((err: string) => toast.error("Failed to save", { description: err }));
+  };
+
+  const handleDelete = () => {
+    if (!deleteItem) return;
+    dispatch(deleteTasTier(deleteItem.id)).unwrap()
+      .then(() => { toast.success("Deleted"); setDeleteItem(null); })
+      .catch((err: string) => { toast.error("Failed to delete", { description: err }); setDeleteItem(null); });
+  };
+
+  return (
+    <>
+      <div style={CARD}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <SectionLabel text="TAS Tier Settings" />
+          <AddButton onClick={() => setShowAdd(true)} />
+        </div>
+
+        {loading && <CardLoader />}
+
+        {!loading && tiers.length === 0 && (
+          <EmptyState label="TAS tier settings" onAdd={() => setShowAdd(true)} />
+        )}
+
+        {tiers.map((t: TasTier) => (
+          <div key={t.id} style={{ marginBottom: "10px", padding: "14px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#FAFAFA" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+              <RecordActions
+                isActive={t.status} isMutating={loading}
+                onToggle={() =>
+                  dispatch(toggleTasTierStatus(t.id)).unwrap()
+                    .then(() => {
+                      toast.success(`TAS tier ${t.status ? "disabled" : "enabled"}`);
+                      // Re-fetch to guarantee the switch reflects the true server
+                      // state, in case the toggle endpoint's own response doesn't
+                      // include the full/updated tier record.
+                      dispatch(fetchTasTiers());
+                    })
+                    .catch((e: string) => toast.error(e))
+                }
+                onEdit={() => setEditItem(t)}
+                onDelete={() => setDeleteItem(t)}
+              />
+            </div>
+            {TIER_KEYS.map((key) => {
+              const color = TIER_COLORS[key];
+              const tier  = t[key] as TierConfig;
+              const min   = tier?.minReferrals ?? 0;
+              const max   = tier?.maxReferrals;
+              const rangeLabel = max != null ? `${min.toLocaleString()}–${max.toLocaleString()}` : `${min.toLocaleString()}+`;
+              return (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 9px", borderRadius: "999px", whiteSpace: "nowrap", flexShrink: 0, color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}>
+                    {TIER_LABELS[key]}
+                  </span>
+                  <span style={{ fontSize: "13px", color: "#374151", flex: 1 }}>
+                    {rangeLabel} experts
+                  </span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
+                    {tier?.commissionRate ?? 0}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {(showAdd || editItem) && (
+        <TasTierModal
+          item={editItem}
+          onClose={() => { setShowAdd(false); setEditItem(null); }}
+          onSave={handleSave}
+          saving={loading}
+        />
+      )}
+      {deleteItem && (
+        <DeleteModal
+          name="TAS tier record"
+          onClose={() => setDeleteItem(null)}
+          onConfirm={handleDelete}
+          saving={loading}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAGE SHELL
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function CommissionSettings({ onBack }: { onBack: () => void }) {
   return (
-    <SubPageShell title="System Settings" onBack={onBack} action={<SaveButton />}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "20px" }}>
-
-        {/* Commission Settings */}
-        <div style={CARD}>
-          <SectionLabel text="Commission Settings" />
-
-          <SubLabel text="Expert" />
-          <InfoRow label="Model 2 Commission Rate"  value="10%" />
-          <InfoRow label="Model 1 Subscription Fee" value="₦50,000 / month" />
-
-          <div style={DIVIDER}>
-            <SubLabel text="TAS" />
-            <InfoRow label="Registration Bonus"  value="₦7,000" />
-            <InfoRow label="Model 2 Commission"  value="1%" />
-            <InfoRow label="Model 1 Commission"  value="₦1,000 / month" />
-          </div>
-
-          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "14px" }}>
-            <InfoRow label="Effective Date" value="01/04/2026" />
-          </div>
-        </div>
-
-        {/* Verification Tier Settings */}
-        <div style={CARD}>
-          <SectionLabel text="Verification Tier Settings" />
-          <InfoRow label="Tier 1 Max Job Value"    value="₦20,000" />
-          <InfoRow label="Tier 2 Max Job Value"    value="₦100,000" />
-          <InfoRow label="Tier 3 Verification Fee" value="₦5,000" />
-        </div>
-
-        {/* TAS Tier Settings */}
-        <div style={CARD}>
-          <SectionLabel text="TAS Tier Settings" />
-          {[
-            "Tier 1:  0 – 49 experts – 0% bonus",
-            "Tier 2:  50 – 199 experts – 5% bonus",
-            "Tier 3:  200 – 499 experts – 10% bonus",
-            "Tier 4:  500 – 999 experts – 12% bonus",
-            "Tier 5:  1,000 – 2,499 experts – 15% bonus",
-            "Tier 6:  2,500+ experts – 20% bonus",
-          ].map((t, i) => (
-            <TierRow key={t} text={t} index={i} />
-          ))}
-        </div>
-
+    <SubPageShell title="System Settings" onBack={onBack}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "20px" }}>
+        <CommissionCard />
+        <VerificationCard />
+        <TasTierCard />
       </div>
     </SubPageShell>
   );

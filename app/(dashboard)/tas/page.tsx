@@ -1,179 +1,114 @@
-// app/(dashboard)/tas/page.tsx
+// app/(admin)/tas/page.tsx  — or wherever your TAS page lives
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { fetchTas } from "@/lib/redux/tasSlice";
+import type { ApiTas } from "@/lib/api/tasApi";
 import ApplicationsTab from "@/components/tas/Applicationstab";
 import ActiveAgentsTab from "@/components/tas/Activeagentstab";
-import AgentDetail from "@/components/tas/Agentdetail";
-import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchTas, selectTas, clearSelectedTas } from "@/lib/redux/tasSlice";
-import type { ApiTas } from "@/lib/api/tasApi";
-import type { TASTab, ActiveAgent, AgentStatus } from "@/components/tas/types";
+import type { MainTab } from "@/components/tas/shared";
 
-const TABS: TASTab[] = ["Applications", "Active TAS Agents"];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// ── Parse tier string from API ─────────────────────────────
-// API returns: "Tier 2 (Senior, +5% bonus)" or plain "1" etc.
-const parseTier = (tierStr?: string): { num: number; label: string; bonus: string } => {
-  if (!tierStr) return { num: 1, label: "Bronze", bonus: "—" };
-  const numMatch   = tierStr.match(/\d+/);
-  const num        = numMatch ? parseInt(numMatch[0]) : 1;
-  const bonusMatch = tierStr.match(/\+[\d.]+%[^)"]*/);
-  const bonus      = bonusMatch ? bonusMatch[0].trim() : "—";
-  const labelMatch = tierStr.match(/\(([^,)]+)/);
-  const label      = labelMatch ? labelMatch[1].trim() : `Tier ${num}`;
-  return { num, label, bonus };
+// Applications = anyone who has gone through the verify flow (has a `verify` field).
+// Includes pending, approved, and rejected — so approved agents appear in both tabs.
+const isApplication = (t: ApiTas): boolean => {
+  const ext = t as Record<string, unknown>;
+  return ext.verify !== undefined && ext.verify !== null;
 };
 
-// ── Map real ApiTas → ActiveAgent UI shape ─────────────────
-const toActiveAgent = (t: ApiTas): ActiveAgent => {
-  const { num, label, bonus } = parseTier(t.tier);
-  const bank = t.bankDetails as { bankName?: string; accountNo?: string } | null;
-  const loc  = t.location as Record<string, string> | undefined;
-  const doc  = t.document as Record<string, string> | undefined;
-
-  return {
-    id:               t.id,
-    name:             t.name ?? "—",
-    fullName:         t.name ?? "—",
-    tasId:            t.username ?? t.id.slice(0, 8).toUpperCase(),
-    phone:            t.phone ?? "—",
-    email:            t.email ?? "—",
-    tier:             num,
-    tierLabel:        label,
-    bonus:            bonus,
-    joined:           t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-GB") : "—",
-    status:           (t.status === "suspended" ? "Suspended" : "Active") as AgentStatus,
-    experts:          0,
-    activeExperts:    0,
-    earnings:         "—",
-    totalEarnings:    "—",
-    thisMonth:        "—",
-    availableBalance: "—",
-    pendingBalance:   "—",
-    recruitedExperts: [],
-    // real API fields
-    verified:         t.verify,
-    dob:              t.dateOfBirth,
-    category:         Array.isArray(t.category) ? (t.category as string[]).join(", ") : undefined,
-    location:         loc,
-    document:         doc,
-    bankName:         bank?.bankName,
-    accountNo:        bank?.accountNo,
-    applicationCode:  t.applicationCode,
-  };
+// Active Agents = strictly status: "active" (operational, verified agents).
+const isActiveAgent = (t: ApiTas): boolean => {
+  const s = t.status;
+  if (!s || typeof s === "object") return false;
+  return String(s).toLowerCase() === "active";
 };
 
-export default function TASManagementPage() {
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function TASPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected } = useAppSelector((s) => s.tas);
-
-  const [activeTab,      setActiveTab]      = useState<TASTab>("Applications");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const { list, listStatus, listError } = useAppSelector((s) => s.tas);
+  const [mainTab, setMainTab] = useState<MainTab>("applications");
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchTas());
   }, [dispatch, listStatus]);
 
-  const allAgents = useMemo(() =>
-    listStatus === "succeeded" ? list.map(toActiveAgent) : [],
-  [listStatus, list]);
+  const applications = list.filter(isApplication);
+  const activeAgents  = list.filter(isActiveAgent);
 
-  // Applications = not yet verified (verify: false)
-  const applicationAgents = useMemo(() =>
-    allAgents.filter((a) => !a.verified),
-  [allAgents]);
-
-  // Active = verified agents (verify: true)
-  const activeAgents = useMemo(() =>
-    allAgents.filter((a) => a.verified),
-  [allAgents]);
-
-  // Keep selected in sync with freshly fetched list (e.g. after tier adjust)
-  const displayAgent = useMemo(() => {
-    if (!selectedAgentId) return null;
-    if (selected?.id === selectedAgentId) return toActiveAgent(selected);
-    return allAgents.find((a) => a.id === selectedAgentId) ?? null;
-  }, [selectedAgentId, selected, allAgents]);
-
-  const handleSelectAgent = (agent: ActiveAgent) => {
-    setSelectedAgentId(agent.id);
-    dispatch(selectTas(agent.id));
-  };
-
-  const handleBack = () => {
-    setSelectedAgentId(null);
-    dispatch(clearSelectedTas());
-  };
+  const tabs = [
+    { key: "applications" as MainTab, label: "Applications",      count: applications.length },
+    { key: "active"       as MainTab, label: "Active TAS Agents", count: activeAgents.length  },
+  ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{
+      display: "flex", flexDirection: "column", flex: 1,
+      minHeight: "100vh", backgroundColor: "#F4F5F7",
+    }}>
       <Topbar title="TAS Management" />
 
-      <style>{`
-        .tas-outer { padding: 12px; }
-        .tas-tabs  { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-        .tas-tabs::-webkit-scrollbar { display: none; }
-        .tas-tabs-inner { display: flex; gap: 8px; width: max-content; }
-        @media (min-width: 640px) {
-          .tas-outer { padding: 20px 32px; }
-          .tas-tabs  { overflow-x: visible; }
-          .tas-tabs-inner { width: auto; flex-wrap: wrap; }
-        }
-      `}</style>
+      <main style={{
+        flex: 1, padding: "16px 16px",
+        display: "flex", flexDirection: "column", gap: 20,
+      }}>
 
-      <div className="tas-outer" style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-background)" }}>
-
-        {displayAgent ? (
-          <AgentDetail agent={displayAgent} onBack={handleBack} />
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
-            {/* Tabs */}
-            <div className="tas-tabs">
-              <div className="tas-tabs-inner">
-                {TABS.map((tab) => (
-                  <button key={tab} onClick={() => setActiveTab(tab)}
-                    className={tab === activeTab ? "btn-primary" : ""}
-                    style={{
-                      padding: "8px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
-                      border: tab === activeTab ? "none" : "1px solid var(--color-border)",
-                      backgroundColor: tab === activeTab ? undefined : "transparent",
-                      color: tab === activeTab ? undefined : "var(--color-text-muted)",
-                      cursor: "pointer", whiteSpace: "nowrap",
-                    }}>
-                    {tab}
-                    {listStatus === "succeeded" && (
-                      <span style={{
-                        marginLeft: "6px", fontSize: "11px", fontWeight: 700,
-                        backgroundColor: tab === activeTab ? "rgba(255,255,255,0.25)" : "#E5E7EB",
-                        color: tab === activeTab ? "#fff" : "#6B7280",
-                        padding: "1px 7px", borderRadius: "999px",
-                      }}>
-                        {tab === "Applications" ? applicationAgents.length : activeAgents.length}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {listStatus === "loading" && (
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                <Loader2 size={16} className="animate-spin" /> Loading TAS data...
-              </div>
-            )}
-            {listStatus === "failed" && (
-              <p style={{ fontSize: "13px", color: "#ef4444" }}>{listError}</p>
-            )}
-
-            {activeTab === "Applications"      && <ApplicationsTab agents={applicationAgents} onSelectAgent={handleSelectAgent} />}
-            {activeTab === "Active TAS Agents" && <ActiveAgentsTab agents={activeAgents}      onSelectAgent={handleSelectAgent} />}
+        {/* Loading */}
+        {listStatus === "loading" && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 64, gap: 8, color: "#9CA3AF", fontSize: 14,
+          }}>
+            <Loader2 size={18} className="animate-spin" /> Loading TAS data…
           </div>
         )}
-      </div>
+
+        {/* Error */}
+        {listStatus === "failed" && list.length === 0 && (
+          <p style={{ textAlign: "center", padding: 40, fontSize: 13, color: "#ef4444" }}>
+            {listError}
+          </p>
+        )}
+
+        {/* Content */}
+        {(listStatus === "succeeded" || listStatus === "failed") && (
+          <>
+            {/* Main tab switcher */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {tabs.map((t) => (
+                <button key={t.key} onClick={() => setMainTab(t.key)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "9px 22px", borderRadius: 999,
+                    fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    border:           mainTab === t.key ? "none"    : "1px solid #D1D5DB",
+                    backgroundColor:  mainTab === t.key ? "#2563eb" : "#fff",
+                    color:            mainTab === t.key ? "#fff"    : "#6B7280",
+                  }}>
+                  {t.label}
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999,
+                    backgroundColor: mainTab === t.key ? "rgba(255,255,255,0.25)" : "#E5E7EB",
+                    color:           mainTab === t.key ? "#fff" : "#6B7280",
+                  }}>
+                    {t.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {mainTab === "applications" && <ApplicationsTab agents={applications} />}
+            {mainTab === "active"       && <ActiveAgentsTab agents={activeAgents}  />}
+          </>
+        )}
+      </main>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

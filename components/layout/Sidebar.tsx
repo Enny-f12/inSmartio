@@ -1,37 +1,47 @@
-// components/layout/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { logout } from "@/lib/redux/authSlice";
+import { clearAuth } from "@/lib/api/axiosInstance";
+import { getPermissions } from "@/lib/adminPermissions";
 import {
   LayoutDashboard, Users, ShieldCheck, Briefcase, Crown,
   CreditCard, Scale, BarChart2, Settings, LogOut, PanelLeftClose, X,
 } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard",      href: "/dashboard",    icon: LayoutDashboard },
-  { label: "Users",          href: "/users",         icon: Users },
-  { label: "Verifications",  href: "/verifications", icon: ShieldCheck },
-  { label: "Jobs",           href: "/jobs",          icon: Briefcase },
-  { label: "TAS Management", href: "/tas",           icon: Crown },
-  { label: "Payments",       href: "/payments",      icon: CreditCard },
-  { label: "Disputes",       href: "/dispute",       icon: Scale },
-  { label: "Reports",        href: "/report",        icon: BarChart2 },
-  { label: "Settings",       href: "/settings",      icon: Settings },
+  { label: "Dashboard",      href: "/dashboard",    icon: LayoutDashboard, permission: "canViewDashboard"    },
+  { label: "Users",          href: "/users",         icon: Users,           permission: "canViewUsers"        },
+  { label: "Verifications",  href: "/verifications", icon: ShieldCheck,     permission: "canViewVerifications"},
+  { label: "Jobs",           href: "/jobs",          icon: Briefcase,       permission: "canViewJobs"         },
+  { label: "Bids",           href: "/bid",           icon: Briefcase,       permission: "canViewJobs"         },
+  { label: "TAS Management", href: "/tas",           icon: Crown,           permission: "canViewTas"          },
+  { label: "Payments",       href: "/payments",      icon: CreditCard,      permission: "canViewPayments"     },
+  { label: "Disputes",       href: "/dispute",       icon: Scale,           permission: "canViewDisputes"     },
+  { label: "Audit Logs",     href: "/audit-log",     icon: BarChart2,       permission: "canViewAuditLogs"    },
+  { label: "Reports",        href: "/report",        icon: BarChart2,       permission: "canViewReports"      },
+  { label: "Settings",       href: "/settings",      icon: Settings,        permission: "canViewSettings"     },
 ];
 
 interface SidebarContentProps {
-  onClose?: () => void; // only passed on mobile drawer
+  onClose?:  () => void;
+  onLogout?: () => void;
+  role?:     string;
 }
 
-function SidebarContent({ onClose }: SidebarContentProps) {
-  const pathname = usePathname();
+function SidebarContent({ onClose, onLogout, role }: SidebarContentProps) {
+  const pathname              = usePathname();
   const { collapsed, toggle } = useSidebar();
+  const isCollapsed           = onClose ? false : collapsed;
+  const perms                 = getPermissions(role);
 
-  // On mobile drawer we always show full labels (not collapsed)
-  const isCollapsed = onClose ? false : collapsed;
+  const visibleItems = navItems.filter(
+    (item) => perms[item.permission as keyof typeof perms] === true
+  );
 
   return (
     <aside className={`
@@ -49,9 +59,9 @@ function SidebarContent({ onClose }: SidebarContentProps) {
         ) : (
           <>
             <Link href="/" className="shrink-0">
-              <Image src="/logo/insmartio.png" alt="inSmartio Logo" width={120} height={35} style={{ height: "auto", width: "auto" }} priority />
+              <Image src="/insmartio.png" alt="inSmartio Logo" width={180} height={45}
+                style={{ height: "auto", width: "auto", marginLeft: "-20px", marginTop: "-10px" }} priority />
             </Link>
-            {/* Mobile: X to close | Desktop: collapse icon */}
             <button
               onClick={onClose ?? toggle}
               aria-label={onClose ? "Close menu" : "Collapse sidebar"}
@@ -66,13 +76,13 @@ function SidebarContent({ onClose }: SidebarContentProps) {
       {/* ── Nav ── */}
       <nav className="flex-1 overflow-y-auto pt-8 py-3 px-2.5">
         <ul className="space-y-2.5">
-          {navItems.map(({ label, href, icon: Icon }) => {
+          {visibleItems.map(({ label, href, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <li key={href}>
                 <Link
                   href={href}
-                  onClick={onClose} // close drawer on nav (mobile)
+                  onClick={onClose}
                   title={isCollapsed ? label : undefined}
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium
@@ -93,6 +103,7 @@ function SidebarContent({ onClose }: SidebarContentProps) {
       {/* ── Logout ── */}
       <div className="px-2.5 pb-4 pt-3 border-t border-border">
         <button
+          onClick={onLogout}
           className={`
             flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium w-full
             text-red-500 hover:bg-red-50 transition-colors
@@ -109,6 +120,18 @@ function SidebarContent({ onClose }: SidebarContentProps) {
 
 export default function Sidebar() {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebar();
+  const dispatch = useAppDispatch();
+  const router   = useRouter();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = useAppSelector((s) => (s.auth as any).admin);
+  const role  = admin?.role ?? "view";
+
+  const handleLogout = () => {
+    clearAuth();
+    dispatch(logout());
+    router.push("/login");
+  };
 
   return (
     <>
@@ -117,7 +140,7 @@ export default function Sidebar() {
         className="hidden md:flex h-screen sticky top-0 shrink-0 transition-all duration-300"
         style={{ width: collapsed ? "72px" : "260px" }}
       >
-        <SidebarContent />
+        <SidebarContent onLogout={handleLogout} role={role} />
       </div>
 
       {/* ── Mobile overlay backdrop ── */}
@@ -136,7 +159,11 @@ export default function Sidebar() {
           transition: "transform 0.3s ease",
         }}
       >
-        <SidebarContent onClose={() => setMobileOpen(false)} />
+        <SidebarContent
+          onClose={() => setMobileOpen(false)}
+          onLogout={handleLogout}
+          role={role}
+        />
       </div>
     </>
   );

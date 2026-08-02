@@ -1,11 +1,17 @@
 // lib/api/disputeApi.ts
 import axiosInstance from "@/lib/api/axiosInstance";
 
-// ── Types ─────────────────────────────────────────────────
 export type DisputePriority = "HIGH" | "MEDIUM" | "LOW";
-export type DisputeStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
+export type DisputeStatus   = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSE";
+
+export interface MediationNote {
+  date: string;
+  time: string;
+  note: string;
+}
 
 export interface DisputeParty {
+  name:      string;
   id:        string;
   statement: string;
   evidence:  string[];
@@ -20,15 +26,15 @@ export interface ApiDispute {
   amountInEscrows: number;
   client:          DisputeParty;
   expert:          DisputeParty;
-  chatId:          string;
+  chatId:          string | null;
+  mediation:       MediationNote;   // ← object, not array
   status?:         DisputeStatus;
+  resolution?:     string | null;
+  decisionReason?: string | null;
   createdAt?:      string;
   updatedAt?:      string;
 }
 
-// ── Create payload ────────────────────────────────────────
-// POST /api/dispute
-// Response: { status: true, message: string, data: ApiDispute }
 export interface CreateDisputePayload {
   jobId:           string;
   date:            string;
@@ -40,36 +46,33 @@ export interface CreateDisputePayload {
   chatId:          string;
 }
 
-// ── Update payload ────────────────────────────────────────
-// PUT /api/dispute/{id}
-// Used by frontend for status changes: Open → In Progress
-// Response: { status: true, message: string, data: ApiDispute }
 export interface UpdateDisputePayload extends Partial<CreateDisputePayload> {
   status?: DisputeStatus;
 }
 
-// ── PROPOSED: Resolve payload ─────────────────────────────
-// POST /api/dispute/{id}/resolve
-// Backend handles escrow release + sets status to "Resolved" automatically
-// Request:
-// {
-//   resolution: "full_expert" | "full_client" | "dismiss" | "partial_70" | "reperform",
-//   reason?: string
-// }
-// Response: { status: true, message: "Dispute resolved successfully", data: ApiDispute }
 export type ResolutionType =
-  | "full_expert"    // Full payment to expert
-  | "full_client"    // Full refund to client
-  | "dismiss"        // Dismiss dispute
-  | "partial_70"     // Partial payment (70%)
-  | "reperform";     // Re-performance ordered
+  | "REFUND_EXPERT"
+  | "REFUND_CLIENT"
+  | "SPLIT_REFUND"
+  | "PARTIAL_REFUND_EXPERT"
+  | "PARTIAL_REFUND_CLIENT"
+  | "DISMISS_DISPUTE"
+  | "RE_PERFORM";
 
 export interface ResolveDisputePayload {
   resolution: ResolutionType;
-  reason?:    string;
+  reason:     string;
 }
 
-// ── Response wrappers ─────────────────────────────────────
+export interface AppealDisputePayload {
+  reason: string;
+}
+
+// PUT /api/dispute/{id}/mediation — single mediation object
+export interface AddMediationPayload {
+  mediation: MediationNote;
+}
+
 interface DisputesResponse {
   status:  boolean;
   message: string;
@@ -82,46 +85,57 @@ interface DisputeResponse {
   data:    ApiDispute;
 }
 
-// ── API functions ─────────────────────────────────────────
-
-// GET /api/dispute
 export const getAllDisputes = async (): Promise<ApiDispute[]> => {
   const { data } = await axiosInstance.get<DisputesResponse>("/dispute");
-  console.log("📋 Disputes API:", data);
   return data.data ?? [];
 };
 
-// GET /api/dispute/{id}
 export const getDisputeById = async (id: string): Promise<ApiDispute> => {
   const { data } = await axiosInstance.get<DisputeResponse>(`/dispute/${id}`);
   return data.data;
 };
 
-// GET /api/dispute/case/{caseId}
 export const getDisputeByCaseId = async (caseId: string): Promise<ApiDispute> => {
   const { data } = await axiosInstance.get<DisputeResponse>(`/dispute/case/${caseId}`);
   return data.data;
 };
 
-// POST /api/dispute
 export const createDispute = async (payload: CreateDisputePayload): Promise<ApiDispute> => {
   const { data } = await axiosInstance.post<DisputeResponse>("/dispute", payload);
   return data.data;
 };
 
-// PUT /api/dispute/{id}
 export const updateDispute = async (id: string, payload: UpdateDisputePayload): Promise<ApiDispute> => {
   const { data } = await axiosInstance.put<DisputeResponse>(`/dispute/${id}`, payload);
   return data.data;
 };
 
-// DELETE /api/dispute/{id}
 export const deleteDispute = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/dispute/${id}`);
 };
 
-// PROPOSED: POST /api/dispute/{id}/resolve
-export const resolveDispute = async (id: string, payload: ResolveDisputePayload): Promise<ApiDispute> => {
+export const resolveDispute = async (
+  id:      string,
+  payload: ResolveDisputePayload,
+): Promise<ApiDispute> => {
   const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/resolve`, payload);
+  return data.data;
+};
+
+export const appealDispute = async (
+  id:      string,
+  payload: AppealDisputePayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.post<DisputeResponse>(`/dispute/${id}/appeal`, payload);
+  return data.data;
+};
+
+// ✅ Changed to PUT — sends single mediation object matching backend shape:
+// { mediation: { date: "2026-05-19", time: "14:30", note: "..." } }
+export const addMediationNote = async (
+  id:      string,
+  payload: AddMediationPayload,
+): Promise<ApiDispute> => {
+  const { data } = await axiosInstance.put<DisputeResponse>(`/dispute/${id}/mediation`, payload);
   return data.data;
 };

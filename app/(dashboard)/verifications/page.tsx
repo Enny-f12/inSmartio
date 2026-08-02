@@ -1,334 +1,405 @@
-// app/(dashboard)/verifications/page.tsx
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Eye, Loader2 } from "lucide-react";
 import Topbar from "@/components/layout/Navbar";
-import VerificationModal from "@/components/verifications/VerificationModal";
+import VerificationModal, { type ComputedStatus } from "@/components/verifications/VerificationModal";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import {
   fetchVerifications,
-  selectVerification,
+  fetchVerificationById,
   clearSelectedVerification,
+  selectItemTier,
 } from "@/lib/redux/verificationSlice";
-import type { ApiVerificationSummary, VerificationTier } from "@/lib/api/verificationApi";
+import {
+  normaliseVerificationStatus,
+  type ApiVerificationSummary,
+  type VerificationTier,
+  type VerificationStatus,
+} from "@/lib/api/verificationApi";
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
 const TIERS = ["Tier 1", "Tier 2", "Tier 3"] as const;
-type TierLabel = typeof TIERS[number];
+type TierLabel = (typeof TIERS)[number];
 
-const tierLabelToKey: Record<TierLabel, VerificationTier> = {
+const TIER_LABEL_TO_KEY: Record<TierLabel, VerificationTier> = {
   "Tier 1": "tier1",
   "Tier 2": "tier2",
   "Tier 3": "tier3",
 };
 
-// ── Mock data — used when API returns nothing or as tier fill ──
-const MOCK_VERIFICATIONS: ApiVerificationSummary[] = [
-  {
-    id: "mock-t1-1", name: "Emeka O.", email: "emeka@email.com", phone: "+234 801 234 5678",
-    status: "active", submitted: "2026-03-20T10:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 20/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
-      { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph", url: "#", status: "verified" },
-    ],
-    ninVerification: { ninNumber: "12345678901", ninStatus: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: "mock-t1-2", name: "Ngozi E.", email: "ngozi@email.com", phone: "+234 802 345 6789",
-    status: "active", submitted: "2026-03-21T09:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1", verificationFee: "₦500 · Paid on 21/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
-      { name: "Valid ID (National ID)", url: "#", status: "verified" },
-      { name: "Passport Photograph", url: "#", status: "verified" },
-    ],
-    ninVerification: { ninNumber: "98765432100", ninStatus: "Verified", nameMatch: true, dobMatch: true },
-  },
-  {
-    id: "mock-t1-3", name: "Peter O.", email: "peter@email.com", phone: "+234 803 456 7891",
-    status: "active", submitted: "2026-03-18T08:00:00.000Z",
-    documents: 1, totalDocuments: 3, tier: "tier1",
-    appliedTier: "Tier 1",
-    verificationDocuments: [
-      { name: "NIN Slip",            url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",         status: "pending" },
-      { name: "Passport Photograph",            status: "pending" },
-    ],
-  },
-  // ── Tier 2 ──
-  {
-    id: "mock-t2-1", name: "Chidi E.", email: "chidi@email.com", phone: "+234 803 456 7890",
-    status: "active", submitted: "2026-03-19T11:00:00.000Z",
-    documents: 7, totalDocuments: 7, tier: "tier2",
-    appliedTier: "Tier 2", verificationFee: "₦1,500 · Paid on 18/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-      { name: "Proof of Address",      url: "#", status: "verified" },
-      { name: "Guarantor Form",        url: "#", status: "pending"  },
-      { name: "Police Clearance",      url: "#", status: "pending"  },
-    ],
-    guarantor: { name: "Chief Okafor M.", phone: "+234 809 876 5432", occupation: "Civil Servant (Level 14)" },
-    policeClearance: { certificateNo: "PC-2026-12345", issued: "10/03/2026 (within 6 months)", issuingState: "Lagos", status: "Verify Online" },
-  },
-  {
-    id: "mock-t2-2", name: "Mary K.", email: "mary@email.com", phone: "+234 804 567 8901",
-    status: "active", submitted: "2026-03-17T14:00:00.000Z",
-    documents: 5, totalDocuments: 7, tier: "tier2",
-    appliedTier: "Tier 2", verificationFee: "₦1,500 · Paid on 17/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "Valid ID (National ID)",url: "#", status: "verified" },
-      { name: "Passport Photograph",   url: "#", status: "verified" },
-      { name: "Proof of Address",      url: "#", status: "verified" },
-      { name: "Guarantor Form",                  status: "pending"  },
-      { name: "Police Clearance",                status: "pending"  },
-    ],
-    guarantor: { name: "Alhaji Musa B.", phone: "+234 811 234 5678", occupation: "Business Owner" },
-  },
-  // ── Tier 3 ──
-  {
-    id: "mock-t3-1", name: "James A.", email: "james@email.com", phone: "+234 805 678 9012",
-    status: "active", submitted: "2026-03-16T10:00:00.000Z",
-    documents: 2, totalDocuments: 3, tier: "tier3",
-    appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 16/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",              url: "#", status: "verified" },
-      { name: "BVN Consent Form",      url: "#", status: "verified" },
-      { name: "CAC Certificate",                 status: "pending"  },
-    ],
-  },
-  {
-    id: "mock-t3-2", name: "Fatima B.", email: "fatima@email.com", phone: "+234 806 789 0123",
-    status: "active", submitted: "2026-03-14T08:00:00.000Z",
-    documents: 3, totalDocuments: 3, tier: "tier3",
-    appliedTier: "Tier 3", verificationFee: "₦3,000 · Paid on 14/03/2026",
-    verificationDocuments: [
-      { name: "NIN Slip",       url: "#", status: "verified" },
-      { name: "BVN Consent Form", url: "#", status: "verified" },
-      { name: "CAC Certificate",  url: "#", status: "verified" },
-    ],
-  },
+const TIER_STYLE: Record<VerificationTier, { bg: string; text: string; label: string }> = {
+  tier1: { bg: "#e0f2fe", text: "#0369a1", label: "Tier 1" },
+  tier2: { bg: "#fef3c7", text: "#b45309", label: "Tier 2" },
+  tier3: { bg: "#ede9fe", text: "#6d28d9", label: "Tier 3" },
+};
+
+const STATUS_VARIANT: Record<ComputedStatus, "green" | "yellow" | "red"> = {
+  approved: "green",
+  pending:  "yellow",
+  rejected: "red",
+};
+
+const STATUS_OPTIONS: { value: VerificationStatus | ""; label: string }[] = [
+  { value: "",         label: "All statuses" },
+  { value: "approved", label: "Approved"     },
+  { value: "pending",  label: "Pending"      },
+  { value: "rejected", label: "Rejected"     },
 ];
 
-const getDocLabel = (e: ApiVerificationSummary) => `${e.documents}/${e.totalDocuments}`;
+// ── Priority-based status (used only when per-document data is available —
+// i.e. Tier 3 / TAS rows, which the list endpoint returns in full) ───────────
+//   any document rejected  → rejected   (highest priority)
+//   all documents verified → approved
+//   otherwise               → pending
+function computeStatus(docs: { verified: boolean; rejected: boolean }[]): ComputedStatus {
+  if (docs.some((d) => d.rejected)) return "rejected";
+  if (docs.length > 0 && docs.every((d) => d.verified)) return "approved";
+  return "pending";
+}
 
-const statusVariant = (s: string): "green" | "yellow" | "red" | "gray" => {
-  if (s === "active")   return "green";
-  if (s === "rejected") return "red";
-  if (s === "pending")  return "yellow";
-  return "gray";
-};
+function getDocFlags(e: ApiVerificationSummary): { verified: boolean; rejected: boolean }[] {
+  if (!Array.isArray(e.documents)) return [];
+  return e.documents.map((d) => ({
+    verified: d.verify === true,
+    rejected: (d as unknown as { reject?: boolean }).reject === true,
+  }));
+}
+
+function getDocCounts(e: ApiVerificationSummary): { submitted: number; total: number } {
+  if (Array.isArray(e.documents)) {
+    const total     = e.documents.length;
+    const submitted = e.documents.filter((d) => typeof d.url === "string" && d.url.length > 10).length;
+    return { submitted, total };
+  }
+  const total = e.totalDocuments ?? 0;
+  const n     = typeof e.documents === "number" ? e.documents : 0;
+  return { submitted: n, total };
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function VerificationsPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected } = useAppSelector((s) => s.verifications);
+  const { list, listStatus, listError, selected, selectedStatus } =
+    useAppSelector((s) => s.verifications);
 
-  const [activeTier, setActiveTier] = useState<TierLabel>("Tier 1");
-  const [search,     setSearch]     = useState("");
-  const [page,       setPage]       = useState(1);
+  const [activeTier,   setActiveTier]   = useState<TierLabel>("Tier 1");
+  const [tierSet,      setTierSet]      = useState(false);
+  const [statusFilter, setStatusFilter] = useState<VerificationStatus | "">("");
+  const [search,       setSearch]       = useState("");
+  const [page,         setPage]         = useState(1);
+
+  // Local overrides give instant feedback while the modal is open, on top of
+  // whatever the server returned for the current filter.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, ComputedStatus>>({});
+
+  // ── Data loading ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (listStatus === "idle") dispatch(fetchVerifications());
   }, [dispatch, listStatus]);
 
-  // Merge real API data with mock — real data wins, mock fills the rest
-  // Real API items get tier assigned by index position (first third = tier1 etc.)
-  // until backend adds a tier field
-  const mergedData: ApiVerificationSummary[] = (() => {
-    if (listStatus === "succeeded" && list.length > 0) {
-      // Assign tiers to real data by index until backend provides tier field
-      const withTiers = list.map((item, i): ApiVerificationSummary => ({
-        ...item,
-        tier: item.tier ?? (i % 3 === 0 ? "tier1" : i % 3 === 1 ? "tier2" : "tier3"),
-      }));
-      // Supplement with mock data for tiers that have no real entries
-      const realTiers = new Set(withTiers.map((i) => i.tier));
-      const mockFill  = MOCK_VERIFICATIONS.filter((m) => !realTiers.has(m.tier));
-      return [...withTiers, ...mockFill];
-    }
-    return MOCK_VERIFICATIONS;
-  })();
+  // ── Per-item derived values ────────────────────────────────────────────────
 
-  const activeTierKey = tierLabelToKey[activeTier];
+  const getStatus = (e: ApiVerificationSummary): ComputedStatus => {
+    const override = statusOverrides[e.id];
+    if (override) return override;
+    // Tier 3 / TAS rows carry full per-document data — compute from that.
+    const flags = getDocFlags(e);
+    if (flags.length > 0) return computeStatus(flags);
+    // Everything else: trust the backend's own field (same one the server
+    // uses for the `verify` filter param, so this stays consistent with it).
+    return normaliseVerificationStatus(e.status, e.verify) as ComputedStatus;
+  };
 
-  const filtered = mergedData.filter((e) => {
-    const matchTier   = e.tier === activeTierKey;
-    const matchSearch = e.name.toLowerCase().includes(search.toLowerCase());
-    return matchTier && matchSearch;
-  });
+  const getTier = (e: ApiVerificationSummary): VerificationTier => selectItemTier(e);
+
+  // ── Tier counts (pending items per tier, for tab badges) ──────────────────
+
+  const tierCounts = useMemo(() => ({
+    tier1: list.filter((e) => getTier(e) === "tier1").length,
+    tier2: list.filter((e) => getTier(e) === "tier2").length,
+    tier3: list.filter((e) => getTier(e) === "tier3").length,
+  }), [list]);
+
+  // Auto-select the first tier that has items (runs once after list loads)
+  useEffect(() => {
+    if (listStatus !== "succeeded" || tierSet) return;
+    const first = TIERS.find((t) => tierCounts[TIER_LABEL_TO_KEY[t]] > 0);
+    setActiveTier(first ?? "Tier 1");
+    setTierSet(true);
+  }, [listStatus, tierCounts, tierSet]);
+
+  // ── Filtering ──────────────────────────────────────────────────────────────
+
+  const filtered = useMemo(() => list.filter((e) => {
+    if (getTier(e) !== TIER_LABEL_TO_KEY[activeTier]) return false;
+    if (statusFilter && getStatus(e) !== statusFilter) return false;
+    if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }), [list, activeTier, statusFilter, search, statusOverrides]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const from       = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to         = Math.min(page * PAGE_SIZE, filtered.length);
 
-  // Counts per tier for the badge
-  const tierCounts: Record<VerificationTier, number> = {
-    tier1: mergedData.filter((e) => e.tier === "tier1").length,
-    tier2: mergedData.filter((e) => e.tier === "tier2").length,
-    tier3: mergedData.filter((e) => e.tier === "tier3").length,
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleTierChange = (tier: TierLabel) => {
+    setActiveTier(tier);
+    setPage(1);
   };
+
+  const handleStatusFilterChange = (val: VerificationStatus | "") => {
+    setStatusFilter(val);
+    setPage(1);
+  };
+
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
+    setPage(1);
+  };
+
+  const handleOpenDetail  = (e: ApiVerificationSummary) =>
+    dispatch(fetchVerificationById({ id: e.id, summary: e }));
+  // The local override below is just for instant feedback while the modal is
+  // open. The real fix: refetch the list (with the current filter) so Redux
+  // itself has the correct data — otherwise switching tiers/pages or
+  // navigating elsewhere and back shows stale data until a hard refresh.
+  const handleCloseModal  = () => {
+    dispatch(clearSelectedVerification());
+    dispatch(fetchVerifications());
+  };
+  const handleStatusChange = (id: string, status: ComputedStatus) => {
+    setStatusOverrides((prev) => ({ ...prev, [id]: status }));
+  };
+
+  const isModalOpen = selectedStatus === "loading" || selectedStatus === "succeeded";
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
       <Topbar title="Verifications" />
 
       <style>{`
-        .ver-main { padding: 16px; gap: 16px; }
-        .ver-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-        .ver-tiers { display: flex; gap: 8px; }
-        .ver-pgn { flex-direction: column; gap: 8px; align-items: flex-start; }
+        .ver-main      { padding: 16px; }
+        .ver-pgn       { flex-direction: column; gap: 8px; align-items: flex-start; }
         .ver-row:hover { background: #F9FAFB; }
-        .ver-desktop { display: none !important; }
-        .ver-mobile  { display: flex !important; flex-direction: column; gap: 10px; padding: 12px; }
+        .ver-desktop   { display: none !important; }
+        .ver-mobile    { display: flex !important; flex-direction: column; gap: 10px; padding: 12px; }
         @media (min-width: 640px) {
-          .ver-main    { padding: 24px 32px; gap: 20px; }
-          .ver-header  { flex-direction: row; align-items: center; }
+          .ver-main    { padding: 24px 32px; }
           .ver-pgn     { flex-direction: row; align-items: center; }
           .ver-desktop { display: block !important; }
           .ver-mobile  { display: none !important; }
         }
       `}</style>
 
-      <main className="ver-main" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <main className="ver-main" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
 
-        {/* Header */}
-        <div className="ver-header" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, backgroundColor: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A", whiteSpace: "nowrap" }}>
-            {mergedData.length} pending
-          </span>
-
-          {/* Tier filters */}
-          <div className="ver-tiers">
+          {/* ── Tier tabs ── */}
+          <div style={{ display: "flex", borderBottom: "1px solid #E5E7EB", padding: "0 20px" }}>
             {TIERS.map((tier) => {
-              const count = tierCounts[tierLabelToKey[tier]];
               const isActive = tier === activeTier;
+              const count    = tierCounts[TIER_LABEL_TO_KEY[tier]];
               return (
-                <button key={tier} onClick={() => { setActiveTier(tier); setPage(1); }}
+                <button key={tier}
+                  onClick={() => handleTierChange(tier)}
                   style={{
-                    padding: "8px 20px", borderRadius: "999px", fontSize: "13px", fontWeight: 600,
-                    cursor: "pointer", border: isActive ? "none" : "1px solid #D1D5DB",
-                    backgroundColor: isActive ? "#16a34a" : "#ffffff",
-                    color: isActive ? "#ffffff" : "#6B7280",
+                    padding: "14px 20px", fontSize: "13px", fontWeight: 600, border: "none",
+                    background: "none", cursor: "pointer",
+                    color: isActive ? "#111827" : "#6B7280",
+                    borderBottom: isActive ? "2px solid #16a34a" : "2px solid transparent",
                     display: "flex", alignItems: "center", gap: "6px",
                   }}>
                   {tier}
                   <span style={{
-                    fontSize: "11px", fontWeight: 700,
-                    backgroundColor: isActive ? "rgba(255,255,255,0.25)" : "#E5E7EB",
+                    fontSize: "11px", fontWeight: 700, padding: "1px 7px", borderRadius: "999px",
+                    backgroundColor: isActive ? "#16a34a" : "#E5E7EB",
                     color: isActive ? "#fff" : "#6B7280",
-                    padding: "1px 6px", borderRadius: "999px",
                   }}>
-                    {count}
+                    {listStatus === "loading" ? "…" : count}
                   </span>
                 </button>
               );
             })}
           </div>
-        </div>
 
-        {/* Card */}
-        <div style={{ backgroundColor: "#ffffff", border: "1px solid #E5E7EB", borderRadius: "16px", overflow: "hidden" }}>
-
-          {/* Search */}
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
-            <div style={{ position: "relative" }}>
+          {/* ── Toolbar: search + status filter ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px 20px", borderBottom: "1px solid #E5E7EB", flexWrap: "wrap" }}>
+            {/* Search */}
+            <div style={{ position: "relative", flex: 1, minWidth: "180px" }}>
               <Search size={15} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
-              <input type="text" placeholder="Search name..." value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px", paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px", fontSize: "13px", outline: "none", border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }}
-              />
+              <input
+                type="text"
+                placeholder="Search name…"
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                style={{
+                  width: "100%", paddingLeft: "40px", paddingRight: "16px",
+                  paddingTop: "10px", paddingBottom: "10px",
+                  borderRadius: "10px", fontSize: "13px", outline: "none",
+                  border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                  color: "#111827", boxSizing: "border-box",
+                }} />
             </div>
+
+            {/* Status filter — server-side */}
+            <select
+              value={statusFilter}
+              onChange={(e) => handleStatusFilterChange(e.target.value as VerificationStatus | "")}
+              style={{
+                padding: "10px 14px", borderRadius: "10px", fontSize: "13px",
+                border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB",
+                color: "#111827", outline: "none", cursor: "pointer", minWidth: "140px",
+              }}>
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </div>
 
+          {/* ── Loading / error ── */}
           {listStatus === "loading" && (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "56px", gap: "8px", color: "#9CA3AF", fontSize: "14px" }}>
-              <Loader2 size={18} className="animate-spin" /> Loading verifications...
+              <Loader2 size={18} className="animate-spin" /> Loading verifications…
             </div>
           )}
           {listStatus === "failed" && (
             <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#ef4444" }}>{listError}</p>
           )}
 
-          {(listStatus !== "loading") && (
+          {listStatus !== "loading" && (
             <>
-              {/* Desktop table */}
+              {/* ── Desktop table ── */}
               <div className="ver-desktop" style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      {["Name", "Submitted", "Status", "Documents", "Actions"].map((h) => (
-                        <th key={h} style={{ textAlign: "left", padding: "12px 24px", fontSize: "12px", fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
+                      {["Name", "Tier", "Submitted", "Status", "Documents", "Actions"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "12px 20px", fontSize: "12px", fontWeight: 600, color: "#6B7280", letterSpacing: "0.03em" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>No verifications found.</td></tr>
-                    ) : paginated.map((expert) => (
-                      <tr key={expert.id} className="ver-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
-                        <td style={{ padding: "16px 24px", fontSize: "14px", fontWeight: 600, color: "#111827" }}>{expert.name}</td>
-                        <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"}</td>
-                        <td style={{ padding: "16px 24px" }}><StatusBadge label={expert.status ?? "pending"} variant={statusVariant(expert.status ?? "")} /></td>
-                        <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "#6B7280" }}>{getDocLabel(expert)}</td>
-                        <td style={{ padding: "16px 24px" }}>
-                          <button onClick={() => dispatch(selectVerification(expert))}
-                            style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
-                            <Eye size={17} strokeWidth={1.8} />
-                          </button>
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "#9CA3AF" }}>
+                          No verifications found.
                         </td>
                       </tr>
-                    ))}
+                    ) : paginated.map((expert) => {
+                      const tier       = getTier(expert);
+                      const ts         = TIER_STYLE[tier];
+                      const st         = getStatus(expert);
+                      const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
+                      const docsComplete = docsTotal > 0 && docsIn === docsTotal;
+                      const docsNone      = docsIn === 0;
+                      return (
+                        <tr key={expert.id} className="ver-row" style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}>
+                          <td style={{ padding: "14px 20px", fontSize: "14px", fontWeight: 600, color: "#111827" }}>{expert.name}</td>
+                          <td style={{ padding: "14px 20px" }}>
+                            <span style={{ fontSize: "12px", fontWeight: 600, color: ts.text, backgroundColor: ts.bg, padding: "3px 10px", borderRadius: "999px", whiteSpace: "nowrap" }}>
+                              {ts.label}
+                            </span>
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: "13px", color: "#6B7280" }}>
+                            {expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"}
+                          </td>
+                          <td style={{ padding: "14px 20px" }}>
+                            <StatusBadge label={st} variant={STATUS_VARIANT[st]} />
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: "13px", fontVariantNumeric: "tabular-nums" }}>
+                            <span style={{ fontWeight: 600, color: docsComplete ? "#15803d" : docsNone ? "#9CA3AF" : "#111827" }}>{docsIn}</span>
+                            <span style={{ color: "#D1D5DB", margin: "0 1px" }}>/</span>
+                            <span style={{ color: "#6B7280" }}>{docsTotal}</span>
+                          </td>
+                          <td style={{ padding: "14px 20px" }}>
+                            <button onClick={() => handleOpenDetail(expert)}
+                              style={{ padding: "6px", borderRadius: "8px", border: "none", background: "none", cursor: "pointer", color: "#9CA3AF", display: "flex", alignItems: "center" }}>
+                              <Eye size={17} strokeWidth={1.8} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Mobile cards */}
+              {/* ── Mobile cards ── */}
               <div className="ver-mobile">
                 {paginated.length === 0 ? (
-                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF", margin: 0 }}>No verifications found.</p>
-                ) : paginated.map((expert) => (
-                  <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: "0 0 4px" }}>{expert.name}</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                        <StatusBadge label={expert.status ?? "pending"} variant={statusVariant(expert.status ?? "")} />
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}>{expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"}</span>
-                        <span style={{ fontSize: "12px", color: "#6B7280" }}>Docs: {getDocLabel(expert)}</span>
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "#9CA3AF", margin: 0 }}>
+                    No verifications found.
+                  </p>
+                ) : paginated.map((expert) => {
+                  const tier      = getTier(expert);
+                  const ts        = TIER_STYLE[tier];
+                  const st        = getStatus(expert);
+                  const { submitted: docsIn, total: docsTotal } = getDocCounts(expert);
+                  const docsComplete = docsTotal > 0 && docsIn === docsTotal;
+                  const docsNone      = docsIn === 0;
+                  return (
+                    <div key={expert.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid #E5E7EB", backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                          <p style={{ fontSize: "13.5px", fontWeight: 600, color: "#111827", margin: 0 }}>{expert.name}</p>
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: ts.text, backgroundColor: ts.bg, padding: "2px 8px", borderRadius: "999px", whiteSpace: "nowrap" }}>
+                            {ts.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                          <StatusBadge label={st} variant={STATUS_VARIANT[st]} />
+                          <span style={{ fontSize: "12px", color: "#6B7280" }}>
+                            {expert.submitted ? new Date(expert.submitted).toLocaleDateString("en-GB") : "—"}
+                          </span>
+                          <span style={{ fontSize: "12px", color: "#6B7280", fontVariantNumeric: "tabular-nums" }}>
+                            Docs:{" "}
+                            <span style={{ fontWeight: 600, color: docsComplete ? "#15803d" : docsNone ? "#9CA3AF" : "#374151" }}>{docsIn}</span>
+                            <span style={{ color: "#D1D5DB", margin: "0 1px" }}>/</span>
+                            <span>{docsTotal}</span>
+                          </span>
+                        </div>
                       </div>
+                      <button onClick={() => handleOpenDetail(expert)}
+                        style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                        <Eye size={16} strokeWidth={1.8} />
+                      </button>
                     </div>
-                    <button onClick={() => dispatch(selectVerification(expert))}
-                      style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB", background: "none", cursor: "pointer", color: "#9CA3AF", flexShrink: 0, display: "flex", alignItems: "center" }}>
-                      <Eye size={16} strokeWidth={1.8} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {/* Pagination */}
+              {/* ── Pagination ── */}
               <div className="ver-pgn" style={{ display: "flex", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
                 <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
                   {filtered.length === 0 ? "No results" : `Showing ${from}–${to} of ${filtered.length} results`}
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>Previous</button>
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.4 : 1 }}>
+                    Previous
+                  </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                     <button key={p} onClick={() => setPage(p)}
-                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#16a34a" : "#ffffff", color: p === page ? "#ffffff" : "#6B7280", cursor: "pointer" }}>{p}</button>
+                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: p === page ? "none" : "1px solid #E5E7EB", backgroundColor: p === page ? "#16a34a" : "#fff", color: p === page ? "#fff" : "#6B7280", cursor: "pointer" }}>
+                      {p}
+                    </button>
                   ))}
                   <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
+                    style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#fff", color: "#6B7280", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.4 : 1 }}>
+                    Next
+                  </button>
                 </div>
               </div>
             </>
@@ -336,8 +407,12 @@ export default function VerificationsPage() {
         </div>
       </main>
 
-      {selected && (
-        <VerificationModal expert={selected} onClose={() => dispatch(clearSelectedVerification())} />
+      {isModalOpen && (
+        <VerificationModal
+          expert={selected}
+          onClose={handleCloseModal}
+          onStatusChange={handleStatusChange}
+        />
       )}
     </div>
   );

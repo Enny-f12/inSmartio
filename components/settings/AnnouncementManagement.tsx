@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Plus, Eye, Pencil, Trash2, Loader2, Calendar, Users, Info, AlertTriangle } from "lucide-react";
+import { Plus, Eye, Pencil, Trash2, Loader2, Calendar, Users, Info, AlertTriangle, ArrowLeft } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell, FieldInput, FieldTextarea } from "./SettingsShared";
 
@@ -16,19 +16,6 @@ import {
 } from "@/lib/redux/announcementSlice";
 import type { AppDispatch, RootState } from "@/lib/redux/store";
 import type { CreateAnnouncementPayload, UpdateAnnouncementPayload, ApiAnnouncement } from "@/lib/api/announcementApi";
-
-// ── Mock Fallback Config ──────────────────────────────────
-const MOCK_FALLBACK_DATA: ApiAnnouncement[] = [
-  {
-    id: "mock-ann-1",
-    title: "System Maintenance Downtime",
-    message: "Our primary database servers will undergo a standard update cycles starting midnight.",
-    audience: { all: true, client: true, expert: true, tas: true },
-    schedule: { now: true, later: false },
-    status: "sent",
-    createdAt: "2026-05-18T14:30:00.000Z"
-  }
-];
 
 type ClientAudienceLabel = "All users" | "Clients Only" | "Experts Only" | "TAS Only";
 const AUDIENCES: ClientAudienceLabel[] = ["All users", "Clients Only", "Experts Only", "TAS Only"];
@@ -56,6 +43,17 @@ function StatusBadge({ status }: { status: string }) {
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
+}
+
+// ── Shared audience formatting (used by both preview and detail view) ──
+function getAudienceString(aud: { all?: boolean; client?: boolean; expert?: boolean; tas?: boolean } | undefined) {
+  if (!aud) return "None Specified";
+  if (aud.all) return "All users";
+  const targets: string[] = [];
+  if (aud.client) targets.push("Clients");
+  if (aud.expert) targets.push("Experts");
+  if (aud.tas) targets.push("TAS");
+  return targets.join(", ") || "None Specified";
 }
 
 // ── Delete Confirmation Modal ─────────────────────────────
@@ -103,16 +101,6 @@ function DeleteAnnouncementModal({ id, onClose }: DeleteModalProps) {
 
 // ── Detail View Modal ─────────────────────────────────────
 function ViewAnnouncementModal({ announcement, onClose }: { announcement: ApiAnnouncement; onClose: () => void }) {
-  const getAudienceString = (aud: ApiAnnouncement["audience"]) => {
-    if (!aud) return "None Specified";
-    if (aud.all) return "All users";
-    const targets: string[] = [];
-    if (aud.client) targets.push("Clients");
-    if (aud.expert) targets.push("Experts");
-    if (aud.tas) targets.push("TAS");
-    return targets.join(", ") || "None Specified";
-  };
-
   return (
     <Modal open onClose={onClose} title="Announcement Details">
       <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "4px 0" }}>
@@ -152,6 +140,7 @@ interface FormModalProps {
 function AnnouncementFormModal({ onClose, announcementToEdit }: FormModalProps) {
   const dispatch = useDispatch<AppDispatch>();
   const { mutateStatus } = useSelector((state: RootState) => state.announcements);
+  const isEditing = !!announcementToEdit;
 
   const [title, setTitle] = useState(announcementToEdit?.title ?? "");
   const [message, setMessage] = useState(announcementToEdit?.message ?? "");
@@ -170,25 +159,42 @@ function AnnouncementFormModal({ onClose, announcementToEdit }: FormModalProps) 
   const [date, setDate] = useState(announcementToEdit?.schedule?.date ?? "");
   const [time, setTime] = useState(announcementToEdit?.schedule?.time ?? "");
 
-  const handleSave = async () => {
+  // Create flow gets a preview step before dispatch. Editing stays single-step.
+  const [step, setStep] = useState<"form" | "preview">("form");
+
+  const targetAudience = {
+    all: audience === "All users",
+    client: audience === "All users" || audience === "Clients Only",
+    expert: audience === "All users" || audience === "Experts Only",
+    tas: audience === "All users" || audience === "TAS Only",
+  };
+
+  const scheduleData = {
+    now: scheduleMode === "now",
+    later: scheduleMode === "later",
+    date: scheduleMode === "later" ? date : undefined,
+    time: scheduleMode === "later" ? time : undefined,
+  };
+
+  const validate = () => {
     if (!title.trim() || !message.trim()) {
       alert("Please complete the announcement content fields.");
-      return;
+      return false;
     }
+    if (scheduleMode === "later" && (!date || !time)) {
+      alert("Please pick a date and time for the scheduled dispatch.");
+      return false;
+    }
+    return true;
+  };
 
-    const targetAudience = {
-      all: audience === "All users",
-      client: audience === "All users" || audience === "Clients Only",
-      expert: audience === "All users" || audience === "Experts Only",
-      tas: audience === "All users" || audience === "TAS Only",
-    };
+  const handleContinueToPreview = () => {
+    if (!validate()) return;
+    setStep("preview");
+  };
 
-    const scheduleData = {
-      now: scheduleMode === "now",
-      later: scheduleMode === "later",
-      date: scheduleMode === "later" ? date : undefined,
-      time: scheduleMode === "later" ? time : undefined,
-    };
+  const handleSave = async () => {
+    if (!isEditing && !validate()) return;
 
     if (announcementToEdit) {
       const payload: UpdateAnnouncementPayload = {
@@ -211,25 +217,67 @@ function AnnouncementFormModal({ onClose, announcementToEdit }: FormModalProps) 
 
   const isSaving = mutateStatus === "loading";
 
-  const footer = (
-    <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-      <button onClick={onClose} disabled={isSaving} style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" }}>
-        Cancel
-      </button>
+  // ── Footer varies by mode/step ──
+  let footer: React.ReactNode;
+  if (!isEditing && step === "form") {
+    footer = (
       <button
-        onClick={handleSave}
-        disabled={isSaving}
+        onClick={handleContinueToPreview}
         className="btn-primary"
-        style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+        style={{ width: "100%", padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer" }}
       >
-        {isSaving && <Loader2 size={14} className="animate-spin" />}
-        {announcementToEdit ? "Update Changes" : "Dispatch Announcement"}
+        Preview Announcement
       </button>
-    </div>
-  );
+    );
+  } else if (!isEditing && step === "preview") {
+    footer = (
+      <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+        <button
+          onClick={() => setStep("form")}
+          disabled={isSaving}
+          style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+        >
+          <ArrowLeft size={14} /> Back to Edit
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="btn-primary"
+          style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+        >
+          {isSaving && <Loader2 size={14} className="animate-spin" />}
+          Confirm & Dispatch
+        </button>
+      </div>
+    );
+  } else {
+    // Editing — unchanged single-step behavior
+    footer = (
+      <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+        <button onClick={onClose} disabled={isSaving} style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 500, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-muted)", cursor: "pointer" }}>
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="btn-primary"
+          style={{ flex: 1, padding: "10px", borderRadius: "12px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+        >
+          {isSaving && <Loader2 size={14} className="animate-spin" />}
+          Update Changes
+        </button>
+      </div>
+    );
+  }
+
+  const modalTitle = isEditing
+    ? "Modify Announcement"
+    : step === "preview"
+      ? "Preview Announcement"
+      : "Create New Announcement";
 
   return (
-    <Modal open onClose={onClose} title={announcementToEdit ? "Modify Announcement" : "Create New Announcement"} footer={footer}>
+    <Modal open onClose={onClose} title={modalTitle} footer={footer}>
       <style>{`
         .ann-schedule-row { display: flex; flex-direction: column; gap: 10px; }
         .ann-date-inputs  { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -238,45 +286,76 @@ function AnnouncementFormModal({ onClose, announcementToEdit }: FormModalProps) 
         }
       `}</style>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <FieldInput label="Title" placeholder="New Feature Update" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <FieldTextarea label="Message" placeholder="Provide complete notification descriptions..." rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
-        </div>
-
-        <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px" }}>
-          <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "10px" }}>Audience Targeting</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            {AUDIENCES.map((a) => (
-              <label key={a} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--color-text-main)", cursor: "pointer", padding: "8px 10px", borderRadius: "10px", border: `1px solid ${audience === a ? "var(--color-primary)" : "var(--color-border)"}`, backgroundColor: audience === a ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : "var(--color-background)" }}>
-                <input type="radio" name="audience" checked={audience === a} onChange={() => setAudience(a)} style={{ accentColor: "var(--color-primary)", width: "14px", height: "14px", flexShrink: 0 }} />
-                {a}
-              </label>
-            ))}
+      {!isEditing && step === "preview" ? (
+        // ── Preview: exactly what recipients / the log will show ──
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "4px 0" }}>
+          <div style={{ padding: "10px 14px", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", fontSize: "12px", color: "#1d4ed8" }}>
+            This is exactly how the announcement will be recorded. Review before dispatching.
           </div>
-        </div>
-
-        <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px" }}>
-          <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "10px" }}>Schedule Dispatch</p>
-          <div className="ann-schedule-row">
-            {(["now", "later"] as const).map((s) => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--color-text-main)", cursor: "pointer" }}>
-                <input type="radio" name="schedule" checked={scheduleMode === s} onChange={() => setScheduleMode(s)} style={{ accentColor: "var(--color-primary)", width: "14px", height: "14px" }} />
-                {s === "now" ? "Send immediately" : "Schedule for later date"}
-              </label>
-            ))}
+          <div>
+            <h4 style={{ fontSize: "16px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "6px" }}>{title}</h4>
+            <StatusBadge status={scheduleMode === "now" ? "sent" : "scheduled"} />
           </div>
-          
-          {scheduleMode === "later" && (
-            <div className="ann-date-inputs" style={{ marginTop: "12px" }}>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                style={{ flex: 1, minWidth: "120px", padding: "8px 12px", borderRadius: "10px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", outline: "none" }} />
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
-                style={{ flex: 1, minWidth: "100px", padding: "8px 12px", borderRadius: "10px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", outline: "none" }} />
+          <div style={{ backgroundColor: "var(--color-background)", padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--color-border)" }}>
+            <p style={{ fontSize: "13.5px", color: "var(--color-text-main)", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{message}</p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px", color: "var(--color-text-muted)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Users size={14} /> <strong>Audience:</strong> {getAudienceString(targetAudience)}
             </div>
-          )}
+            {scheduleMode === "now" ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <Calendar size={14} /> <strong>Dispatch:</strong> Immediately upon confirmation
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#d97706" }}>
+                <Info size={14} /> <strong>Scheduled for:</strong> {date} at {time}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        // ── Form ──
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <FieldInput label="Title" placeholder="New Feature Update" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <FieldTextarea label="Message" placeholder="Provide complete notification descriptions..." rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
+          </div>
+
+          <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "10px" }}>Audience Targeting</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              {AUDIENCES.map((a) => (
+                <label key={a} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--color-text-main)", cursor: "pointer", padding: "8px 10px", borderRadius: "10px", border: `1px solid ${audience === a ? "var(--color-primary)" : "var(--color-border)"}`, backgroundColor: audience === a ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : "var(--color-background)" }}>
+                  <input type="radio" name="audience" checked={audience === a} onChange={() => setAudience(a)} style={{ accentColor: "var(--color-primary)", width: "14px", height: "14px", flexShrink: 0 }} />
+                  {a}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ borderRadius: "14px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", padding: "14px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "10px" }}>Schedule Dispatch</p>
+            <div className="ann-schedule-row">
+              {(["now", "later"] as const).map((s) => (
+                <label key={s} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--color-text-main)", cursor: "pointer" }}>
+                  <input type="radio" name="schedule" checked={scheduleMode === s} onChange={() => setScheduleMode(s)} style={{ accentColor: "var(--color-primary)", width: "14px", height: "14px" }} />
+                  {s === "now" ? "Send immediately" : "Schedule for later date"}
+                </label>
+              ))}
+            </div>
+
+            {scheduleMode === "later" && (
+              <div className="ann-date-inputs" style={{ marginTop: "12px" }}>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                  style={{ flex: 1, minWidth: "120px", padding: "8px 12px", borderRadius: "10px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", outline: "none" }} />
+                <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+                  style={{ flex: 1, minWidth: "100px", padding: "8px 12px", borderRadius: "10px", fontSize: "13px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-main)", outline: "none" }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -305,9 +384,6 @@ export default function AnnouncementManagement({ onBack }: { onBack: () => void 
       dispatch(resetMutateStatus());
     }
   }, [mutateStatus, dispatch]);
-
-  const isUsingFallback = listStatus === "succeeded" && announcements.length === 0;
-  const displayedAnnouncements = isUsingFallback ? MOCK_FALLBACK_DATA : announcements;
 
   const stringifyAudience = (aud: ApiAnnouncement["audience"]) => {
     if (!aud) return "Custom";
@@ -354,12 +430,6 @@ export default function AnnouncementManagement({ onBack }: { onBack: () => void 
           </button>
         }
       >
-        {isUsingFallback && (
-          <div style={{ padding: "10px 16px", backgroundColor: "#fefcbf", border: "1px solid #fef08a", borderRadius: "10px", fontSize: "12px", color: "#a16207", marginTop: "16px", marginBottom: "-8px" }}>
-            💡 Operational logs are empty. Presenting temporary mock schemas. These drop away on manual dispatches.
-          </div>
-        )}
-
         <div style={{ borderRadius: "16px", border: "1px solid var(--color-border)", backgroundColor: "#ffffff", overflow: "hidden", marginTop: "20px" }}>
           
           {listStatus === "loading" && (
@@ -374,8 +444,14 @@ export default function AnnouncementManagement({ onBack }: { onBack: () => void 
             </div>
           )}
 
+          {listStatus === "succeeded" && announcements.length === 0 && (
+            <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "13.5px" }}>
+              No announcements yet. Click &quot;Create&quot; to dispatch your first one.
+            </div>
+          )}
+
           {/* Desktop Table */}
-          {listStatus === "succeeded" && (
+          {listStatus === "succeeded" && announcements.length > 0 && (
             <table className="ann-table">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
@@ -385,7 +461,7 @@ export default function AnnouncementManagement({ onBack }: { onBack: () => void 
                 </tr>
               </thead>
               <tbody>
-                {displayedAnnouncements.map((a: ApiAnnouncement) => (
+                {announcements.map((a: ApiAnnouncement) => (
                   <tr key={a.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "16px 24px", fontSize: "13.5px", fontWeight: 500, color: "var(--color-text-main)" }}>{a.title}</td>
                     <td style={{ padding: "16px 24px", fontSize: "13.5px", color: "var(--color-text-muted)" }}>{stringifyAudience(a.audience)}</td>
@@ -411,9 +487,9 @@ export default function AnnouncementManagement({ onBack }: { onBack: () => void 
           )}
 
           {/* Mobile Layout Structure */}
-          {listStatus === "succeeded" && (
+          {listStatus === "succeeded" && announcements.length > 0 && (
             <div className="ann-cards" style={{ padding: "12px" }}>
-              {displayedAnnouncements.map((a: ApiAnnouncement) => (
+              {announcements.map((a: ApiAnnouncement) => (
                 <div key={a.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "8px" }}>
                     <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)", flex: 1, minWidth: 0 }}>{a.title}</p>
