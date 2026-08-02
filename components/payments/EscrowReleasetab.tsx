@@ -9,6 +9,16 @@ import type { ApiEscrow } from "@/lib/api/paymentApi";
 
 const PAGE_SIZE = 10;
 
+const getClientName = (rec: Record<string, unknown>): string => {
+  const user = rec.user as { name?: string; username?: string } | null | undefined;
+  return user?.name || user?.username || String(rec.clientName ?? "") || String(rec.userId ?? "—");
+};
+
+const getExpertName = (rec: Record<string, unknown>): string => {
+  const expert = rec.expert as { name?: string; username?: string } | null | undefined;
+  return expert?.name || expert?.username || String(rec.expertName ?? "") || String(rec.expertId ?? "—");
+};
+
 // ── Moved outside — fixes react-hooks/static-components ──
 function StatusPill({ status }: { status?: string }) {
   const s = (status ?? "").toLowerCase();
@@ -63,8 +73,8 @@ function EscrowDetailModal({ escrow, onClose }: { escrow: EnrichedEscrow; onClos
 
           <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#6B7280", marginBottom: "14px" }}>Parties</p>
           <div style={{ backgroundColor: "#F9FAFB", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
-            <DetailRow label="Client ID:" value={escrow.userId} />
-            <DetailRow label="Expert ID:" value={escrow.expertId ?? "—"} />
+            <DetailRow label="Client:" value={getClientName(rec)} />
+            <DetailRow label="Expert:" value={getExpertName(rec)} />
           </div>
 
           <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#6B7280", marginBottom: "14px" }}>Payment</p>
@@ -112,11 +122,12 @@ export default function EscrowReleasesTab() {
 
   const filtered = data.filter((e) => {
     if (!search) return true;
-    const q = search.toLowerCase();
+    const q   = search.toLowerCase();
+    const rec = e as Record<string, unknown>;
     return (
-      (e.id ?? "").toLowerCase().includes(q)                          ||
-      (e.userId ?? "").toLowerCase().includes(q)                      ||
-      ((e.expertId ?? "") as string).toLowerCase().includes(q)
+      (e.id ?? "").toLowerCase().includes(q)          ||
+      getClientName(rec).toLowerCase().includes(q)     ||
+      getExpertName(rec).toLowerCase().includes(q)
     );
   });
 
@@ -188,14 +199,15 @@ export default function EscrowReleasesTab() {
                   {paginated.length === 0 ? (
                     <tr><td colSpan={7} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: "var(--color-text-muted)" }}>No escrows found.</td></tr>
                   ) : paginated.map((e) => {
+                    const rec    = e as Record<string, unknown>;
                     const urgent = e.daysLeft <= 1;
                     return (
                       <tr key={e.id} style={{ borderBottom: "1px solid var(--color-border)" }}
                         onMouseEnter={ev => (ev.currentTarget.style.backgroundColor = "#F9FAFB")}
                         onMouseLeave={ev => (ev.currentTarget.style.backgroundColor = "transparent")}>
                         <td style={{ ...TD, fontWeight: 600, fontFamily: "monospace", fontSize: "12px" }}>{e.id}</td>
-                        <td style={TD}>{e.userId}</td>
-                        <td style={TD}>{e.expertId ?? "—"}</td>
+                        <td style={TD}>{getClientName(rec)}</td>
+                        <td style={TD}>{getExpertName(rec)}</td>
                         <td style={{ ...TD, fontWeight: 600 }}>₦{Number(e.amount).toLocaleString()}</td>
                         <td style={{ ...TD, fontWeight: 600, color: urgent ? "#dc2626" : "#d97706" }}>{e.daysLeft} {e.daysLeft === 1 ? "day" : "days"}</td>
                         <td style={TD}><StatusPill status={e.escrowStatus} /></td>
@@ -217,12 +229,13 @@ export default function EscrowReleasesTab() {
               {paginated.length === 0
                 ? <p style={{ textAlign: "center", padding: "40px", fontSize: "13px", color: "var(--color-text-muted)" }}>No escrows found.</p>
                 : paginated.map((e) => {
+                  const rec    = e as Record<string, unknown>;
                   const urgent = e.daysLeft <= 1;
                   return (
                     <div key={e.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#fff", display: "flex", alignItems: "center", gap: "12px" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: 600, color: "var(--color-text-main)", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.id}</p>
-                        <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginBottom: 4 }}>Client: {e.userId} · Expert: {e.expertId ?? "—"}</p>
+                        <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginBottom: 4 }}>Client: {getClientName(rec)} · Expert: {getExpertName(rec)}</p>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <StatusPill status={e.escrowStatus} />
                           <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)" }}>₦{Number(e.amount).toLocaleString()}</span>

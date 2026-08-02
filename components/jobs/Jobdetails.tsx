@@ -131,13 +131,7 @@ export default function JobDetailView({ job, onBack }: Props) {
       : fmtMoney(budgetObj.amount)
     : "—";
 
-  const finalAmountBeforeInspection = fmtMoney(
-    job["finalAmountBeforeInspection"] as number | undefined,
-    fmtMoney(job["finalAmount"] as number | undefined),
-  );
-  const finalAmountAfterInspection = fmtMoney(
-    job["finalAmountAfterInspection"] as number | undefined,
-  );
+  const amount = fmtMoney(job["amount"] as number | undefined);
 
   const commissionAmt = fmtMoney(job["commissionAmount"] as number | undefined);
   const expertPayout  = fmtMoney(job["expertPayout"]    as number | undefined);
@@ -154,9 +148,16 @@ export default function JobDetailView({ job, onBack }: Props) {
   // ── Expert ────────────────────────────────────────────
   const bids = (job["bids"] as Array<{
     status: string;
+    amount?: number;
     expert?: { name?: string; phone?: string; email?: string; rating?: number; commission?: number };
   }> | undefined) ?? [];
   const acceptedBid = bids.find(b => b.status === "accepted");
+
+  // ── Final Amounts ─────────────────────────────────────
+  // Before inspection: the job's posted amount.
+  // After inspection: the accepted bid's amount (set once an expert's bid is accepted).
+  const finalAmountBeforeInspection = fmtMoney(job["amount"] as number | undefined);
+  const finalAmountAfterInspection = fmtMoney(acceptedBid?.amount as number | undefined);
 
   const expertObj    = job["expert"] as { name?: string; phone?: string; email?: string; rating?: number; commission?: number } | undefined;
   const expertName   = expertObj?.name   ?? acceptedBid?.expert?.name   ?? null;
@@ -212,6 +213,7 @@ export default function JobDetailView({ job, onBack }: Props) {
             <InfoRow label="Category:"                       value={val(job, "category")} />
             <InfoRow label="Description:"                    value={val(job, "description")} />
             <InfoRow label="Location:"                       value={location} />
+            <InfoRow label="Amount:"                         value={amount} />
             <InfoRow label="Budget:"                         value={budget} />
             <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
             <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />

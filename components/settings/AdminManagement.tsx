@@ -64,6 +64,47 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
+// ── Toggle switch ────────────────────────────────────────────────────────────
+function Switch({ checked, onChange, label, description }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      gap: "12px", padding: "10px 14px", borderRadius: "10px",
+      border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)",
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", margin: 0 }}>{label}</p>
+        {description && (
+          <p style={{ fontSize: "11.5px", color: "var(--color-text-muted)", margin: "2px 0 0" }}>{description}</p>
+        )}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        style={{
+          flexShrink: 0, width: "40px", height: "22px", borderRadius: "999px",
+          border: "none", cursor: "pointer", position: "relative",
+          backgroundColor: checked ? "#16a34a" : "#D1D5DB",
+          transition: "background-color 0.15s ease",
+        }}
+      >
+        <span style={{
+          position: "absolute", top: "2px", left: checked ? "20px" : "2px",
+          width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#fff",
+          transition: "left 0.15s ease", boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // ── Edit form state type ───────────────────────────────────────────────────────
 
 interface EditFormState extends UpdateAdminPayload {
@@ -82,10 +123,10 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const [addForm, setAddForm] = useState<RegisterAdminPayload>({
-    name: "", email: "", password: "", role: "view",
+    name: "", email: "", password: "", role: "view", twoFactorAuth: false,
   });
   const [editForm, setEditForm] = useState<EditFormState>({
-    name: "", email: "", role: "view",
+    name: "", email: "", role: "view", twoFactorAuth: false,
   });
 
   const isMutating   = mutateStatus === "loading";
@@ -108,7 +149,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       .then(() => {
         toast.success("Admin added");
         setAddOpen(false);
-        setAddForm({ name: "", email: "", password: "", role: "view" });
+        setAddForm({ name: "", email: "", password: "", role: "view", twoFactorAuth: false });
       })
       .catch((err: string) => toast.error("Failed to add admin", { description: err }));
   };
@@ -116,7 +157,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
   const handleEdit = () => {
     if (!editTarget) return;
 
-    const { role, ...rest } = editForm;
+    const { role, twoFactorAuth, ...rest } = editForm;
     const promises: Promise<unknown>[] = [];
 
     // name / email → PUT /admin/{id}
@@ -130,6 +171,14 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
     if (role) {
       promises.push(
         dispatch(changeRole({ id: editTarget, role })).unwrap()
+      );
+    }
+
+    // 2FA → GET /admin/toggle-2fa/{id} (flips the current value, so only
+    // call it when the desired value actually differs from what's stored)
+    if (editAdmin_ && typeof twoFactorAuth === "boolean" && twoFactorAuth !== editAdmin_.twoFactorAuth) {
+      promises.push(
+        dispatch(toggleAdmin2FA(editTarget)).unwrap()
       );
     }
 
@@ -160,7 +209,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
 
   const openEdit = (admin: typeof list[number]) => {
     setEditTarget(admin.id);
-    setEditForm({ name: admin.name, email: admin.email, role: admin.role ?? "view" });
+    setEditForm({ name: admin.name, email: admin.email, role: admin.role ?? "view", twoFactorAuth: admin.twoFactorAuth });
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -285,7 +334,7 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       <Modal
         key={addOpen ? "add-open" : "add-closed"}
         open={addOpen}
-        onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "view" }); }}
+        onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "view", twoFactorAuth: false }); }}
         title="Add New Admin"
         size="sm"
         footer={
@@ -361,6 +410,12 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
           <p style={{ fontSize: "12px", color: "#6B7280", backgroundColor: "#F9FAFB", borderRadius: "8px", padding: "8px 12px", margin: 0, lineHeight: 1.6, border: "1px solid #E5E7EB" }}>
             {ROLE_DESCRIPTIONS[(addForm.role ?? "view") as AdminRole]}
           </p>
+          <Switch
+            label="Two-Factor Authentication"
+            description="Require a second verification step at sign-in"
+            checked={!!addForm.twoFactorAuth}
+            onChange={(v) => setAddForm((f) => ({ ...f, twoFactorAuth: v }))}
+          />
         </div>
       </Modal>
 
@@ -425,6 +480,12 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
           <p style={{ fontSize: "12px", color: "#6B7280", backgroundColor: "#F9FAFB", borderRadius: "8px", padding: "8px 12px", margin: 0, lineHeight: 1.6, border: "1px solid #E5E7EB" }}>
             {ROLE_DESCRIPTIONS[(editForm.role ?? "view") as AdminRole]}
           </p>
+          <Switch
+            label="Two-Factor Authentication"
+            description="Require a second verification step at sign-in"
+            checked={!!editForm.twoFactorAuth}
+            onChange={(v) => setEditForm((f) => ({ ...f, twoFactorAuth: v }))}
+          />
         </div>
         {editAdmin_ && (
           <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "12px" }}>

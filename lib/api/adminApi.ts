@@ -25,15 +25,17 @@ export interface AdminResponse {
 }
 
 export interface RegisterAdminPayload {
-  name:     string;
-  email:    string;
-  password: string;
-  role?:    string;
+  name:           string;
+  email:          string;
+  password:       string;
+  role?:          string;
+  twoFactorAuth?: boolean;
 }
 
 export interface UpdateAdminPayload {
-  name?:  string;
-  email?: string;
+  name?:          string;
+  email?:         string;
+  twoFactorAuth?: boolean;
 }
 
 export interface ChangeRolePayload {

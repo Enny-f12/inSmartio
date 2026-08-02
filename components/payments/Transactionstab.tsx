@@ -17,6 +17,11 @@ const truncateRef = (ref: string) => {
   return parts.slice(0, 3).join("_");
 };
 
+const getUserName = (rec: Record<string, unknown>): string => {
+  const user = rec.user as { name?: string; username?: string } | null | undefined;
+  return user?.name || user?.username || String(rec.clientName ?? "") || String(rec.userId ?? "—");
+};
+
 function StatusPill({ status }: { status: string }) {
   const s = (status ?? "").toLowerCase();
   let style = { color: "#6B7280", background: "#F9FAFB", border: "1px solid #E5E7EB" };
@@ -64,10 +69,10 @@ export default function TransactionsTab() {
     const rec = t as Record<string, unknown>;
     if (search) {
       const q    = search.toLowerCase();
-      const user = String(rec.userId       ?? "").toLowerCase();
+      const name = getUserName(rec).toLowerCase();
       const ref  = String(rec.reference    ?? "").toLowerCase();
       const type = String(rec.resourceType ?? "").toLowerCase();
-      if (!user.includes(q) && !ref.includes(q) && !type.includes(q) && !t.id?.toLowerCase().includes(q)) return false;
+      if (!name.includes(q) && !ref.includes(q) && !type.includes(q) && !t.id?.toLowerCase().includes(q)) return false;
     }
     if (typeFilter   && !String(rec.resourceType ?? "").toLowerCase().includes(typeFilter)) return false;
     if (statusFilter && String(rec.status ?? "").toLowerCase() !== statusFilter)            return false;
@@ -211,7 +216,7 @@ export default function TransactionsTab() {
                       <tr key={t.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                         <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>{fmt(t.createdAt)}</td>
                         <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", textTransform: "capitalize" }}>{String(rec.resourceType ?? "—")}</td>
-                        <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", fontWeight: 500 }}>{String(rec.userId ?? "—")}</td>
+                        <td style={{ padding: "15px 20px", fontSize: "13px", color: "var(--color-text-main)", fontWeight: 500 }}>{getUserName(rec)}</td>
                         <td style={{ padding: "15px 20px", fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", whiteSpace: "nowrap" }}>₦{Number(t.amount).toLocaleString()}</td>
                         <td style={{ padding: "15px 20px" }}><StatusPill status={String(t.status ?? "—")} /></td>
                         <td style={{ padding: "15px 20px", fontSize: "12px", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
@@ -234,7 +239,7 @@ export default function TransactionsTab() {
                   <div key={t.id} style={{ padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "#fff" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "6px" }}>
                       <div>
-                        <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{String(rec.userId ?? "—")}</p>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-main)", marginBottom: "2px" }}>{getUserName(rec)}</p>
                         <p style={{ fontSize: "12px", color: "var(--color-text-muted)", textTransform: "capitalize" }}>{String(rec.resourceType ?? "—")}</p>
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>

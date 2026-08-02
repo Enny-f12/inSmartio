@@ -25,6 +25,22 @@ export interface ApiTransaction {
   releasedAt?:      string | null;
   createdAt:        string;
   updatedAt?:       string;
+  user?: {
+    id:       string;
+    name?:    string;
+    email?:   string;
+    username?: string;
+    [key: string]: unknown;
+  } | null;
+  expert?: {
+    id:       string;
+    name?:    string;
+    email?:   string;
+    username?: string;
+    [key: string]: unknown;
+  } | null;
+  clientName?:      string;
+  expertName?:      string;
   [key: string]:    unknown;
 }
 
@@ -34,10 +50,10 @@ export interface TransactionMeta {
 }
 
 export interface ApiBalances {
-  paystackBalance?:        number;
-  korapayBalance?:         number;
-  paystackEscrowsBalance?: number;
-  korapayEscrowsBalance?:  number;
+  balance:  number;
+  payout:   number;
+  revenue:  number;
+  pending:  number;
   [key: string]: unknown;
 }
 
