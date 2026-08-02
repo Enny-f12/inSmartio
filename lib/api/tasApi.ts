@@ -25,7 +25,19 @@ export interface ApiTas {
   recruitExpectations?: Record<string, unknown> | string | null;
   commission?:         unknown;
   commissionsGiven?:   unknown[];
-  experts?:            unknown;
+  commissions?:        unknown[];
+  // Recruit summary + roster — backend key is `expert` (singular)
+  expert?: {
+    total?:         number;
+    active?:        number;
+    activeExperts?: unknown[];
+    experts?:       unknown[];
+  };
+  // Balances / earnings — actual backend field names
+  currentBalance?:    number; // shown in UI as "Available Balance"
+  thisMonthEarnings?: number; // shown in UI as "This Month"
+  earnings?:          number; // shown in UI as "Total Earnings"
+  pendingBalance?:    number;
   createdAt:           string;
   updatedAt:           string;
   [key: string]:       unknown;

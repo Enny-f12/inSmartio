@@ -14,13 +14,6 @@ import { downloadReport } from "@/lib/api/reportApi";
 import type { PayTab } from "@/components/payments/types";
 import { PAY_TABS }    from "@/components/payments/types";
 
-const MOCK_BALANCES = {
-  paystackBalance:        4200000,
-  korapayBalance:         1850000,
-  paystackEscrowsBalance: 980000,
-  korapayEscrowsBalance:  320000,
-};
-
 function StatCard({ label, value, sub, loading }: { label: string; value: string; sub?: string; loading?: boolean }) {
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid var(--color-border)", borderRadius: "14px", padding: "16px 20px", flex: 1, minWidth: "140px" }}>
@@ -47,9 +40,7 @@ export default function PaymentsPage() {
   }, [dispatch, balancesStatus]);
 
   const loading = balancesStatus === "loading" || balancesStatus === "idle";
-  const b = (balancesStatus === "succeeded" && balances)
-    ? balances as { paystackBalance?: number; korapayBalance?: number; paystackEscrowsBalance?: number; korapayEscrowsBalance?: number }
-    : MOCK_BALANCES;
+  const b = balancesStatus === "succeeded" ? balances : null;
   const fmt = (v?: number) => v != null ? `₦${Number(v).toLocaleString()}` : "—";
 
   const handleExport = async () => {
@@ -99,10 +90,10 @@ export default function PaymentsPage() {
             </button>
           </div>
           <div className="pay-stat-cards">
-            <StatCard label="Escrow"          value={fmt(b?.paystackEscrowsBalance)} sub="Held"       loading={loading} />
-            <StatCard label="Payouts"          value={fmt(b?.paystackBalance)}        sub="Processed"  loading={loading} />
-            <StatCard label="Revenue"          value={fmt(b?.korapayBalance)}         sub="Platform"   loading={loading} />
-            <StatCard label="Pending"          value={fmt(b?.korapayEscrowsBalance)}  sub="To Release" loading={loading} />
+            <StatCard label="Escrow"  value={fmt(b?.balance)} sub="Held"       loading={loading} />
+            <StatCard label="Payouts" value={fmt(b?.payout)}  sub="Processed"  loading={loading} />
+            <StatCard label="Revenue" value={fmt(b?.revenue)} sub="Platform"   loading={loading} />
+            <StatCard label="Pending" value={fmt(b?.pending)} sub="To Release" loading={loading} />
           </div>
         </div>
 
