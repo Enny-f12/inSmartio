@@ -34,9 +34,7 @@ export default function DashboardLineChart({
 
   // ── SVG viewport ─────────────────────────────────────────
   const W = 500, H = 220;
-  const PL = 16, PR = 16, PT = 16, PB = 36;
-  const chartW = W - PL - PR;
-  const chartH = H - PT - PB;
+  const PT = 16, PB = 36, PR = 16;
 
   const minV  = 0;
   const dataMax = Math.max(...data, 0);
@@ -44,6 +42,19 @@ export default function DashboardLineChart({
     ? (Math.ceil((dataMax * 1.1 || yStep) / yStep) * yStep) || yStep
     : Math.ceil(dataMax * 1.15) || 1;
   const range = maxV - minV;
+
+  const fmt = yFormatter ?? ((v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+
+  const TICKS = yStep ? Math.max(1, Math.round(maxV / yStep)) : 4;
+  const tickValues = Array.from({ length: TICKS + 1 }, (_, i) => (yStep ? i * yStep : minV + (range / TICKS) * i));
+
+  // Left margin sized to the widest formatted label (e.g. "₦200K" needs more
+  // room than "129") so it can't get clipped by the card's overflow:hidden.
+  const maxLabelLen = Math.max(...tickValues.map((v) => fmt(v).length), 1);
+  const PL = Math.min(64, Math.max(18, 12 + maxLabelLen * 5.6));
+
+  const chartW = W - PL - PR;
+  const chartH = H - PT - PB;
 
   const xOf = (i: number) => PL + (i / (data.length - 1)) * chartW;
   const yOf = (v: number) => PT + chartH - ((v - minV) / range) * chartH;
@@ -70,11 +81,7 @@ export default function DashboardLineChart({
     + ` L ${xOf(0)} ${PT + chartH} Z`;
 
   // ── Y grid ticks ─────────────────────────────────────────
-  const TICKS = yStep ? Math.max(1, Math.round(maxV / yStep)) : 4;
-  const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => {
-    const v = yStep ? i * yStep : minV + (range / TICKS) * i;
-    return { v, y: yOf(v) };
-  });
+  const yTicks = tickValues.map((v) => ({ v, y: yOf(v) }));
 
   // ── Tooltip positioning ───────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -91,8 +98,6 @@ export default function DashboardLineChart({
     setTooltip({ x: px, y: py, label: labels[i], value: data[i], idx: i });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, labels]);
-
-  const fmt = yFormatter ?? ((v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
 
   return (
     <div ref={wrapRef} style={{ position: "relative", userSelect: "none" }}>

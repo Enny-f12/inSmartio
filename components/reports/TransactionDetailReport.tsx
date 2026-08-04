@@ -73,8 +73,7 @@ export default function TransactionDetailReport() {
 
   const kpiTotalTxn = pickSummary(summary, ["totalTransactions"]);
   const kpiVolume = pickSummary(summary, ["totalVolume"]);
-  const kpiHolding = pickSummary(summary, ["holdingVolume"]);
-  const kpiReleased = pickSummary(summary, ["releasedVolume"]);
+ 
 
   const handleExport = async (format: ReportFormat) => {
     const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format, fromDate: dateFrom || undefined, toDate: dateTo || undefined }));
@@ -120,29 +119,29 @@ export default function TransactionDetailReport() {
         </select>
       </div>
 
-      {/* KPIs */}
-      {loading ? (
-        <SkelKPIRow count={4} />
-      ) : (
-        <div className="rp-kpis" style={{ display: "grid", gap: "14px" }}>
-          <div style={kpiCard}>
-            <span style={kpiLabel}><Receipt size={13} /> Total Transactions</span>
-            <span style={kpiValue}>{kpiTotalTxn != null ? kpiTotalTxn.toLocaleString() : "—"}</span>
-          </div>
-          <div style={kpiCard}>
-            <span style={kpiLabel}><TrendingUp size={13} /> Total Volume</span>
-            <span style={kpiValue}>{kpiVolume != null ? fmtNaira(kpiVolume) : "—"}</span>
-          </div>
-          <div style={kpiCard}>
-            <span style={kpiLabel}><Lock size={13} /> Holding Volume</span>
-            <span style={kpiValue}>{kpiHolding != null ? fmtNaira(kpiHolding) : "—"}</span>
-          </div>
-          <div style={kpiCard}>
-            <span style={kpiLabel}><CheckCircle2 size={13} /> Released Volume</span>
-            <span style={kpiValue}>{kpiReleased != null ? fmtNaira(kpiReleased) : "—"}</span>
-          </div>
-        </div>
-      )}
+     {/* KPIs */}
+{loading ? (
+  <SkelKPIRow count={4} />
+) : (
+  <div className="rp-kpis" style={{ display: "grid", gap: "14px" }}>
+    <div style={kpiCard}>
+      <span style={kpiLabel}><Receipt size={13} /> Total Transactions</span>
+      <span style={kpiValue}>{kpiTotalTxn != null ? kpiTotalTxn.toLocaleString() : "—"}</span>
+    </div>
+    <div style={kpiCard}>
+      <span style={kpiLabel}><TrendingUp size={13} /> Total Volume</span>
+      <span style={kpiValue}>{kpiVolume != null ? fmtNaira(kpiVolume) : "—"}</span>
+    </div>
+    <div style={kpiCard}>
+      <span style={kpiLabel}><Lock size={13} /> Total Fees</span>
+      <span style={kpiValue}>—</span>
+    </div>
+    <div style={kpiCard}>
+      <span style={kpiLabel}><CheckCircle2 size={13} /> Total TAS comm</span>
+      <span style={kpiValue}>—</span>
+    </div>
+  </div>
+)}
 
       {/* Table */}
       <div style={card}>

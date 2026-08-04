@@ -105,7 +105,7 @@ export default function UserGrowthReport() {
           </select>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "12px", color: colors.textFaint }}>Compared to previous period</span>
+          
           <ExportMenuButton onExport={handleExport} exporting={downloadStatus === "loading"} />
         </div>
       </div>
