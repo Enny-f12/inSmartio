@@ -71,7 +71,10 @@ export const deleteAdmin = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/admin/${id}`);
 };
 
-export const toggle2FA = async (id: string): Promise<Admin> => {
-  const { data } = await axiosInstance.get<AdminResponse>(`/admin/toggle-2fa/${id}`);
+
+export const toggle2FA = async (id: string, enable: boolean): Promise<Admin> => {
+  const { data } = await axiosInstance.get<AdminResponse>(`/admin/toggle-2fa/${id}`, {
+    params: { enable },
+  });
   return data.data;
 };

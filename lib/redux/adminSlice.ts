@@ -56,10 +56,13 @@ export const removeAdmin = createAsyncThunk(
   }
 );
 
+// NOTE: backend endpoint is GET /admin/toggle-2fa/{id}?enable=true|false
+// `enable` is a required boolean query param, not an implicit flip —
+// so the thunk must take the desired target state explicitly.
 export const toggleAdmin2FA = createAsyncThunk(
   "admin/toggle2fa",
-  async (id: string, { rejectWithValue }) => {
-    try { return await toggle2FA(id); }
+  async ({ id, enable }: { id: string; enable: boolean }, { rejectWithValue }) => {
+    try { return await toggle2FA(id, enable); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to toggle 2FA")); }
   }
 );

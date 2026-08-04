@@ -3,6 +3,10 @@ import axiosInstance from "./axiosInstance";
 export interface LoginPayload {
   email: string;
   password: string;
+  // Sent only once the backend asks for it (401 + 2FA-required message).
+  // TODO: confirm exact field name in Swagger — using "code" as a placeholder;
+  // backend may expect "twoFactorCode" or "otp" instead.
+  code?: string;
 }
 
 export interface Admin {

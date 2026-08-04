@@ -174,11 +174,12 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
       );
     }
 
-    // 2FA → GET /admin/toggle-2fa/{id} (flips the current value, so only
-    // call it when the desired value actually differs from what's stored)
+    // 2FA → GET /admin/toggle-2fa/{id}?enable=true|false
+    // `enable` is a required query param, so we pass the desired target
+    // state explicitly and only call it when the value actually changed.
     if (editAdmin_ && typeof twoFactorAuth === "boolean" && twoFactorAuth !== editAdmin_.twoFactorAuth) {
       promises.push(
-        dispatch(toggleAdmin2FA(editTarget)).unwrap()
+        dispatch(toggleAdmin2FA({ id: editTarget, enable: twoFactorAuth })).unwrap()
       );
     }
 
@@ -201,9 +202,10 @@ export default function AdminManagement({ onBack }: { onBack: () => void }) {
   };
 
   const handleToggle2FA = (id: string, current: boolean, name: string) => {
-    dispatch(toggleAdmin2FA(id))
+    const nextValue = !current;
+    dispatch(toggleAdmin2FA({ id, enable: nextValue }))
       .unwrap()
-      .then(() => toast.success(`2FA ${current ? "disabled" : "enabled"} for ${name}`))
+      .then(() => toast.success(`2FA ${nextValue ? "enabled" : "disabled"} for ${name}`))
       .catch((err: string) => toast.error("Failed to toggle 2FA", { description: err }));
   };
 
