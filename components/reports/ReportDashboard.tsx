@@ -74,6 +74,8 @@ export default function ReportDashboard({ onNavigate }: { onNavigate: (key: Repo
               color={colors.primary}
               data={revenueTrend}
               labels={revenueTrendLabels}
+              yStep={50000}
+              yFormatter={(v) => `₦${(v / 1000).toFixed(0)}K`}
               statValue={fmtNaira(dashboardKPIs.revenue.value)}
             />
           </div>

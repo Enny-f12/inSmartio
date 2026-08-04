@@ -10,6 +10,10 @@ interface DashboardLineChartProps {
   labels:     string[];
   color?:     string;
   statValue?: string;  // real value from API e.g. "4 users" or "₦0"
+  /** Fixed y-axis tick increment, e.g. 50 or 50000. Omit to fall back to 4 auto-divided ticks. */
+  yStep?:      number;
+  /** Formats each y-axis tick value. Defaults to compact "1.2k" style. */
+  yFormatter?: (value: number) => string;
 }
 
 interface Tooltip {
@@ -21,7 +25,7 @@ interface Tooltip {
 }
 
 export default function DashboardLineChart({
-  title, yLabel, xLabel, data, labels, color = "#2563eb", statValue,
+  title, yLabel, xLabel, data, labels, color = "#2563eb", statValue, yStep, yFormatter,
 }: DashboardLineChartProps) {
   const svgRef   = useRef<SVGSVGElement>(null);
   const wrapRef  = useRef<HTMLDivElement>(null);
@@ -35,7 +39,10 @@ export default function DashboardLineChart({
   const chartH = H - PT - PB;
 
   const minV  = 0;
-  const maxV  = Math.ceil(Math.max(...data) * 1.15) || 1;
+  const dataMax = Math.max(...data, 0);
+  const maxV  = yStep
+    ? (Math.ceil((dataMax * 1.1 || yStep) / yStep) * yStep) || yStep
+    : Math.ceil(dataMax * 1.15) || 1;
   const range = maxV - minV;
 
   const xOf = (i: number) => PL + (i / (data.length - 1)) * chartW;
@@ -63,9 +70,9 @@ export default function DashboardLineChart({
     + ` L ${xOf(0)} ${PT + chartH} Z`;
 
   // ── Y grid ticks ─────────────────────────────────────────
-  const TICKS = 4;
+  const TICKS = yStep ? Math.max(1, Math.round(maxV / yStep)) : 4;
   const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => {
-    const v = minV + (range / TICKS) * i;
+    const v = yStep ? i * yStep : minV + (range / TICKS) * i;
     return { v, y: yOf(v) };
   });
 
@@ -85,7 +92,7 @@ export default function DashboardLineChart({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, labels]);
 
-  const fmt = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
+  const fmt = yFormatter ?? ((v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
 
   return (
     <div ref={wrapRef} style={{ position: "relative", userSelect: "none" }}>
@@ -122,7 +129,7 @@ export default function DashboardLineChart({
         }}>
           <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 2px", fontWeight: 500 }}>{tooltip.label}</p>
           <p style={{ fontSize: "17px", fontWeight: 700, margin: 0, color: "#fff" }}>
-            {tooltip.value.toLocaleString()}
+            {yFormatter ? yFormatter(tooltip.value) : tooltip.value.toLocaleString()}
           </p>
           {/* arrow */}
           <span style={{

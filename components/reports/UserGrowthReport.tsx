@@ -1,42 +1,93 @@
-// components/UserGrowthReport.tsx
+// app/(dashboard)/reports/components/UserGrowthReport.tsx
 "use client";
 
-import { useState } from "react";
-import { UserPlus, TrendingUp, TrendingDown, Users, Download, Eye, Pencil } from "lucide-react";
-import { colors, card, kpiCard, kpiLabel, kpiValue, kpiDelta, th, thFirst, td, tdFirst, exportBtn } from "./shared";
+import { useEffect, useState } from "react";
+import { UserPlus, TrendingUp, TrendingDown, Users, Eye } from "lucide-react";
+import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
+import type { ReportType, ReportFormat } from "@/lib/api/detailedReportApi";
+import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst } from "./shared";
+import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelChart, SkelTableRows, SkelCardRows } from "./Skeleton";
 import DashboardLineChart from "./DashboardLineChart";
 import { HorizontalBarList } from "./ChartBits";
-import { useSimulatedLoad } from "./useSimulatedLoad";
-import { experts, userGrowthKPIs, userGrowthByRegion } from "./mockData";
+import { pick, pickSummary, matchesFilter } from "./rowUtils";
+import { userGrowthByRegion } from "./mockData";
+import { RowDetailModal } from "./RowDetailModal";
+
+const REPORT_TYPE: ReportType = "user-growth";
+
+type Row = Record<string, unknown>;
 
 const PERIOD_OPTIONS = ["July 2026", "June 2026", "May 2026", "Q2 2026"];
 const USER_TYPE_OPTIONS = ["All User Types", "Clients", "Experts", "TAS"];
 const REGION_OPTIONS = ["All Regions", "MN-W", "IS-E", "MN-N", "MN-E", "IS-N"];
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 
+// Illustrative until the API exposes a trends endpoint (no time-series data in the confirmed response).
 const growthTrend = [30, 55, 60, 65, 68, 90, 112];
 const growthTrendLabels = ["Day 1", "Day 5", "Day 10", "Day 15", "Day 20", "Day 25", "Day 30"];
 
 function statusPill(status: string) {
+  const s = status.toLowerCase();
   const map: Record<string, { bg: string; fg: string }> = {
-    Active: { bg: colors.greenBg, fg: colors.green },
-    Pending: { bg: colors.amberBg, fg: colors.amber },
-    Suspended: { bg: colors.redBg, fg: colors.red },
+    active: { bg: colors.greenBg, fg: colors.green },
+    pending: { bg: colors.amberBg, fg: colors.amber },
+    suspended: { bg: colors.redBg, fg: colors.red },
   };
-  const c = map[status] ?? { bg: "#F3F4F6", fg: colors.textMuted };
+  const c = map[s] ?? { bg: "#F3F4F6", fg: colors.textMuted };
   return <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>{status}</span>;
 }
 
 export default function UserGrowthReport() {
+  const dispatch = useAppDispatch();
+  const { summary, rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
+
+  useEffect(() => {
+    dispatch(setReportType(REPORT_TYPE));
+    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE }));
+  }, [dispatch]);
+
   const [period, setPeriod] = useState("July 2026");
   const [userType, setUserType] = useState("All User Types");
   const [region, setRegion] = useState("All Regions");
   const [tier, setTier] = useState("All Tiers");
-  const loading = useSimulatedLoad([period, userType, region, tier]);
+  const [selected, setSelected] = useState<Row | null>(null);
+
+  const loading = listStatus === "loading" || listStatus === "idle";
+
+  const handleExport = async (format: ReportFormat) => {
+    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format }));
+    if (downloadReport.fulfilled.match(action)) {
+      const a = document.createElement("a");
+      a.href = action.payload;
+      a.download = `user-growth_${new Date().toISOString().split("T")[0]}.${format}`;
+      a.click();
+      dispatch(clearDownloadUrl());
+    }
+  };
+
+  const filtered = (rows as Row[]).filter((r) => {
+    if (userType !== "All User Types" && !matchesFilter(pick(r, ["userType", "type"]), userType)) return false;
+    if (region !== "All Regions" && !matchesFilter(pick(r, ["region"]), region)) return false;
+    if (tier !== "All Tiers" && !matchesFilter(pick(r, ["tier"]), tier.replace("Tier ", ""))) return false;
+    return true;
+  });
+
+  // growthRate / churnRate / activeUsers are confirmed NOT present in this
+  // endpoint's summary yet — shown as "—" until the backend adds them,
+  // same pattern as every other report screen's KPI cards.
+  const kpiNewUsers = pickSummary(summary, ["newUsers"]);
+  const kpiGrowthRate = pickSummary(summary, ["growthRate"]);
+  const kpiChurnRate = pickSummary(summary, ["churnRate"]);
+  const kpiActiveUsers = pickSummary(summary, ["activeUsers"]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {selected && (
+        <RowDetailModal title="User Detail" row={selected} onClose={() => setSelected(null)} />
+      )}
+
       {/* Controls */}
       <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -53,7 +104,10 @@ export default function UserGrowthReport() {
             {TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}
           </select>
         </div>
-        <span style={{ fontSize: "12px", color: colors.textFaint, alignSelf: "center" }}>Compared to previous period</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "12px", color: colors.textFaint }}>Compared to previous period</span>
+          <ExportMenuButton onExport={handleExport} exporting={downloadStatus === "loading"} />
+        </div>
       </div>
 
       {/* KPIs */}
@@ -63,41 +117,29 @@ export default function UserGrowthReport() {
         <div className="rp-kpis" style={{ display: "grid", gap: "14px" }}>
           <div style={kpiCard}>
             <span style={kpiLabel}><UserPlus size={13} /> New Users</span>
-            <span style={kpiValue}>{userGrowthKPIs.newUsers.toLocaleString()}</span>
-            <span style={kpiDelta(true)}>↑ 18%</span>
+            <span style={kpiValue}>{kpiNewUsers != null ? kpiNewUsers.toLocaleString() : "—"}</span>
           </div>
           <div style={kpiCard}>
             <span style={kpiLabel}><TrendingUp size={13} /> Growth Rate</span>
-            <span style={kpiValue}>+{userGrowthKPIs.growthRate}%</span>
-            <span style={kpiDelta(true)}>↑ 5%</span>
+            <span style={kpiValue}>{kpiGrowthRate != null ? `${kpiGrowthRate}%` : "—"}</span>
           </div>
           <div style={kpiCard}>
             <span style={kpiLabel}><TrendingDown size={13} /> Churn Rate</span>
-            <span style={kpiValue}>{userGrowthKPIs.churnRate}%</span>
-            <span style={kpiDelta(false)}>↓ 2%</span>
+            <span style={kpiValue}>{kpiChurnRate != null ? `${kpiChurnRate}%` : "—"}</span>
           </div>
           <div style={kpiCard}>
             <span style={kpiLabel}><Users size={13} /> Active Users</span>
-            <span style={kpiValue}>{userGrowthKPIs.activeUsers.toLocaleString()}</span>
-            <span style={kpiDelta(true)}>↑ 15%</span>
+            <span style={kpiValue}>{kpiActiveUsers != null ? kpiActiveUsers.toLocaleString() : "—"}</span>
           </div>
         </div>
       )}
 
-      {/* Trend chart */}
+      {/* Trend chart — illustrative until a trends endpoint exists */}
       {loading ? (
         <SkelChart height={170} />
       ) : (
         <div style={card}>
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "14px 20px 0", gap: "12px" }}>
-            <div style={{ display: "flex", gap: "12px", fontSize: "11.5px", color: colors.textMuted, alignItems: "center" }}>
-              <Legend color={colors.primary} label="Clients" />
-              <Legend color="#10B981" label="Experts" />
-              <Legend color="#F59E0B" label="TAS" />
-            </div>
-            <button style={{ ...exportBtn("ghost"), padding: "5px 10px" }}><Download size={12} /> Export</button>
-          </div>
-          <div style={{ padding: "0 20px 20px" }}>
+          <div style={{ padding: "20px 20px 20px" }}>
             <DashboardLineChart
               title="User Growth Trends (Last 30 Days)"
               yLabel="New Users"
@@ -105,17 +147,16 @@ export default function UserGrowthReport() {
               color={colors.primary}
               data={growthTrend}
               labels={growthTrendLabels}
-              statValue={`${userGrowthKPIs.newUsers.toLocaleString()} users`}
+              yStep={50}
             />
           </div>
         </div>
       )}
 
-      {/* New experts table */}
+      {/* New users table */}
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: `1px solid ${colors.border}` }}>
           <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0 }}>Expert Details — New Experts ({period})</p>
-          <button style={exportBtn()}><Download size={13} /> Export</button>
         </div>
 
         <div className="rp-table" style={{ overflowX: "auto" }}>
@@ -130,22 +171,21 @@ export default function UserGrowthReport() {
             <tbody>
               {loading ? (
                 <SkelTableRows rows={7} cols={10} />
-              ) : experts.map((e) => (
-                <tr key={e.email} className="rp-row" style={{ borderBottom: `1px solid ${colors.borderSoft}` }}>
-                  <td style={tdFirst}>{e.name}</td>
-                  <td style={td}>{e.phone}</td>
-                  <td style={td}>{e.email}</td>
-                  <td style={td}>{e.tier}</td>
-                  <td style={td}>{e.model}</td>
-                  <td style={td}>{e.category}</td>
-                  <td style={td}>{e.region}</td>
-                  <td style={td}>{e.joined}</td>
-                  <td style={td}>{statusPill(e.status)}</td>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={10} style={{ textAlign: "center", padding: "56px", fontSize: "14px", color: colors.textFaint }}>No new users in this period.</td></tr>
+              ) : filtered.map((e, i) => (
+                <tr key={pick(e, ["id", "_id", "email"], String(i))} className="rp-row" style={{ borderBottom: `1px solid ${colors.borderSoft}` }}>
+                  <td style={tdFirst}>{pick(e, ["name", "fullName"])}</td>
+                  <td style={td}>{pick(e, ["phone", "phoneNumber"])}</td>
+                  <td style={td}>{pick(e, ["email"])}</td>
+                  <td style={td}>{pick(e, ["tier"])}</td>
+                  <td style={td}>{pick(e, ["paymentModel", "model"])}</td>
+                  <td style={td}>{pick(e, ["category"])}</td>
+                  <td style={td}>{pick(e, ["region"])}</td>
+                  <td style={td}>{pick(e, ["joined", "createdAt"])}</td>
+                  <td style={td}>{statusPill(pick(e, ["status"]))}</td>
                   <td style={td}>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <Eye size={15} style={{ color: colors.textFaint, cursor: "pointer" }} />
-                      <Pencil size={14} style={{ color: colors.textFaint, cursor: "pointer" }} />
-                    </div>
+                    <Eye size={15} style={{ color: colors.textFaint, cursor: "pointer" }} onClick={() => setSelected(e)} />
                   </td>
                 </tr>
               ))}
@@ -154,44 +194,36 @@ export default function UserGrowthReport() {
         </div>
 
         <div className="rp-cards">
-          {loading ? <SkelCardRows rows={4} /> : experts.map((e) => (
-            <div key={e.email} style={{ padding: "14px 16px", borderRadius: "12px", border: `1px solid ${colors.border}` }}>
+          {loading ? <SkelCardRows rows={4} /> : filtered.map((e, i) => (
+            <div key={pick(e, ["id", "_id", "email"], String(i))} onClick={() => setSelected(e)} style={{ padding: "14px 16px", borderRadius: "12px", border: `1px solid ${colors.border}`, cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                <span style={{ fontSize: "13px", fontWeight: 600 }}>{e.name}</span>
-                {statusPill(e.status)}
+                <span style={{ fontSize: "13px", fontWeight: 600 }}>{pick(e, ["name", "fullName"])}</span>
+                {statusPill(pick(e, ["status"]))}
               </div>
-              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{e.category} · {e.region} · Tier {e.tier}</p>
+              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{pick(e, ["category"])} · {pick(e, ["region"])} · Tier {pick(e, ["tier"])}</p>
             </div>
           ))}
         </div>
 
         {!loading && (
           <div style={{ padding: "14px 20px", borderTop: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB", fontSize: "12px", color: colors.textFaint }}>
-            Showing 1 to 7 of 876 new experts
+            Showing 1 to {filtered.length} of {filtered.length} new experts
           </div>
         )}
       </div>
 
-      {/* Growth by region */}
+      {/* Growth by region — no backend aggregation exists yet; kept as an illustrative placeholder. */}
       {loading ? <SkelChart height={140} /> : (
         <div style={card}>
-          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>
+          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 4px" }}>
             User Growth by Region ({period})
           </p>
+          <p style={{ fontSize: "11.5px", color: colors.textFaint, margin: "0 20px 10px" }}>Illustrative — pending a backend region breakdown.</p>
           <div style={{ padding: "0 20px 20px" }}>
             <HorizontalBarList data={userGrowthByRegion} color={colors.primary} />
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-      <span style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: color }} />
-      {label}
-    </span>
   );
 }

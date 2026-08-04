@@ -9,7 +9,7 @@ export const dashboardKPIs = {
   tasAgents: { value: 156, delta: 22 },
 };
 
-export const revenueTrend = [40, 62, 58, 90, 82, 130, 150];
+export const revenueTrend = [40000, 62000, 58000, 90000, 82000, 130000, 150000];
 export const revenueTrendLabels = ["Day 1", "Day 5", "Day 10", "Day 15", "Day 20", "Day 25", "Day 30"];
 
 export const quickReports = [

@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Receipt, Users, IdCard, ShieldCheck,
-  Wallet, Briefcase, Gavel, CalendarClock, LayoutTemplate, ChevronDown,
+  Wallet, CalendarClock, LayoutTemplate, ChevronDown,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { colors } from "./shared";
