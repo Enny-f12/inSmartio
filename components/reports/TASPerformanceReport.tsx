@@ -1,7 +1,7 @@
 // app/(dashboard)/reports/components/TASPerformanceReport.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UserCog, Users, Wallet, Gauge, Eye } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
@@ -10,15 +10,35 @@ import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst, fm
 import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelTableRows, SkelCardRows } from "./Skeleton";
 import { pick, fmtNairaCell, pickSummary, matchesFilter } from "./rowUtils";
-import { RowDetailModal } from "./RowDetailModal";
+import TASDetailModal from "./TASDetailModal";
 
 const REPORT_TYPE: ReportType = "tas-performance";
 
 type Row = Record<string, unknown>;
 
+interface Location {
+  area?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  country?: string;
+}
+
 const PERIOD_OPTIONS = ["July 2026", "June 2026", "Q2 2026"];
 const TIER_OPTIONS = ["All Tiers", "1", "2", "3", "4", "5"];
-const ZONE_OPTIONS = ["All Zones", "MN-W", "IS-E", "MN-E", "MN-N", "IS-N", "MN-S"];
+
+function getLocation(row: Row): Location | undefined {
+  const raw = row["location"];
+  return raw && typeof raw === "object" ? (raw as Location) : undefined;
+}
+
+// The API has no separate "zone"/"region" field — the closest real signal
+// is location.state, so the Zone column and filter are sourced from that
+// instead of a key that never appears in the response.
+function pickState(row: Row): string {
+  const state = getLocation(row)?.state;
+  return state && state.trim() ? state.trim() : "—";
+}
 
 function statusPill(status: string) {
   const s = status.toLowerCase();
@@ -47,9 +67,20 @@ export default function TASPerformanceReport() {
 
   const loading = listStatus === "loading" || listStatus === "idle";
 
+  // Built from the states actually present in the loaded rows, instead of a
+  // hardcoded list (MN-W, IS-E, ...) that doesn't match any real value.
+  const zoneOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows as Row[]) {
+      const s = pickState(r);
+      if (s !== "—") set.add(s);
+    }
+    return ["All Zones", ...Array.from(set).sort()];
+  }, [rows]);
+
   const filtered = (rows as Row[]).filter((a) => {
     if (tier !== "All Tiers" && !matchesFilter(pick(a, ["tier"]), tier)) return false;
-    if (zone !== "All Zones" && !matchesFilter(pick(a, ["zone", "region"]), zone)) return false;
+    if (zone !== "All Zones" && !matchesFilter(pickState(a), zone)) return false;
     return true;
   });
 
@@ -73,13 +104,13 @@ export default function TASPerformanceReport() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {selected && <RowDetailModal title="TAS Agent Detail" row={selected} onClose={() => setSelected(null)} />}
+      {selected && <TASDetailModal row={selected} onClose={() => setSelected(null)} />}
 
       <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <select className="rp-select" value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIOD_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
           <select className="rp-select" value={tier} onChange={(e) => setTier(e.target.value)}>{TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
-          <select className="rp-select" value={zone} onChange={(e) => setZone(e.target.value)}>{ZONE_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
+          <select className="rp-select" value={zone} onChange={(e) => setZone(e.target.value)}>{zoneOptions.map((o) => <option key={o}>{o}</option>)}</select>
         </div>
         <ExportMenuButton onExport={handleExport} exporting={downloadStatus === "loading"} />
       </div>
@@ -112,7 +143,7 @@ export default function TASPerformanceReport() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB" }}>
-                {["TAS Name", "Phone", "Email", "Tier", "Experts", "Status", "Earnings", "Zone", "Joined", "Actions"].map((h, i) => (
+                {["TAS Name", "Phone", "Email", "Tier", "Experts", "Status", "Earnings", "Zone (State)", "Joined", "Actions"].map((h, i) => (
                   <th key={h} style={i === 0 ? thFirst : th}>{h}</th>
                 ))}
               </tr>
@@ -131,7 +162,7 @@ export default function TASPerformanceReport() {
                   <td style={td}>{pick(a, ["expertsRecruited"])}</td>
                   <td style={td}>{statusPill(pick(a, ["status"]))}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{fmtNairaCell(a, ["earnings"])}</td>
-                  <td style={td}>{pick(a, ["zone", "region"])}</td>
+                  <td style={td}>{pickState(a)}</td>
                   <td style={td}>{pick(a, ["joined"])}</td>
                   <td style={td}>
                     <Eye size={15} style={{ color: colors.textFaint, cursor: "pointer" }} onClick={() => setSelected(a)} />
@@ -149,7 +180,7 @@ export default function TASPerformanceReport() {
                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{pick(a, ["name"])}</span>
                 <span style={{ fontSize: "13px", fontWeight: 700 }}>{fmtNairaCell(a, ["earnings"])}</span>
               </div>
-              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>Tier {pick(a, ["tier"])} · {pick(a, ["expertsRecruited"])} recruited · {pick(a, ["status"])}</p>
+              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>Tier {pick(a, ["tier"])} · {pick(a, ["expertsRecruited"])} recruited · {pick(a, ["status"])} · {pickState(a)}</p>
             </div>
           ))}
         </div>

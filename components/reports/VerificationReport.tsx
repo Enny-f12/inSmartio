@@ -13,7 +13,7 @@ import { HorizontalBarList } from "./ChartBits";
 import DashboardLineChart from "./DashboardLineChart";
 import { pick, pickNumber, pickSummary, matchesFilter } from "./rowUtils";
 import { rejectionReasons, officerWorkload } from "./mockData";
-import { RowDetailModal } from "./RowDetailModal";
+import VerificationDetailModal from "./VerificationDetailModal";
 
 const REPORT_TYPE: ReportType = "verification";
 
@@ -30,6 +30,97 @@ const verificationTrendLabels = ["Day 1", "Day 5", "Day 10", "Day 15", "Day 20",
 
 // Best-effort key match against data.summary — exact key names unconfirmed for this report type.
 
+// Each row's `document` field is a flat array of document objects
+// ({ url, type, verify, reject, reason, ... }) per the verification
+// detailed-report API — count it directly instead of trusting a "docs"
+// summary field that isn't part of the response.
+function docsCount(v: Row): number {
+  const raw = v["document"];
+  return Array.isArray(raw) ? raw.length : 0;
+}
+
+// Status badge colors keyed off the row's real status, instead of the
+// previous hardcoded amber for every row.
+const STATUS_BADGE: Record<string, { bg: string; text: string }> = {
+  approved: { bg: "#f0fdf4", text: "#15803d" },
+  rejected: { bg: "#fef2f2", text: "#dc2626" },
+  pending: { bg: colors.amberBg, text: colors.amber },
+};
+
+function StatusPill({ status }: { status: string }) {
+  const key = status.toLowerCase();
+  const meta = STATUS_BADGE[key] ?? STATUS_BADGE.pending;
+  return (
+    <span
+      style={{
+        padding: "3px 10px",
+        borderRadius: "999px",
+        fontSize: "11px",
+        fontWeight: 600,
+        backgroundColor: meta.bg,
+        color: meta.text,
+        textTransform: "capitalize",
+      }}
+    >
+      {status}
+    </span>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function PageControls({
+  page,
+  totalPages,
+  onPrev,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <button
+        onClick={onPrev}
+        disabled={page <= 1}
+        style={{
+          padding: "5px 12px",
+          borderRadius: "8px",
+          border: `1px solid ${colors.border}`,
+          backgroundColor: "#fff",
+          fontSize: "12px",
+          fontWeight: 600,
+          color: page <= 1 ? colors.textFaint : colors.textMain,
+          cursor: page <= 1 ? "not-allowed" : "pointer",
+        }}
+      >
+        Previous
+      </button>
+      <span style={{ fontSize: "12px", color: colors.textFaint }}>
+        Page {page} of {totalPages}
+      </span>
+      <button
+        onClick={onNext}
+        disabled={page >= totalPages}
+        style={{
+          padding: "5px 12px",
+          borderRadius: "8px",
+          border: `1px solid ${colors.border}`,
+          backgroundColor: "#fff",
+          fontSize: "12px",
+          fontWeight: 600,
+          color: page >= totalPages ? colors.textFaint : colors.textMain,
+          cursor: page >= totalPages ? "not-allowed" : "pointer",
+        }}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 export default function VerificationReport() {
   const dispatch = useAppDispatch();
   const { summary, rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
@@ -44,8 +135,16 @@ export default function VerificationReport() {
   const [status, setStatus] = useState("All Status");
   const [officer, setOfficer] = useState("All Officers");
   const [selected, setSelected] = useState<Row | null>(null);
+  const [page, setPage] = useState(1);
 
   const loading = listStatus === "loading" || listStatus === "idle";
+
+  // Any filter change can shrink the result set below the current page —
+  // jump back to page 1 rather than showing an empty page.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [tier, status, officer, period]);
 
   const handleExport = async (format: ReportFormat) => {
     const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format }));
@@ -81,6 +180,11 @@ export default function VerificationReport() {
       .map(([label, value]) => ({ label: `Tier ${label}`, value }));
   })();
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginated = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
   const kpiTotal = pickSummary(summary, ["totalSubmissions"]);
   const kpiPending = pickSummary(summary, ["pending", "pendingVerifications"]);
   const kpiApproved = pickSummary(summary, ["approved", "approvedVerifications"]);
@@ -88,7 +192,7 @@ export default function VerificationReport() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {selected && <RowDetailModal title="Verification Detail" row={selected} onClose={() => setSelected(null)} />}
+      {selected && <VerificationDetailModal row={selected} onClose={() => setSelected(null)} />}
 
       <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -157,16 +261,18 @@ export default function VerificationReport() {
             <tbody>
               {loading ? (
                 <SkelTableRows rows={6} cols={10} />
-              ) : filtered.map((v, i) => {
+              ) : paginated.map((v, i) => {
                 const days = pickNumber(v, ["daysPending"]);
                 const officerName = pick(v, ["officer", "assignedOfficer"]);
+                const rowStatus = pick(v, ["status"], "pending");
+                const docCount = docsCount(v);
                 return (
                   <tr key={pick(v, ["id", "_id", "email"], String(i))} className="rp-row" style={{ borderBottom: `1px solid ${colors.borderSoft}` }}>
                     <td style={tdFirst}>{pick(v, ["name", "fullName"])}</td>
                     <td style={td}>{pick(v, ["phone", "phoneNumber"])}</td>
                     <td style={td}>{pick(v, ["email"])}</td>
                     <td style={td}>{pick(v, ["tier", "verificationTier"])}</td>
-                    <td style={td}>{pick(v, ["docs", "documents"])}</td>
+                    <td style={td}>{docCount > 0 ? docCount : "—"}</td>
                     <td style={td}>{pick(v, ["submitted", "submittedAt", "createdAt"])}</td>
                     <td style={td}>
                       {days == null ? "—" : (
@@ -179,7 +285,7 @@ export default function VerificationReport() {
                       <span style={{ color: officerName === "Unassigned" ? colors.red : colors.textMain, fontWeight: officerName === "Unassigned" ? 600 : 400 }}>{officerName}</span>
                     </td>
                     <td style={td}>
-                      <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: colors.amberBg, color: colors.amber }}>{pick(v, ["status"])}</span>
+                      <StatusPill status={rowStatus} />
                     </td>
                     <td style={td}><Eye size={15} style={{ color: colors.textFaint, cursor: "pointer" }} onClick={() => setSelected(v)} /></td>
                   </tr>
@@ -190,20 +296,41 @@ export default function VerificationReport() {
         </div>
 
         <div className="rp-cards">
-          {loading ? <SkelCardRows rows={4} /> : filtered.map((v, i) => (
+          {loading ? <SkelCardRows rows={4} /> : paginated.map((v, i) => (
             <div key={pick(v, ["id", "_id", "email"], String(i))} onClick={() => setSelected(v)} style={{ padding: "14px 16px", borderRadius: "12px", border: `1px solid ${colors.border}`, cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{pick(v, ["name", "fullName"])}</span>
                 <span style={{ fontSize: "12px", fontWeight: 600, color: colors.textMuted }}>{pick(v, ["daysPending"])}d pending</span>
               </div>
-              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>Tier {pick(v, ["tier", "verificationTier"])} · Docs {pick(v, ["docs"])} · {pick(v, ["officer", "assignedOfficer"])}</p>
+              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>Tier {pick(v, ["tier", "verificationTier"])} · Docs {docsCount(v) || pick(v, ["docs"])} · {pick(v, ["officer", "assignedOfficer"])}</p>
             </div>
           ))}
         </div>
 
         {!loading && (
-          <div style={{ padding: "14px 20px", borderTop: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB", fontSize: "12px", color: colors.textFaint }}>
-            Showing 1 to {filtered.length} of {filtered.length} pending
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "10px",
+              padding: "14px 20px",
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: "#F9FAFB",
+            }}
+          >
+            <span style={{ fontSize: "12px", color: colors.textFaint }}>
+              Showing {filtered.length === 0 ? 0 : pageStart + 1} to {Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            {totalPages > 1 && (
+              <PageControls
+                page={currentPage}
+                totalPages={totalPages}
+                onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              />
+            )}
           </div>
         )}
       </div>

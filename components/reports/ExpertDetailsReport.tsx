@@ -1,7 +1,7 @@
 // app/(dashboard)/reports/components/ExpertDetailsReport.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Users, ShieldCheck, Eye } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
@@ -17,19 +17,40 @@ const REPORT_TYPE: ReportType = "expert-details";
 type Row = Record<string, unknown>;
 
 const TIER_OPTIONS = ["All Tiers", "1", "2", "3"];
-const MODEL_OPTIONS = ["All Models", "M1", "M2"];
-const CATEGORY_OPTIONS = ["All Categories", "Plumbing", "Cleaning", "Auto Repair", "Tutoring", "Appliance", "Hairdressing"];
-const REGION_OPTIONS = ["All Regions", "MN-W", "IS-E", "MN-N", "MN-E", "IS-N", "MN-S", "IS-W"];
-const STATUS_OPTIONS = ["All Status", "Active", "Pending", "Suspended"];
+// Displayed labels match the mapped values, not the raw "protected"/"unprotected" strings.
+const MODEL_OPTIONS = ["All Models", "Model 1", "Model 2"];
+
+// The real `category` field is often a comma-separated multi-value string
+// (e.g. "Beauty Services, Events Services, Entertainment"), so options are
+// built from the individual split-out values, not the raw row strings.
+function getCategories(row: Row): string[] {
+  const raw = pick(row, ["category", "serviceCategory"], "");
+  if (!raw || raw === "—") return [];
+  return raw.split(",").map((c) => c.trim()).filter(Boolean);
+}
+
+// Real statuses come back lowercase ("active"/"inactive"), so colors are
+// keyed lowercase and the label is capitalized only for display.
+const STATUS_META: Record<string, { bg: string; fg: string }> = {
+  active: { bg: colors.greenBg, fg: colors.green },
+  inactive: { bg: colors.redBg, fg: colors.red },
+  pending: { bg: colors.amberBg, fg: colors.amber },
+  suspended: { bg: colors.redBg, fg: colors.red },
+};
 
 function statusPill(status: string) {
-  const map: Record<string, { bg: string; fg: string }> = {
-    Active: { bg: colors.greenBg, fg: colors.green },
-    Pending: { bg: colors.amberBg, fg: colors.amber },
-    Suspended: { bg: colors.redBg, fg: colors.red },
-  };
-  const c = map[status] ?? { bg: "#F3F4F6", fg: colors.textMuted };
-  return <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>{status}</span>;
+  const key = status.toLowerCase();
+  const c = STATUS_META[key] ?? { bg: "#F3F4F6", fg: colors.textMuted };
+  const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : "—";
+  return <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>{label}</span>;
+}
+
+/** "protected" -> "Model 1", "unprotected" -> "Model 2". Falls back to raw value (or "—") for anything unexpected. */
+function formatPaymentModel(model: unknown) {
+  const m = String(model ?? "").toLowerCase();
+  if (m === "protected") return "Model 1";
+  if (m === "unprotected") return "Model 2";
+  return model ? String(model) : "—";
 }
 
 // Best-effort key match against data.summary — exact key names unconfirmed for this report type.
@@ -53,10 +74,41 @@ export default function ExpertDetailsReport() {
 
   const loading = listStatus === "loading" || listStatus === "idle";
 
+  // Region — built from whatever regions are actually present in the loaded rows.
+  const regionOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows as Row[]) {
+      const v = pick(r, ["region"]);
+      if (v && v !== "—") set.add(v.trim());
+    }
+    return ["All Regions", ...Array.from(set).sort()];
+  }, [rows]);
+
+  // Category — split multi-value strings into individual categories first.
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows as Row[]) {
+      for (const c of getCategories(r)) set.add(c);
+    }
+    return ["All Categories", ...Array.from(set).sort()];
+  }, [rows]);
+
+  // Status — real values are lowercase; capitalize only for the dropdown label.
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows as Row[]) {
+      const s = pick(r, ["status"]);
+      if (s && s !== "—") set.add(s.toLowerCase());
+    }
+    const labels = Array.from(set).map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+    return ["All Status", ...labels.sort()];
+  }, [rows]);
+
   const filtered = (rows as Row[]).filter((e) => {
     if (tier !== "All Tiers" && !matchesFilter(pick(e, ["tier", "verificationTier"]), tier)) return false;
-    if (model !== "All Models" && !matchesFilter(pick(e, ["paymentModel", "model"]), model)) return false;
-    if (category !== "All Categories" && !matchesFilter(pick(e, ["category", "serviceCategory"]), category)) return false;
+    // Compare against the mapped label ("Model 1"/"Model 2"), since that's what the dropdown now offers.
+    if (model !== "All Models" && formatPaymentModel(pick(e, ["paymentModel", "model"])) !== model) return false;
+    if (category !== "All Categories" && !getCategories(e).some((c) => matchesFilter(c, category))) return false;
     if (region !== "All Regions" && !matchesFilter(pick(e, ["region"]), region)) return false;
     if (status !== "All Status" && !matchesFilter(pick(e, ["status"]), status)) return false;
     if (search && !`${pick(e, ["name", "fullName"])} ${pick(e, ["email"])}`.toLowerCase().includes(search.toLowerCase())) return false;
@@ -99,9 +151,9 @@ export default function ExpertDetailsReport() {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <select className="rp-select" value={tier} onChange={(e) => setTier(e.target.value)}>{TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
           <select className="rp-select" value={model} onChange={(e) => setModel(e.target.value)}>{MODEL_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
-          <select className="rp-select" value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORY_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
-          <select className="rp-select" value={region} onChange={(e) => setRegion(e.target.value)}>{REGION_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
-          <select className="rp-select" value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
+          <select className="rp-select" value={category} onChange={(e) => setCategory(e.target.value)}>{categoryOptions.map((o) => <option key={o}>{o}</option>)}</select>
+          <select className="rp-select" value={region} onChange={(e) => setRegion(e.target.value)}>{regionOptions.map((o) => <option key={o}>{o}</option>)}</select>
+          <select className="rp-select" value={status} onChange={(e) => setStatus(e.target.value)}>{statusOptions.map((o) => <option key={o}>{o}</option>)}</select>
         </div>
       </div>
 
@@ -153,7 +205,7 @@ export default function ExpertDetailsReport() {
                   <td style={td}>{pick(e, ["phone", "phoneNumber"])}</td>
                   <td style={td}>{pick(e, ["email"])}</td>
                   <td style={td}>{pick(e, ["tier", "verificationTier"])}</td>
-                  <td style={td}>{pick(e, ["paymentModel", "model"])}</td>
+                  <td style={td}>{formatPaymentModel(pick(e, ["paymentModel", "model"]))}</td>
                   <td style={td}>{pick(e, ["category", "serviceCategory"])}</td>
                   <td style={td}>{pick(e, ["region"])}</td>
                   <td style={td}>{pick(e, ["joined", "dateJoined", "createdAt"])}</td>
@@ -174,7 +226,7 @@ export default function ExpertDetailsReport() {
                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{pick(e, ["name", "fullName"])}</span>
                 {statusPill(pick(e, ["status"]))}
               </div>
-              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{pick(e, ["category", "serviceCategory"])} · {pick(e, ["region"])} · Tier {pick(e, ["tier", "verificationTier"])} · {pick(e, ["paymentModel", "model"])}</p>
+              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{pick(e, ["category", "serviceCategory"])} · {pick(e, ["region"])} · Tier {pick(e, ["tier", "verificationTier"])} · {formatPaymentModel(pick(e, ["paymentModel", "model"]))}</p>
             </div>
           ))}
         </div>

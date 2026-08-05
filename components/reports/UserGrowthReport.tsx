@@ -1,11 +1,12 @@
 // app/(dashboard)/reports/components/UserGrowthReport.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UserPlus, TrendingUp, TrendingDown, Users, Eye } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
-import type { ReportType, ReportFormat } from "@/lib/api/detailedReportApi";
+import { getDetailedReport } from "@/lib/api/detailedReportApi";
+import type { ReportType, ReportFormat, ReportSummary } from "@/lib/api/detailedReportApi";
 import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst } from "./shared";
 import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelChart, SkelTableRows, SkelCardRows } from "./Skeleton";
@@ -15,13 +16,19 @@ import { pick, pickSummary, matchesFilter } from "./rowUtils";
 import { userGrowthByRegion } from "./mockData";
 import { RowDetailModal } from "./RowDetailModal";
 
-const REPORT_TYPE: ReportType = "user-growth";
+// This screen genuinely needs two different live endpoints:
+//   - user-growth   -> KPI stats only (newUsers/growthRate/churnRate/activeUsers)
+//   - expert-details -> the table rows (name/tier/paymentModel/category/region/status/joined)
+// The table's redux slice (reportDetail) stays wired to expert-details, same
+// as before. The KPI stats are fetched separately, straight from the API
+// module, so the two calls don't clobber each other's summary/rows.
+const TABLE_REPORT_TYPE: ReportType = "expert-details";
+const STATS_REPORT_TYPE: ReportType = "user-growth";
 
 type Row = Record<string, unknown>;
 
 const PERIOD_OPTIONS = ["July 2026", "June 2026", "May 2026", "Q2 2026"];
 const USER_TYPE_OPTIONS = ["All User Types", "Clients", "Experts", "TAS"];
-const REGION_OPTIONS = ["All Regions", "MN-W", "IS-E", "MN-N", "MN-E", "IS-N"];
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 
 // Illustrative until the API exposes a trends endpoint (no time-series data in the confirmed response).
@@ -39,14 +46,39 @@ function statusPill(status: string) {
   return <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>{status}</span>;
 }
 
+/** "protected" -> "Model 1", "unprotected" -> "Model 2". Falls back to raw value (or "—") for anything unexpected. */
+function formatPaymentModel(model: unknown) {
+  const m = String(model ?? "").toLowerCase();
+  if (m === "protected") return "Model 1";
+  if (m === "unprotected") return "Model 2";
+  return model ? String(model) : "—";
+}
+
 export default function UserGrowthReport() {
   const dispatch = useAppDispatch();
-  const { summary, rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
+  const { rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
+
+  // Table data — unchanged, still the expert-details fetch via the shared slice.
+  useEffect(() => {
+    dispatch(setReportType(TABLE_REPORT_TYPE));
+    dispatch(fetchDetailedReport({ reportType: TABLE_REPORT_TYPE }));
+  }, [dispatch]);
+
+  // KPI stats — separate fetch straight from the API module, since these
+  // come from a different endpoint (user-growth) than the table rows.
+  const [stats, setStats] = useState<ReportSummary | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    dispatch(setReportType(REPORT_TYPE));
-    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE }));
-  }, [dispatch]);
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatsLoading(true);
+    getDetailedReport({ reportType: STATS_REPORT_TYPE })
+      .then((res) => { if (!cancelled) setStats(res.summary); })
+      .catch(() => { if (!cancelled) setStats(null); })
+      .finally(() => { if (!cancelled) setStatsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const [period, setPeriod] = useState("July 2026");
   const [userType, setUserType] = useState("All User Types");
@@ -57,15 +89,27 @@ export default function UserGrowthReport() {
   const loading = listStatus === "loading" || listStatus === "idle";
 
   const handleExport = async (format: ReportFormat) => {
-    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format }));
+    const action = await dispatch(downloadReport({ reportType: TABLE_REPORT_TYPE, format }));
     if (downloadReport.fulfilled.match(action)) {
       const a = document.createElement("a");
       a.href = action.payload;
-      a.download = `user-growth_${new Date().toISOString().split("T")[0]}.${format}`;
+      a.download = `expert-details_${new Date().toISOString().split("T")[0]}.${format}`;
       a.click();
       dispatch(clearDownloadUrl());
     }
   };
+
+  // Region options built from whatever's actually in the loaded expert rows
+  // — the field is real now (confirmed in the expert-details response), so
+  // this replaces the old hardcoded MN-W/IS-E placeholder list.
+  const regionOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows as Row[]) {
+      const v = pick(r, ["region"]);
+      if (v && v !== "—") set.add(v.trim());
+    }
+    return ["All Regions", ...Array.from(set).sort()];
+  }, [rows]);
 
   const filtered = (rows as Row[]).filter((r) => {
     if (userType !== "All User Types" && !matchesFilter(pick(r, ["userType", "type"]), userType)) return false;
@@ -74,13 +118,11 @@ export default function UserGrowthReport() {
     return true;
   });
 
-  // growthRate / churnRate / activeUsers are confirmed NOT present in this
-  // endpoint's summary yet — shown as "—" until the backend adds them,
-  // same pattern as every other report screen's KPI cards.
-  const kpiNewUsers = pickSummary(summary, ["newUsers"]);
-  const kpiGrowthRate = pickSummary(summary, ["growthRate"]);
-  const kpiChurnRate = pickSummary(summary, ["churnRate"]);
-  const kpiActiveUsers = pickSummary(summary, ["activeUsers"]);
+  // Confirmed keys from the user-growth summary response.
+  const kpiNewUsers = pickSummary(stats ?? undefined, ["newUsers"]);
+  const kpiGrowthRate = pickSummary(stats ?? undefined, ["growthRate"]);
+  const kpiChurnRate = pickSummary(stats ?? undefined, ["churnRate"]);
+  const kpiActiveUsers = pickSummary(stats ?? undefined, ["activeUsers"]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -98,7 +140,7 @@ export default function UserGrowthReport() {
             {USER_TYPE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
           </select>
           <select className="rp-select" value={region} onChange={(e) => setRegion(e.target.value)}>
-            {REGION_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+            {regionOptions.map((o) => <option key={o}>{o}</option>)}
           </select>
           <select className="rp-select" value={tier} onChange={(e) => setTier(e.target.value)}>
             {TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}
@@ -110,8 +152,8 @@ export default function UserGrowthReport() {
         </div>
       </div>
 
-      {/* KPIs */}
-      {loading ? (
+      {/* KPIs — from the user-growth endpoint, independent of the table's data source */}
+      {statsLoading ? (
         <SkelKPIRow count={4} />
       ) : (
         <div className="rp-kpis" style={{ display: "grid", gap: "14px" }}>
@@ -135,7 +177,7 @@ export default function UserGrowthReport() {
       )}
 
       {/* Trend chart — illustrative until a trends endpoint exists */}
-      {loading ? (
+      {statsLoading ? (
         <SkelChart height={170} />
       ) : (
         <div style={card}>
@@ -153,10 +195,10 @@ export default function UserGrowthReport() {
         </div>
       )}
 
-      {/* New users table */}
+      {/* Expert details table */}
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: `1px solid ${colors.border}` }}>
-          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0 }}>Expert Details — New Experts ({period})</p>
+          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0 }}>Expert Details — New Experts</p>
         </div>
 
         <div className="rp-table" style={{ overflowX: "auto" }}>
@@ -179,7 +221,7 @@ export default function UserGrowthReport() {
                   <td style={td}>{pick(e, ["phone", "phoneNumber"])}</td>
                   <td style={td}>{pick(e, ["email"])}</td>
                   <td style={td}>{pick(e, ["tier"])}</td>
-                  <td style={td}>{pick(e, ["paymentModel", "model"])}</td>
+                  <td style={td}>{formatPaymentModel(pick(e, ["paymentModel", "model"]))}</td>
                   <td style={td}>{pick(e, ["category"])}</td>
                   <td style={td}>{pick(e, ["region"])}</td>
                   <td style={td}>{pick(e, ["joined", "createdAt"])}</td>
@@ -200,7 +242,7 @@ export default function UserGrowthReport() {
                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{pick(e, ["name", "fullName"])}</span>
                 {statusPill(pick(e, ["status"]))}
               </div>
-              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{pick(e, ["category"])} · {pick(e, ["region"])} · Tier {pick(e, ["tier"])}</p>
+              <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{pick(e, ["category"])} · {pick(e, ["region"])} · Tier {pick(e, ["tier"])} · {formatPaymentModel(pick(e, ["paymentModel", "model"]))}</p>
             </div>
           ))}
         </div>
