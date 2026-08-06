@@ -31,6 +31,7 @@ import expertPayoutReducer from "./expertpayoutSlice";
 import cloudReducer from "./cloudSlice";
 import subscriptionReducer from "./subscriptionSlice";
 import waitlistReducer from "./waitlistSlice";
+import reportDetailReducer from "./reportDetailSlice";                // new — Reports feature (detailed report + download)
 
 
 
@@ -67,7 +68,8 @@ export const store = configureStore({
     expertPayout:          expertPayoutReducer,
     cloud:                 cloudReducer,
     subscription:          subscriptionReducer,
-    waitlist:              waitlistReducer,
+    waitlist:               waitlistReducer,
+    reportDetail:           reportDetailReducer,
   },
 });
 

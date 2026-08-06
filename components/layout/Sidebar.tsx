@@ -23,7 +23,7 @@ const navItems = [
   { label: "Payments",       href: "/payments",      icon: CreditCard,      permission: "canViewPayments"     },
   { label: "Disputes",       href: "/dispute",       icon: Scale,           permission: "canViewDisputes"     },
   { label: "Audit Logs",     href: "/audit-log",     icon: BarChart2,       permission: "canViewAuditLogs"    },
-  { label: "Reports",        href: "/report",        icon: BarChart2,       permission: "canViewReports"      },
+  { label: "Detailed Reports", href: "/reports",        icon: BarChart2,       permission: "canViewReports"      },
   { label: "Settings",       href: "/settings",      icon: Settings,        permission: "canViewSettings"     },
 ];
 
