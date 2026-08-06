@@ -1,8 +1,10 @@
 // lib/api/detailedReportApi.ts
 //
-// Wraps the two live Swagger endpoints:
+// Wraps the live Swagger endpoints:
 //   GET /api/reports/detailed/{reportType}            -> KPIs + individual rows
 //   GET /api/reports/detailed/{reportType}/download    -> CSV or PDF file
+//   GET /api/reports/detailed/dashboard                -> dashboard KPIs, revenue trend, quick reports, recent activity
+//   GET /api/reports/detailed/{reportType}/trend        -> time-bucketed trend series for charting
 //
 // Follows the same shape as lib/api/adminApi.ts: typed axios calls, response
 // unwrapped from the standard { status, message, data } envelope.
@@ -75,12 +77,12 @@ export interface DetailedReportResponse<Row = Record<string, unknown>> {
 
 // ── Calls ──────────────────────────────────────────────────────────
 
-function stripEmpty<T extends Record<string, unknown>>(obj: T): Partial<T> {
+function stripEmpty<T extends object>(obj: T): Partial<T> {
   const out: Partial<T> = {};
-  for (const key in obj) {
+  (Object.keys(obj) as (keyof T)[]).forEach((key) => {
     const v = obj[key];
     if (v !== undefined && v !== null && v !== "") out[key] = v;
-  }
+  });
   return out;
 }
 
@@ -113,4 +115,122 @@ export const downloadDetailedReport = async (
     }
   );
   return URL.createObjectURL(response.data as Blob);
+};
+
+// ── Dashboard ──────────────────────────────────────────────────────
+
+export type DashboardRange = "7d" | "30d" | "month" | "quarter" | "custom";
+
+export interface GetDashboardParams {
+  range?:    DashboardRange;
+  fromDate?: string;   // required when range === "custom"
+  toDate?:   string;   // required when range === "custom"
+}
+
+export interface QuickReportItem {
+  key:   string;
+  label: string;
+}
+
+export interface DashboardCardMetric {
+  value:         number;
+  changePercent: number;
+}
+
+export interface RevenueTrendPoint {
+  date:  string;  // ISO date, e.g. "2026-07-07"
+  value: number;
+}
+
+export interface RecentActivityItem {
+  type:      string;   // e.g. "new_tas", "expert_verified", "escrow_released"
+  message:   string;
+  timestamp: string;   // ISO datetime
+}
+
+/**
+ * CONFIRMED against a live response (2026-08-06):
+ *   GET /api/reports/detailed/dashboard
+ * {
+ *   "status": true, "message": "Reports dashboard retrieved",
+ *   "data": {
+ *     "range": { "from": "...", "to": "..." },
+ *     "cards": { "totalUsers": {value,changePercent}, "jobs": {...}, "revenue": {...}, "tasAgents": {...} },
+ *     "revenueTrend": { "title": "...", "total": 36900, "series": [{date,value}, ...] },
+ *     "quickReports": [{key,label}, ...],
+ *     "recentActivity": [{type,message,timestamp}, ...]
+ *   }
+ * }
+ */
+export interface ReportsDashboardData {
+  range: {
+    from: string;
+    to:   string;
+  };
+  cards: {
+    totalUsers: DashboardCardMetric;
+    jobs:       DashboardCardMetric;
+    revenue:    DashboardCardMetric;
+    tasAgents:  DashboardCardMetric;
+  };
+  revenueTrend: {
+    title:  string;
+    total:  number;
+    series: RevenueTrendPoint[];
+  };
+  quickReports:   QuickReportItem[];
+  recentActivity: RecentActivityItem[];
+}
+
+export interface ReportsDashboardResponse {
+  status:  boolean;
+  message: string;
+  data:    ReportsDashboardData;
+}
+
+/** GET /api/reports/detailed/dashboard */
+export const getReportsDashboard = async (
+  params: GetDashboardParams = {}
+): Promise<ReportsDashboardData> => {
+  const { data } = await axiosInstance.get<ReportsDashboardResponse>(
+    `/reports/detailed/dashboard`,
+    { params: stripEmpty(params) }
+  );
+  return data.data;
+};
+
+// ── Trend ──────────────────────────────────────────────────────────
+
+export type TrendGroupBy = "day" | "week" | "month";
+
+export interface GetReportTrendParams {
+  reportType: ReportType;      // path param
+  groupBy?:   TrendGroupBy;
+  fromDate?:  string;
+  toDate?:    string;
+}
+
+export interface ReportTrendPoint {
+  date:  string;  // ISO date, e.g. "2026-07-07"
+  value: number;
+}
+
+export interface ReportTrendResponse {
+  status:  boolean;
+  message: string;
+  data: {
+    series: ReportTrendPoint[];
+  };
+}
+
+/** GET /api/reports/detailed/{reportType}/trend */
+export const getReportTrend = async (
+  params: GetReportTrendParams
+): Promise<ReportTrendPoint[]> => {
+  const { reportType, ...query } = params;
+  const { data } = await axiosInstance.get<ReportTrendResponse>(
+    `/reports/detailed/${reportType}/trend`,
+    { params: stripEmpty(query) }
+  );
+  return data.data.series ?? [];
 };

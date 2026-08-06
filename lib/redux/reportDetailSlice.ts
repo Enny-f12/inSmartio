@@ -1,7 +1,7 @@
 // lib/redux/reportDetailSlice.ts
 //
-// Drives the Reports feature (ReportPicker + each report screen) against the
-// two live endpoints in lib/api/detailedReportApi.ts.
+// Drives the Reports feature (ReportPicker + each report screen + the
+// dashboard) against the live endpoints in lib/api/detailedReportApi.ts.
 //
 // Named `reportDetail` (not `report`) because a `reportSlice` already exists
 // in the store for other pages — this is a separate, new slice.
@@ -15,11 +15,17 @@ import axios from "axios";
 import {
   getDetailedReport,
   downloadDetailedReport,
+  getReportsDashboard,
+  getReportTrend,
   type ReportType,
   type ReportFormat,
   type DetailedReportQuery,
   type ReportSummary,
   type DetailedReportPagination,
+  type GetDashboardParams,
+  type ReportsDashboardData,
+  type GetReportTrendParams,
+  type ReportTrendPoint,
 } from "@/lib/api/detailedReportApi";
 
 type AsyncStatus = "idle" | "loading" | "succeeded" | "failed";
@@ -40,6 +46,14 @@ interface ReportDetailState {
   downloadStatus: AsyncStatus;
   downloadError:  string | null;
   downloadUrl:    string | null;
+
+  dashboard:       ReportsDashboardData | null;
+  dashboardStatus: AsyncStatus;
+  dashboardError:  string | null;
+
+  trend:       ReportTrendPoint[];
+  trendStatus: AsyncStatus;
+  trendError:  string | null;
 }
 
 const DEFAULT_FILTERS: ReportDetailFilters = {
@@ -61,6 +75,14 @@ const initialState: ReportDetailState = {
   downloadStatus: "idle",
   downloadError:  null,
   downloadUrl:    null,
+
+  dashboard:       null,
+  dashboardStatus: "idle",
+  dashboardError:  null,
+
+  trend:       [],
+  trendStatus: "idle",
+  trendError:  null,
 };
 
 const errMsg = (err: unknown, fallback: string) =>
@@ -87,6 +109,22 @@ export const downloadReport = createAsyncThunk(
   ) => {
     try { return await downloadDetailedReport(params); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to download report")); }
+  }
+);
+
+export const fetchDashboard = createAsyncThunk(
+  "reportDetail/fetchDashboard",
+  async (params: GetDashboardParams, { rejectWithValue }) => {
+    try { return await getReportsDashboard(params); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to load dashboard")); }
+  }
+);
+
+export const fetchReportTrend = createAsyncThunk(
+  "reportDetail/fetchReportTrend",
+  async (params: GetReportTrendParams, { rejectWithValue }) => {
+    try { return await getReportTrend(params); }
+    catch (err) { return rejectWithValue(errMsg(err, "Failed to load trend")); }
   }
 );
 
@@ -141,6 +179,18 @@ const reportDetailSlice = createSlice({
       .addCase(downloadReport.pending,   (state) => { state.downloadStatus = "loading"; state.downloadError = null; })
       .addCase(downloadReport.fulfilled, (state, action) => { state.downloadStatus = "succeeded"; state.downloadUrl = action.payload; })
       .addCase(downloadReport.rejected,  (state, action) => { state.downloadStatus = "failed"; state.downloadError = action.payload as string; });
+
+    // fetchDashboard
+    builder
+      .addCase(fetchDashboard.pending,   (state) => { state.dashboardStatus = "loading"; state.dashboardError = null; })
+      .addCase(fetchDashboard.fulfilled, (state, action) => { state.dashboardStatus = "succeeded"; state.dashboard = action.payload; })
+      .addCase(fetchDashboard.rejected,  (state, action) => { state.dashboardStatus = "failed"; state.dashboardError = action.payload as string; });
+
+    // fetchReportTrend
+    builder
+      .addCase(fetchReportTrend.pending,   (state) => { state.trendStatus = "loading"; state.trendError = null; })
+      .addCase(fetchReportTrend.fulfilled, (state, action) => { state.trendStatus = "succeeded"; state.trend = action.payload; })
+      .addCase(fetchReportTrend.rejected,  (state, action) => { state.trendStatus = "failed"; state.trendError = action.payload as string; });
   },
 });
 

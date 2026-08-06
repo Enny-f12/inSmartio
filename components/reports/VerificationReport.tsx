@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { FileClock, ShieldCheck, ShieldAlert, ClipboardList, Eye, Clock } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
-import type { ReportType, ReportFormat } from "@/lib/api/detailedReportApi";
+import { getReportTrend } from "@/lib/api/detailedReportApi";
+import type { ReportType, ReportFormat, ReportTrendPoint } from "@/lib/api/detailedReportApi";
 import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst } from "./shared";
 import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelTableRows, SkelChart, SkelCardRows } from "./Skeleton";
@@ -24,9 +25,35 @@ const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 const STATUS_OPTIONS = ["All Status", "Pending", "Approved", "Rejected"];
 const OFFICER_OPTIONS = ["All Officers", "Chioma", "Olu", "Unassigned"];
 
-// TODO: illustrative until the API exposes a trends endpoint.
-const verificationTrend = [80, 120, 110, 160, 150, 170, 190];
-const verificationTrendLabels = ["Day 1", "Day 5", "Day 10", "Day 15", "Day 20", "Day 25", "Day 30"];
+/**
+ * Labels every 5th point by its position in the series (1, 5, 10, 15...)
+ * rather than a calendar date, so the axis reads as a straight increasing
+ * line regardless of how the underlying date range is bucketed.
+ */
+function buildIndexLabels(length: number, every = 5): string[] {
+  return Array.from({ length }, (_, i) => ((i + 1) % every === 0 ? String(i + 1) : ""));
+}
+
+/**
+ * Picks a "nice" round y-axis step (1/2/5 × a power of ten) so the chart
+ * gets roughly 4-5 gridlines no matter how small or large the data is.
+ */
+function computeYStep(values: number[]): number {
+  const max = Math.max(0, ...values);
+  if (max <= 0) return 1;
+
+  const rawStep = max / 4;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+
+  let niceResidual: number;
+  if (residual > 5) niceResidual = 10;
+  else if (residual > 2) niceResidual = 5;
+  else if (residual > 1) niceResidual = 2;
+  else niceResidual = 1;
+
+  return niceResidual * magnitude;
+}
 
 // Best-effort key match against data.summary — exact key names unconfirmed for this report type.
 
@@ -130,6 +157,22 @@ export default function VerificationReport() {
     dispatch(fetchDetailedReport({ reportType: REPORT_TYPE }));
   }, [dispatch]);
 
+  // Trend chart — real data from GET /reports/detailed/verification/trend,
+  // replacing the previous hardcoded illustrative series.
+  const [trend, setTrend] = useState<ReportTrendPoint[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTrendLoading(true);
+    getReportTrend({ reportType: REPORT_TYPE, groupBy: "day" })
+      .then((res) => { if (!cancelled) setTrend(Array.isArray(res) ? res : []); })
+      .catch(() => { if (!cancelled) setTrend([]); })
+      .finally(() => { if (!cancelled) setTrendLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const [period, setPeriod] = useState("July 2026");
   const [tier, setTier] = useState("All Tiers");
   const [status, setStatus] = useState("All Status");
@@ -227,19 +270,26 @@ export default function VerificationReport() {
         </div>
       )}
 
-      {loading ? <SkelChart height={160} /> : (
+      {/* Trend chart — real data from /reports/detailed/verification/trend */}
+      {trendLoading ? (
+        <SkelChart height={160} />
+      ) : (
         <div style={card}>
           <div style={{ padding: "20px 20px 20px" }}>
-            <DashboardLineChart
-              title="Verification Trends (Last 30 Days)"
-              yLabel="Submissions"
-              xLabel="Day"
-              color={colors.primary}
-              data={verificationTrend}
-              labels={verificationTrendLabels}
-              yStep={50}
-              statValue={kpiTotal != null ? `${kpiTotal.toLocaleString()} submissions` : undefined}
-            />
+            {trend.length === 0 ? (
+              <p style={{ fontSize: "12.5px", color: colors.textFaint, margin: 0 }}>No trend data for this period.</p>
+            ) : (
+              <DashboardLineChart
+                title="Verification Trends"
+                yLabel="Submissions"
+                xLabel="Day"
+                color={colors.primary}
+                data={trend.map((p) => p.value)}
+                labels={buildIndexLabels(trend.length)}
+                yStep={computeYStep(trend.map((p) => p.value))}
+                statValue={kpiTotal != null ? `${kpiTotal.toLocaleString()} submissions` : undefined}
+              />
+            )}
           </div>
         </div>
       )}

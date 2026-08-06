@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { UserPlus, TrendingUp, TrendingDown, Users, Eye } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
-import { getDetailedReport } from "@/lib/api/detailedReportApi";
-import type { ReportType, ReportFormat, ReportSummary } from "@/lib/api/detailedReportApi";
+import { getDetailedReport, getReportTrend } from "@/lib/api/detailedReportApi";
+import type { ReportType, ReportFormat, ReportSummary, ReportTrendPoint } from "@/lib/api/detailedReportApi";
 import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst } from "./shared";
 import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelChart, SkelTableRows, SkelCardRows } from "./Skeleton";
@@ -20,8 +20,9 @@ import { RowDetailModal } from "./RowDetailModal";
 //   - user-growth   -> KPI stats only (newUsers/growthRate/churnRate/activeUsers)
 //   - expert-details -> the table rows (name/tier/paymentModel/category/region/status/joined)
 // The table's redux slice (reportDetail) stays wired to expert-details, same
-// as before. The KPI stats are fetched separately, straight from the API
-// module, so the two calls don't clobber each other's summary/rows.
+// as before. The KPI stats and the trend chart are fetched separately,
+// straight from the API module, so they don't clobber the table's
+// summary/rows in the shared slice.
 const TABLE_REPORT_TYPE: ReportType = "expert-details";
 const STATS_REPORT_TYPE: ReportType = "user-growth";
 
@@ -31,9 +32,37 @@ const PERIOD_OPTIONS = ["July 2026", "June 2026", "May 2026", "Q2 2026"];
 const USER_TYPE_OPTIONS = ["All User Types", "Clients", "Experts", "TAS"];
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 
-// Illustrative until the API exposes a trends endpoint (no time-series data in the confirmed response).
-const growthTrend = [30, 55, 60, 65, 68, 90, 112];
-const growthTrendLabels = ["Day 1", "Day 5", "Day 10", "Day 15", "Day 20", "Day 25", "Day 30"];
+/**
+ * Labels every 5th point by its position in the series (1, 5, 10, 15...)
+ * rather than a calendar date. Calendar-day-of-month labeling breaks when
+ * the series crosses a month boundary (e.g. day 30 followed by day 5 of the
+ * next month reads as if the axis went backwards) — position-based labels
+ * always read in a straight, increasing line regardless of date range.
+ */
+function buildIndexLabels(length: number, every = 5): string[] {
+  return Array.from({ length }, (_, i) => ((i + 1) % every === 0 ? String(i + 1) : ""));
+}
+
+/**
+ * Picks a "nice" round y-axis step (1/2/5 × a power of ten) so the chart
+ * gets roughly 4-5 gridlines no matter how small or large the data is.
+ */
+function computeYStep(values: number[]): number {
+  const max = Math.max(0, ...values);
+  if (max <= 0) return 1;
+
+  const rawStep = max / 4;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+
+  let niceResidual: number;
+  if (residual > 5) niceResidual = 10;
+  else if (residual > 2) niceResidual = 5;
+  else if (residual > 1) niceResidual = 2;
+  else niceResidual = 1;
+
+  return niceResidual * magnitude;
+}
 
 function statusPill(status: string) {
   const s = status.toLowerCase();
@@ -77,6 +106,22 @@ export default function UserGrowthReport() {
       .then((res) => { if (!cancelled) setStats(res.summary); })
       .catch(() => { if (!cancelled) setStats(null); })
       .finally(() => { if (!cancelled) setStatsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Trend chart — real data from GET /reports/detailed/user-growth/trend,
+  // replacing the previous hardcoded illustrative series.
+  const [trend, setTrend] = useState<ReportTrendPoint[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTrendLoading(true);
+    getReportTrend({ reportType: STATS_REPORT_TYPE, groupBy: "day" })
+      .then((res) => { if (!cancelled) setTrend(Array.isArray(res) ? res : []); })
+      .catch(() => { if (!cancelled) setTrend([]); })
+      .finally(() => { if (!cancelled) setTrendLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -176,21 +221,25 @@ export default function UserGrowthReport() {
         </div>
       )}
 
-      {/* Trend chart — illustrative until a trends endpoint exists */}
-      {statsLoading ? (
+      {/* Trend chart — real data from /reports/detailed/user-growth/trend */}
+      {trendLoading ? (
         <SkelChart height={170} />
       ) : (
         <div style={card}>
           <div style={{ padding: "20px 20px 20px" }}>
-            <DashboardLineChart
-              title="User Growth Trends (Last 30 Days)"
-              yLabel="New Users"
-              xLabel="Day"
-              color={colors.primary}
-              data={growthTrend}
-              labels={growthTrendLabels}
-              yStep={50}
-            />
+            {trend.length === 0 ? (
+              <p style={{ fontSize: "12.5px", color: colors.textFaint, margin: 0 }}>No trend data for this period.</p>
+            ) : (
+              <DashboardLineChart
+                title="User Growth Trends"
+                yLabel="New Users"
+                xLabel="Day"
+                color={colors.primary}
+                data={trend.map((p) => p.value)}
+                labels={buildIndexLabels(trend.length)}
+                yStep={computeYStep(trend.map((p) => p.value))}
+              />
+            )}
           </div>
         </div>
       )}
