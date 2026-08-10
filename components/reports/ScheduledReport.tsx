@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Plus, Pencil, Trash2, X, CalendarClock } from "lucide-react";
+import { Plus, Pencil, Trash2, X, CalendarClock, AlertTriangle } from "lucide-react";
 import { colors, card, th, thFirst, td, tdFirst, pillBtn, pillBtnGhost, modalOverlay, modalCard, toolbarInput } from "./shared";
 import { SkelTableRows, SkelCardRows } from "./Skeleton";
 import type { AppDispatch, RootState } from "@/lib/redux/store"; // ⚠️ adjust to your actual store path
@@ -13,7 +13,7 @@ import {
   updateScheduledReportThunk,
   deleteScheduledReportThunk,
 } from "@/lib/redux/schedduleReportSlice"; // ⚠️ adjust to wherever you place the slice
-import type { ScheduledReport, ScheduledReportPayload } from "@/lib/api/scheduledReportApi";
+import type { ScheduledReport, ScheduledReportPayload, ReportFormat } from "@/lib/api/scheduledReportApi";
 import { reportTypeOptions } from "./mockData"; // kept as static option list — no "options" endpoint given
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -30,6 +30,20 @@ function freqPill(freq: string) {
   return <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>{freq}</span>;
 }
 
+function formatPill(format?: ReportFormat) {
+  if (!format) return <span style={{ color: colors.textFaint }}>—</span>;
+  const map: Record<ReportFormat, { bg: string; fg: string }> = {
+    csv: { bg: colors.greenBg, fg: colors.green },
+    pdf: { bg: colors.primaryLight, fg: colors.primary },
+  };
+  const c = map[format];
+  return (
+    <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, backgroundColor: c.bg, color: c.fg }}>
+      {format.toUpperCase()}
+    </span>
+  );
+}
+
 const capFreq = (f: string) => (f.charAt(0).toUpperCase() + f.slice(1)) as "Daily" | "Weekly" | "Monthly";
 
 export default function ScheduledReports() {
@@ -39,6 +53,8 @@ export default function ScheduledReports() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ScheduledReport | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ScheduledReport | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     dispatch(fetchScheduledReportsThunk());
@@ -47,13 +63,29 @@ export default function ScheduledReports() {
   const openNew = () => { setEditing(null); setShowModal(true); };
   const openEdit = (r: ScheduledReport) => { setEditing(r); setShowModal(true); };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this schedule?")) dispatch(deleteScheduledReportThunk(id));
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await dispatch(deleteScheduledReportThunk(deleteTarget.id)).unwrap();
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
       {showModal && <ScheduleModal initial={editing} onClose={() => setShowModal(false)} />}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete schedule?"
+          message={`This will permanently delete "${deleteTarget.name}". This can't be undone.`}
+          loading={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button style={{ ...pillBtn, display: "flex", alignItems: "center", gap: "6px" }} onClick={openNew}>
@@ -81,13 +113,13 @@ export default function ScheduledReports() {
                     <p style={{ margin: "2px 0 0", fontSize: "11.5px", color: colors.textFaint }}>{r.type}</p>
                   </td>
                   <td style={td}>{freqPill(capFreq(r.schedule.frequency))}</td>
-                  <td style={td}>—</td>
+                  <td style={td}>{formatPill(r.format)}</td>
                   <td style={td}>{r.recipients.join(", ")}</td>
                   <td style={td}>{r.lastRunAt ? new Date(r.lastRunAt).toLocaleString() : "—"}</td>
                   <td style={td}>
                     <div style={{ display: "flex", gap: "10px" }}>
                       <Pencil size={14} style={{ color: colors.textFaint, cursor: "pointer" }} onClick={() => openEdit(r)} />
-                      <Trash2 size={14} style={{ color: colors.red, cursor: "pointer" }} onClick={() => handleDelete(r.id)} />
+                      <Trash2 size={14} style={{ color: colors.red, cursor: "pointer" }} onClick={() => setDeleteTarget(r)} />
                     </div>
                   </td>
                 </tr>
@@ -101,7 +133,10 @@ export default function ScheduledReports() {
             <div key={r.id} style={{ padding: "14px 16px", borderRadius: "12px", border: `1px solid ${colors.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{r.name}</span>
-                {freqPill(capFreq(r.schedule.frequency))}
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {freqPill(capFreq(r.schedule.frequency))}
+                  {formatPill(r.format)}
+                </div>
               </div>
               <p style={{ fontSize: "12px", color: colors.textMuted, margin: 0 }}>{r.recipients.join(", ")}</p>
               <div style={{ display: "flex", gap: "12px", marginTop: "10px" }}>
@@ -126,6 +161,7 @@ function ScheduleModal({ initial, onClose }: { initial: ScheduledReport | null; 
   const [dayOfMonth, setDayOfMonth] = useState(initial?.schedule.dayOfMonth ?? 1);
   const [time, setTime] = useState(initial?.schedule.time ?? "09:00");
   const [recipients, setRecipients] = useState(initial?.recipients.join(", ") ?? "");
+  const [format, setFormat] = useState<ReportFormat>(initial?.format ?? "csv");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -144,6 +180,7 @@ function ScheduleModal({ initial, onClose }: { initial: ScheduledReport | null; 
       type: reportType,
       schedule,
       recipients: recipients.split(",").map((s) => s.trim()).filter(Boolean),
+      format,
     };
 
     try {
@@ -216,8 +253,18 @@ function ScheduleModal({ initial, onClose }: { initial: ScheduledReport | null; 
         </div>
 
         <Field label="Format">
-          <div style={{ padding: "9px 12px", borderRadius: "8px", border: `1px dashed ${colors.border}`, fontSize: "12.5px", color: colors.textMuted }}>
-            Not yet supported by the API — selection isn&apos;t sent
+          <div style={{ display: "flex", gap: "8px" }}>
+            {(["csv", "pdf"] as const).map((f) => (
+              <button
+                key={f} onClick={() => setFormat(f)}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: "8px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${format === f ? colors.primary : colors.border}`,
+                  backgroundColor: format === f ? colors.primaryLight : "#fff",
+                  color: format === f ? colors.primary : colors.textMuted,
+                }}
+              >{f.toUpperCase()}</button>
+            ))}
           </div>
         </Field>
 
@@ -247,6 +294,68 @@ function Field({ label, children, style = {} }: { label: string; children: React
     <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px", ...style }}>
       <span style={{ fontSize: "12px", fontWeight: 600, color: colors.textMuted }}>{label}</span>
       {children}
+    </div>
+  );
+}
+
+function ConfirmModal({
+  title = "Are you sure?",
+  message,
+  confirmLabel = "Delete",
+  cancelLabel = "Cancel",
+  loading = false,
+  onConfirm,
+  onCancel,
+}: {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  loading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div style={modalOverlay} onClick={onCancel}>
+      <div style={{ ...modalCard, width: "400px" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{
+              width: "32px", height: "32px", borderRadius: "999px", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backgroundColor: "#FEE2E2",
+            }}>
+              <AlertTriangle size={16} style={{ color: colors.red }} />
+            </span>
+            <p style={{ fontSize: "15px", fontWeight: 700, color: colors.textMain, margin: 0 }}>{title}</p>
+          </div>
+          <button onClick={onCancel} style={{ border: "none", background: "none", cursor: "pointer", color: colors.textFaint }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <p style={{ fontSize: "13px", color: colors.textMuted, margin: "0 0 20px", lineHeight: 1.5 }}>
+          {message}
+        </p>
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={pillBtnGhost} disabled={loading}>
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              padding: "8px 16px", borderRadius: "999px", fontSize: "12.5px", fontWeight: 600,
+              border: "none", cursor: loading ? "default" : "pointer", color: "#fff",
+              backgroundColor: colors.red,
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? "Deleting…" : confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
