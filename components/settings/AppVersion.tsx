@@ -7,6 +7,7 @@ import { Upload, Trash2, Download, Smartphone, CheckCircle2, Loader2, AlertCircl
 import { toast } from "sonner";
 import { SubPageShell } from "./SettingsShared";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
+import { fileNameFromUrl } from "@/lib/api/appversionApi";
 import {
   fetchLatestVersion,
   fetchAllVersions,
@@ -16,12 +17,6 @@ import {
 } from "@/lib/redux/appversionSlice";
 
 // ── Helpers ───────────────────────────────────────────────
-const fmtBytes = (bytes: number): string => {
-  if (bytes < 1024)        return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -44,6 +39,7 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
   // ── Form state ────────────────────────────────────────
   const [version,      setVersion]      = useState("");
   const [releaseNotes, setReleaseNotes] = useState("");
+  const [force,        setForce]        = useState(false);
   const [file,         setFile]         = useState<File | null>(null);
   const [dragOver,     setDragOver]     = useState(false);
   const [progress,     setProgress]     = useState(0);
@@ -62,7 +58,7 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (uploadStatus === "succeeded") {
       toast.success("APK uploaded successfully");
-      setVersion(""); setReleaseNotes(""); setFile(null); setProgress(0);
+      setVersion(""); setReleaseNotes(""); setForce(false); setFile(null); setProgress(0);
       setTimeout(() => dispatch(resetUploadStatus()), 2000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,7 +81,12 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
     if (!file)           { toast.warning("Please select an APK file");      return; }
 
     dispatch(uploadVersionThunk({
-      payload: { version: version.trim(), releaseNotes: releaseNotes.trim(), file },
+      payload: {
+        version:     version.trim(),
+        releaseNote: releaseNotes.trim(),
+        force,
+        file,
+      },
       onProgress: (pct) => setProgress(pct),
     }));
   };
@@ -148,10 +149,14 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
             ) : latest ? (
               <>
                 <InfoRow label="Version:"       value={<strong style={{ color: "#2563EB" }}>v{latest.version}</strong>} />
-                <InfoRow label="File Name:"     value={latest.fileName} />
-                <InfoRow label="File Size:"     value={fmtBytes(latest.fileSize)} />
+                <InfoRow label="File Name:"     value={fileNameFromUrl(latest.fileUrl)} />
                 <InfoRow label="Released:"      value={fmtDate(latest.createdAt)} />
-                <InfoRow label="Release Notes:" value={latest.releaseNotes || "—"} />
+                <InfoRow label="Release Notes:" value={latest.releaseNote || "—"} />
+                <InfoRow label="Force Update:"  value={
+                  <span style={{ fontWeight: 600, color: latest.force ? "#dc2626" : "#6B7280" }}>
+                    {latest.force ? "Enforced — users must update" : "Optional"}
+                  </span>
+                } />
                 <InfoRow label="Download URL:"  value={
                   <a href={latest.fileUrl} target="_blank" rel="noreferrer"
                     style={{ color: "#2563EB", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -196,6 +201,40 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
               </div>
             </div>
 
+            {/* Force update toggle */}
+            <div
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 16px", borderRadius: 10, border: "1px solid #E5E7EB",
+                backgroundColor: force ? "#FEF2F2" : "#F9FAFB", marginBottom: 16,
+              }}
+            >
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#111827", margin: 0 }}>Force Update</p>
+                <p style={{ fontSize: 12, color: "#6B7280", margin: "2px 0 0" }}>
+                  If enabled, users on any older version will be blocked until they update.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={force}
+                onClick={() => setForce((f) => !f)}
+                disabled={isUploading}
+                style={{
+                  width: 42, height: 24, borderRadius: 999, border: "none",
+                  backgroundColor: force ? "#dc2626" : "#D1D5DB",
+                  position: "relative", cursor: isUploading ? "not-allowed" : "pointer",
+                  transition: "background-color 0.15s", flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 3, left: force ? 21 : 3,
+                  width: 18, height: 18, borderRadius: "50%", backgroundColor: "#fff",
+                  transition: "left 0.15s",
+                }} />
+              </button>
+            </div>
+
             {/* Drop zone */}
             <div
               onClick={() => !isUploading && fileRef.current?.click()}
@@ -220,7 +259,9 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
                   <p style={{ fontSize: 14, fontWeight: 600, color: "#16a34a", margin: "0 0 4px" }}>
                     {file.name}
                   </p>
-                  <p style={{ fontSize: 12, color: "#6B7280", margin: 0 }}>{fmtBytes(file.size)}</p>
+                  <p style={{ fontSize: 12, color: "#6B7280", margin: 0 }}>
+                    {(file.size / (1024 * 1024)).toFixed(1)} MB
+                  </p>
                   {!isUploading && (
                     <button onClick={(e) => { e.stopPropagation(); setFile(null); }}
                       style={{ marginTop: 10, fontSize: 12, color: "#dc2626", background: "none",
@@ -283,7 +324,7 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ backgroundColor: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
-                    {["Version", "File", "Size", "Date", "Notes", "Actions"].map((h) => (
+                    {["Version", "File", "Force", "Date", "Notes", "Actions"].map((h) => (
                       <th key={h} style={{ textAlign: "left", padding: "11px 20px",
                         fontSize: 11, fontWeight: 600, color: "#6B7280",
                         textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
@@ -307,10 +348,15 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
                         </span>
                       </td>
                       <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
-                        {v.fileName}
+                        {fileNameFromUrl(v.fileUrl)}
                       </td>
-                      <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
-                        {fmtBytes(v.fileSize)}
+                      <td style={{ padding: "13px 20px", whiteSpace: "nowrap" }}>
+                        {v.force ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: "#FEF2F2",
+                            color: "#dc2626", borderRadius: 999, padding: "2px 8px" }}>FORCED</span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "#9CA3AF" }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>
                         {fmtDate(v.createdAt)}
@@ -318,7 +364,7 @@ export default function AppVersionSettings({ onBack }: { onBack: () => void }) {
                       <td style={{ padding: "13px 20px", fontSize: 13, color: "#6B7280", maxWidth: 200 }}>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis",
                           whiteSpace: "nowrap", display: "block" }}>
-                          {v.releaseNotes || "—"}
+                          {v.releaseNote || "—"}
                         </span>
                       </td>
                       <td style={{ padding: "13px 20px", whiteSpace: "nowrap" }}>

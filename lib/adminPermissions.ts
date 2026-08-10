@@ -72,7 +72,7 @@ export interface Permissions {
 
   // Categories
   canViewCategories:        boolean;
-  canManageCategories:      boolean;  // ← new
+  canManageCategories:      boolean;
 
   // Notifications
   canViewNotifications:     boolean;
@@ -91,8 +91,8 @@ export interface Permissions {
   canManageFaq:             boolean;
 
   // Subscription
-  canViewSubscription:      boolean;  // ← new
-  canManageSubscription:    boolean;  // ← new
+  canViewSubscription:      boolean;
+  canManageSubscription:    boolean;
 
   // Admin management
   canViewAdmins:            boolean;
@@ -104,8 +104,11 @@ export interface Permissions {
   canViewAuditLogs:         boolean;
   canExportAuditLogs:       boolean;
 
-  //waitlist
-   canManageWaitlist: boolean; 
+  // Waitlist
+  canManageWaitlist:        boolean;
+
+  // App Version — Super Admin only
+  canManageAppVersion:      boolean;  // ← new
 }
 
 // ── Permission definitions per role ───────────────────────
@@ -156,7 +159,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageRoles:           true,
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
-     canManageWaitlist: true,
+    canManageWaitlist:        true,
+    canManageAppVersion:      true,
   },
 
   // ── Verification Officer ──────────────────────────────
@@ -204,6 +208,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
     canManageWaitlist:        false,
+    canManageAppVersion:      false,
   },
 
   // ── Finance Admin ─────────────────────────────────────
@@ -242,8 +247,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageCommission:      true,
     canViewFaq:               false,
     canManageFaq:             false,
-    canViewSubscription:      true,   // ← finance can manage subscription
-    canManageSubscription:    true,   // ← finance can manage subscription
+    canViewSubscription:      true,
+    canManageSubscription:    true,
     canViewAdmins:            false,
     canCreateAdmin:           false,
     canDeleteAdmin:           false,
@@ -251,6 +256,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
     canManageWaitlist:        false,
+    canManageAppVersion:      false,
   },
 
   // ── Support Admin ─────────────────────────────────────
@@ -279,8 +285,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canExportReports:         false,
     canViewAnnouncements:     true,
     canManageAnnouncements:   false,
-    canViewCategories:        true,   // ← support can view categories
-    canManageCategories:      true,   // ← support can manage categories
+    canViewCategories:        true,
+    canManageCategories:      true,
     canViewNotifications:     true,
     canManageNotifications:   false,
     canViewSettings:          false,
@@ -298,6 +304,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
     canManageWaitlist:        true,
+    canManageAppVersion:      false,
   },
 
   // ── View Only ─────────────────────────────────────────
@@ -345,6 +352,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
     canManageWaitlist:        false,
+    canManageAppVersion:      false,
   },
 };
 
@@ -352,8 +360,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
 
 const VALID_ROLES = new Set<string>(["admin", "verification", "finance", "support", "view"]);
 
-/** Coerces any raw string from the auth store to a valid AdminRole.
- *  Falls back to "view" (most restrictive) if the value is unknown. */
+
 export const normaliseRole = (raw: string | null | undefined): AdminRole => {
   if (raw && VALID_ROLES.has(raw)) return raw as AdminRole;
   return "view";

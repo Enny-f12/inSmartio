@@ -15,6 +15,7 @@ import NotificationSettings   from "@/components/settings/NotificationSettings";
 import AdminManagement        from "@/components/settings/AdminManagement";
 import SubscriptionManagement from "@/components/settings/SubscriptionManagement";
 import WaitlistManagement     from "@/components/settings/WaitlistManagement";
+import AppVersionSettings     from "@/components/settings/AppVersion";
 import type { SettingsView }  from "@/components/settings/types";
 import { getPermissions }     from "@/lib/adminPermissions";
 import { useAppSelector }     from "@/hooks/redux";
@@ -50,6 +51,23 @@ function SettingsInner() {
   }, [searchParams]);
 
   // ── Sub-page routing ──────────────────────────────────────────────────────
+  // Guard app-version behind the permission even if reached directly via URL param.
+  if (view === "app-version" && !perms.canManageAppVersion) {
+    return (
+      <div className="flex flex-col flex-1">
+        <Topbar title="Settings" />
+        <main className="flex-1 px-8 py-6">
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <p className="text-text-main font-medium">Access restricted</p>
+            <p className="text-sm text-text-muted mt-1">
+              Only Super Admins can manage app versions.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (view === "categories")     return <CategoriesManagement   onBack={() => setView("main")} />;
   if (view === "faq")            return <FaqManagement          onBack={() => setView("main")} />;
   if (view === "banners")        return <BannerManagement       onBack={() => setView("main")} />;
@@ -60,6 +78,7 @@ function SettingsInner() {
   if (view === "admins")         return <AdminManagement        onBack={() => setView("main")} />;
   if (view === "subscription")   return <SubscriptionManagement onBack={() => setView("main")} />;
   if (view === "waitlist")       return <WaitlistManagement     onBack={() => setView("main")} />;
+  if (view === "app-version")    return <AppVersionSettings     onBack={() => setView("main")} />;
 
   // ── Permission-filtered menu items ────────────────────────────────────────
 
@@ -76,6 +95,7 @@ function SettingsInner() {
     { label: "Commission Settings",    view: "commission"     as ExtendedView, show: perms.canViewCommission      },
     { label: "Notification Templates", view: "notifications"  as ExtendedView, show: perms.canManageNotifications },
     { label: "Notification Settings",  view: "notif-settings" as ExtendedView, show: perms.canManageNotifications },
+    { label: "App Version Management", view: "app-version"    as ExtendedView, show: perms.canManageAppVersion    },
   ].filter((i) => i.show);
 
   // Admin group
