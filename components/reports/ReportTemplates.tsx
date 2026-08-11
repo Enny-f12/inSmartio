@@ -58,7 +58,13 @@ export default function ReportTemplates() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {showModal && <TemplateModal initial={editing} onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <TemplateModal
+          key={editing?.id ?? "new"}
+          initial={editing}
+          onClose={() => setShowModal(false)}
+        />
+      )}
       {deleteTarget && (
         <ConfirmModal
           title="Delete template?"
@@ -159,9 +165,18 @@ function TemplateModal({ initial, onClose }: { initial: ReportTemplate | null; o
     });
     return initial_;
   });
+
+  // The file already attached to this template on the server (shown when editing)
+  const [existingFile, setExistingFile] = useState<{ url: string; kind: "csv" | "pdf" } | null>(() => {
+    if (initial?.urls?.csv?.url) return { url: initial.urls.csv.url, kind: "csv" };
+    if (initial?.urls?.pdf?.url) return { url: initial.urls.pdf.url, kind: "pdf" };
+    return null;
+  });
+  // A brand-new file chosen in this session (to upload / replace with)
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const toggleCol = (c: string) => {
     setSelectedCols((prev) => {
@@ -170,6 +185,15 @@ function TemplateModal({ initial, onClose }: { initial: ReportTemplate | null; o
       next.has(c) ? next.delete(c) : next.add(c);
       return next;
     });
+  };
+
+  const existingFileName = (url: string) => {
+    try {
+      const decoded = decodeURIComponent(url.split("?")[0]);
+      return decoded.split("/").pop() || "attached-file";
+    } catch {
+      return "attached-file";
+    }
   };
 
   const handleSave = async () => {
@@ -283,7 +307,75 @@ function TemplateModal({ initial, onClose }: { initial: ReportTemplate | null; o
         </Field>
 
         <Field label="Attach Sample File (optional)">
-          {!file ? (
+          {file ? (
+            // A brand-new file was just picked/dropped/replaced in this session
+            <div style={{
+              display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px",
+              borderRadius: "10px", border: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB",
+            }}>
+              <span style={{
+                width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0, display: "flex",
+                alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryLight,
+              }}>
+                <FileText size={15} style={{ color: colors.primary }} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: "12.5px", fontWeight: 600, color: colors.textMain, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {file.name}
+                </p>
+                <p style={{ margin: 0, fontSize: "11px", color: colors.textFaint }}>
+                  {formatFileSize(file.size)}
+                </p>
+              </div>
+              <button
+                onClick={() => setFile(null)}
+                style={{ border: "none", background: "none", cursor: "pointer", color: colors.textFaint, flexShrink: 0, display: "flex" }}
+                aria-label="Remove file"
+              >
+                <CircleX size={18} />
+              </button>
+            </div>
+          ) : existingFile ? (
+            // The file already saved on this template (shown on edit, before any new pick)
+            <div style={{
+              display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px",
+              borderRadius: "10px", border: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB",
+            }}>
+              <span style={{
+                width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0, display: "flex",
+                alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryLight,
+              }}>
+                <FileText size={15} style={{ color: colors.primary }} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <a
+                  href={existingFile.url} target="_blank" rel="noreferrer"
+                  style={{ margin: 0, fontSize: "12.5px", fontWeight: 600, color: colors.textMain, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", textDecoration: "none" }}
+                >
+                  {existingFileName(existingFile.url)}
+                </a>
+                <p style={{ margin: 0, fontSize: "11px", color: colors.textFaint }}>
+                  Currently attached · {existingFile.kind.toUpperCase()}
+                </p>
+              </div>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: colors.primary, cursor: "pointer", flexShrink: 0 }}>
+                Replace
+                <input
+                  type="file" accept=".csv,.pdf"
+                  onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+                  style={{ display: "none" }}
+                />
+              </label>
+              <button
+                onClick={() => setExistingFile(null)}
+                style={{ border: "none", background: "none", cursor: "pointer", color: colors.textFaint, flexShrink: 0, display: "flex" }}
+                aria-label="Remove file"
+              >
+                <CircleX size={18} />
+              </button>
+            </div>
+          ) : (
+            // No file at all yet
             <label
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
@@ -318,44 +410,150 @@ function TemplateModal({ initial, onClose }: { initial: ReportTemplate | null; o
                 style={{ display: "none" }}
               />
             </label>
-          ) : (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px",
-              borderRadius: "10px", border: `1px solid ${colors.border}`, backgroundColor: "#F9FAFB",
-            }}>
-              <span style={{
-                width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0, display: "flex",
-                alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryLight,
-              }}>
-                <FileText size={15} style={{ color: colors.primary }} />
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: "12.5px", fontWeight: 600, color: colors.textMain, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {file.name}
-                </p>
-                <p style={{ margin: 0, fontSize: "11px", color: colors.textFaint }}>
-                  {formatFileSize(file.size)}
-                </p>
-              </div>
-              <button
-                onClick={() => setFile(null)}
-                style={{ border: "none", background: "none", cursor: "pointer", color: colors.textFaint, flexShrink: 0, display: "flex" }}
-                aria-label="Remove file"
-              >
-                <CircleX size={18} />
-              </button>
-            </div>
           )}
         </Field>
 
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "8px" }}>
           <button onClick={onClose} style={pillBtnGhost}>Cancel</button>
-          <button onClick={onClose} style={pillBtnGhost}>Preview</button>
+          <button onClick={() => setShowPreview(true)} style={pillBtnGhost} disabled={!name.trim()}>Preview</button>
           <button onClick={handleSave} style={pillBtn} disabled={!name.trim() || saving}>
             {saving ? "Saving…" : "Save Template"}
           </button>
         </div>
       </div>
+
+      {showPreview && (
+        <PreviewModal
+          name={name}
+          description={description}
+          reportType={reportType}
+          baseReport={baseReport}
+          columns={Array.from(selectedCols)}
+          filters={Object.entries(filters).filter(([, v]) => v && v !== "All").map(([k, v]) => `${k}: ${v}`)}
+          fileLabel={file ? file.name : existingFile ? existingFileName(existingFile.url) : null}
+          fileSizeLabel={file ? formatFileSize(file.size) : null}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PreviewModal({
+  name,
+  description,
+  reportType,
+  baseReport,
+  columns,
+  filters,
+  fileLabel,
+  fileSizeLabel,
+  onClose,
+}: {
+  name: string;
+  description: string;
+  reportType: string;
+  baseReport: string;
+  columns: string[];
+  filters: string[];
+  fileLabel: string | null;
+  fileSizeLabel: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div style={{ ...modalOverlay, zIndex: 60 }} onClick={onClose}>
+      <div style={{ ...modalCard, width: "520px" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <p style={{ fontSize: "16px", fontWeight: 700, color: colors.textMain, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            <LayoutTemplate size={17} style={{ color: colors.primary }} /> Preview
+          </p>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", color: colors.textFaint }}><X size={18} /></button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: colors.textMain }}>{name || "Untitled Template"}</p>
+            {description && (
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: colors.textMuted }}>{description}</p>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "24px" }}>
+            <PreviewField label="Report Type" value={reportType} />
+            <PreviewField label="Base Report" value={baseReport || "—"} />
+          </div>
+
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: 600, color: colors.textFaint, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+              Columns ({columns.length})
+            </p>
+            {columns.length ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {columns.map((c) => (
+                  <span key={c} style={{
+                    fontSize: "11.5px", padding: "3px 9px", borderRadius: "999px",
+                    backgroundColor: colors.primaryLight, color: colors.primary, fontWeight: 600,
+                  }}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "12.5px", color: colors.textFaint }}>No columns selected</p>
+            )}
+          </div>
+
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: 600, color: colors.textFaint, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+              Default Filters
+            </p>
+            {filters.length ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {filters.map((f) => (
+                  <span key={f} style={{
+                    fontSize: "11.5px", padding: "3px 9px", borderRadius: "999px",
+                    border: `1px solid ${colors.border}`, color: colors.textMuted, fontWeight: 500,
+                  }}>
+                    {f}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "12.5px", color: colors.textFaint }}>No filters applied</p>
+            )}
+          </div>
+
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: 600, color: colors.textFaint, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+              Sample File
+            </p>
+            {fileLabel ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FileText size={14} style={{ color: colors.primary }} />
+                <span style={{ fontSize: "12.5px", color: colors.textMain, fontWeight: 600 }}>{fileLabel}</span>
+                {fileSizeLabel && <span style={{ fontSize: "11px", color: colors.textFaint }}>({fileSizeLabel})</span>}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "12.5px", color: colors.textFaint }}>No file attached</p>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
+          <button onClick={onClose} style={pillBtn}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p style={{ margin: "0 0 2px", fontSize: "11px", fontWeight: 600, color: colors.textFaint, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, fontSize: "13px", color: colors.textMain, fontWeight: 600 }}>{value}</p>
     </div>
   );
 }
