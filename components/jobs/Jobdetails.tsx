@@ -78,11 +78,37 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+// InfoRow now stacks label-above-value on mobile instead of relying on
+// flex-wrap, which was unstable between ~340px–430px (label's 220px
+// minWidth left just enough leftover space for the value to get squeezed
+// into a narrow column and wrap word-by-word instead of dropping to a
+// clean new line).
+function InfoRow({
+  label,
+  value,
+  isMobile = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  isMobile?: boolean;
+}) {
+  if (isMobile) {
+    return (
+      <div style={{ marginBottom: "12px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 500, color: "#6B7280", margin: "0 0 2px" }}>
+          {label}
+        </p>
+        <div style={{ fontSize: "13.5px", color: "#111827", wordBreak: "break-word" }}>
+          {value ?? "—"}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", gap: "8px", fontSize: "13px", marginBottom: "8px", flexWrap: "wrap" }}>
       <span style={{ minWidth: "220px", flexShrink: 0, fontWeight: 500, color: "#6B7280" }}>{label}</span>
-      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1 }}>{value ?? "—"}</span>
+      <span style={{ color: "#111827", wordBreak: "break-word", flex: 1, minWidth: "0" }}>{value ?? "—"}</span>
     </div>
   );
 }
@@ -107,6 +133,11 @@ interface Props {
 
 export default function JobDetailView({ job, onBack }: Props) {
   const [timelineExpanded, setTimelineExpanded] = useState(false);
+  // Bumped the mobile breakpoint from 640 to 768. 640 previously meant
+  // 375px / 425px devices were being treated the same as desktop-ish
+  // widths for anything above 640, but the real problem width band
+  // (320-425) all needs the same stacked treatment, so we just make sure
+  // isMobile is true across that whole range and style consistently.
   const [isMobile, setIsMobile] = React.useState(
     typeof window !== "undefined" ? window.innerWidth < 640 : false
   );
@@ -187,17 +218,19 @@ export default function JobDetailView({ job, onBack }: Props) {
   const visibleTimeline = timelineExpanded ? uniqueTimeline : uniqueTimeline.slice(0, TIMELINE_LIMIT);
   const hasMoreTimeline = uniqueTimeline.length > TIMELINE_LIMIT;
 
+  const sectionPadding = isMobile ? "16px" : "24px 32px";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, backgroundColor: "#F4F5F7" }}>
       <Topbar title="Jobs Management" />
-      <main style={{ flex: 1, overflowY: "auto", padding: "16px", backgroundColor: "#F4F5F7" }}>
+      <main style={{ flex: 1, overflowY: "auto", padding: isMobile ? "12px" : "16px", backgroundColor: "#F4F5F7" }}>
 
         {/* Back button */}
         <button
           onClick={onBack}
           style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px",
             fontWeight: 500, color: "#111827", background: "none", border: "none",
-            cursor: "pointer", marginBottom: "24px" }}
+            cursor: "pointer", marginBottom: "20px" }}
         >
           <ArrowLeft size={16} /> Jobs
         </button>
@@ -206,27 +239,27 @@ export default function JobDetailView({ job, onBack }: Props) {
           boxShadow: "0 1px 4px rgba(0,0,0,0.05)", overflow: "hidden" }}>
 
           {/* ── Job Information ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: sectionPadding, borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Job Information" />
-            <InfoRow label="Job ID:"                         value={val(job, "id", "_id")} />
-            <InfoRow label="Title:"                          value={val(job, "title")} />
-            <InfoRow label="Category:"                       value={val(job, "category")} />
-            <InfoRow label="Description:"                    value={val(job, "description")} />
-            <InfoRow label="Location:"                       value={location} />
-            <InfoRow label="Amount:"                         value={amount} />
-            <InfoRow label="Budget:"                         value={budget} />
-            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
-            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
-            <InfoRow label="Created:"                        value={createdAt} />
-            {isCompleted && <InfoRow label="Deadline:" value={deadline} />}
-            <InfoRow label="Status:"
+            <InfoRow isMobile={isMobile} label="Job ID:"                         value={val(job, "id", "_id")} />
+            <InfoRow isMobile={isMobile} label="Title:"                          value={val(job, "title")} />
+            <InfoRow isMobile={isMobile} label="Category:"                       value={val(job, "category")} />
+            <InfoRow isMobile={isMobile} label="Description:"                    value={val(job, "description")} />
+            <InfoRow isMobile={isMobile} label="Location:"                       value={location} />
+            <InfoRow isMobile={isMobile} label="Amount:"                         value={amount} />
+            <InfoRow isMobile={isMobile} label="Budget:"                         value={budget} />
+            <InfoRow isMobile={isMobile} label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow isMobile={isMobile} label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow isMobile={isMobile} label="Created:"                        value={createdAt} />
+            {isCompleted && <InfoRow isMobile={isMobile} label="Deadline:" value={deadline} />}
+            <InfoRow isMobile={isMobile} label="Status:"
               value={<StatusBadge label={status} variant={getStatusVariant(status)} />} />
           </div>
 
           {/* ── Client + Expert ── */}
           <div
             style={{
-              padding: isMobile ? "20px 16px" : "24px 32px",
+              padding: sectionPadding,
               borderBottom: "1px solid #E5E7EB",
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
@@ -235,26 +268,26 @@ export default function JobDetailView({ job, onBack }: Props) {
           >
             <div>
               <SectionLabel text="Client" />
-              <InfoRow label="Name:"   value={clientName} />
-              <InfoRow label="Phone:"  value={clientPhone} />
-              <InfoRow label="Email:"  value={clientEmail} />
-              <InfoRow label="Rating:" value={<StarRating value={clientRating} />} />
+              <InfoRow isMobile={isMobile} label="Name:"   value={clientName} />
+              <InfoRow isMobile={isMobile} label="Phone:"  value={clientPhone} />
+              <InfoRow isMobile={isMobile} label="Email:"  value={clientEmail} />
+              <InfoRow isMobile={isMobile} label="Rating:" value={<StarRating value={clientRating} />} />
             </div>
 
             <div
               style={
                 isMobile
-                  ? { borderTop: "1px solid #E5E7EB", paddingTop: "20px", marginTop: "20px" }
+                  ? { borderTop: "1px solid #E5E7EB", paddingTop: "16px", marginTop: "4px" }
                   : {}
               }
             >
               <SectionLabel text="Expert" />
               {expertName ? (
                 <>
-                  <InfoRow label="Name:"   value={expertName} />
-                  <InfoRow label="Phone:"  value={expertPhone} />
-                  <InfoRow label="Email:"  value={expertEmail} />
-                  <InfoRow label="Rating:" value={<StarRating value={expertRating} />} />
+                  <InfoRow isMobile={isMobile} label="Name:"   value={expertName} />
+                  <InfoRow isMobile={isMobile} label="Phone:"  value={expertPhone} />
+                  <InfoRow isMobile={isMobile} label="Email:"  value={expertEmail} />
+                  <InfoRow isMobile={isMobile} label="Rating:" value={<StarRating value={expertRating} />} />
                 </>
               ) : (
                 <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No expert assigned yet.</p>
@@ -263,21 +296,22 @@ export default function JobDetailView({ job, onBack }: Props) {
           </div>
 
           {/* ── Payment Information ── */}
-          <div style={{ padding: "24px 32px", borderBottom: "1px solid #E5E7EB" }}>
+          <div style={{ padding: sectionPadding, borderBottom: "1px solid #E5E7EB" }}>
             <SectionLabel text="Payment Information" />
-            <InfoRow label="Payment Method:"                 value={paymentMethod} />
-            <InfoRow label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
-            <InfoRow label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
+            <InfoRow isMobile={isMobile} label="Payment Method:"                 value={paymentMethod} />
+            <InfoRow isMobile={isMobile} label="Final Amount Before Inspection:" value={finalAmountBeforeInspection} />
+            <InfoRow isMobile={isMobile} label="Final Amount After Inspection:"  value={finalAmountAfterInspection} />
             <InfoRow
+              isMobile={isMobile}
               label={`Platform Commission${expertCommission != null ? ` (${expertCommission}%)` : ""}:`}
               value={commissionAmt !== "—" ? commissionAmt : expertCommission != null ? `₦${expertCommission.toLocaleString()}` : "—"}
             />
-            <InfoRow label="Expert Payout:"  value={expertPayout} />
-            <InfoRow label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
+            <InfoRow isMobile={isMobile} label="Expert Payout:"  value={expertPayout} />
+            <InfoRow isMobile={isMobile} label="Payment Status:" value={paymentStatus !== "—" ? paymentStatus : "Pending"} />
           </div>
 
           {/* ── Timeline ── */}
-          <div style={{ padding: "24px 32px" }}>
+          <div style={{ padding: sectionPadding }}>
             <SectionLabel text="Timeline" />
             {uniqueTimeline.length === 0 ? (
               <p style={{ fontSize: "13px", color: "#9CA3AF" }}>No timeline events available.</p>
