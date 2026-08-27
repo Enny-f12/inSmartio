@@ -7,16 +7,17 @@ export interface RecentActivityItem {
   createdAt: string;
 }
 
-export interface PendingAlerts {
-  pendingVerifications: { total: number; tier1: number; tier2: number; tier3: number };
-  openDisputes:         { total: number; new: number; inProgress: number; inMediation: number };
-  tasApplications:      { total: number };
-  pendingPayouts:       { total: number; amountNaira: number };
+//  GET /admin/alerts 
+export interface AlertsSummary {
+  totalAlerts: number;
+  total:       number;
+  verification: { total: number; tier1: number; tier2: number; tier3: number };
+  tas:          { total: number; pendingReview: number; rejectedDocuments: number; pendingPayout: number };
+  dispute:      { total: number; new: number; inProgress: number; mediation: number };
+  payouts:      { count: number; totalAmount: number; formattedTotalAmount: string };
 }
 
-// Rewrites raw activity text into a cleaner, human-friendly message based on type.
-// - expert_registered: "Name registered on EXPERT-026-2190-07-26" -> "Name registered as an expert"
-// - tas_application:    "Name applied on 2026-07-25T08:02:34.697Z" -> "Name applied as TAS"
+
 function formatActivityText(item: Pick<RecentActivityItem, "type" | "text">): string {
   const { type, text } = item;
   if (!text) return text;
@@ -46,7 +47,7 @@ export const getRecentActivity = (): Promise<RecentActivityItem[]> =>
       }))
     );
 
-export const getPendingAlerts = (): Promise<PendingAlerts> =>
+export const getAlerts = (): Promise<AlertsSummary> =>
   axiosInstance
-    .get<{ success: boolean; data: PendingAlerts }>("/admin/dashboard/pending-alerts")
+    .get<{ status: boolean; message: string; data: AlertsSummary }>("/admin/alerts")
     .then((r) => r.data.data);
