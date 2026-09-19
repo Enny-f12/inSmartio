@@ -9,7 +9,7 @@ export interface JobsPaginatedResponse {
   status: boolean;
   message: string;
   data: {
-    data: ApiJob[];   // ← nested array
+    data: ApiJob[];
     total: number;
     page: number;
     limit: number;
@@ -17,26 +17,32 @@ export interface JobsPaginatedResponse {
   };
 }
 
-export interface JobByIdResponse {
-  status: boolean;
-  message: string;
-  data: ApiJob;
+export interface GetJobsParams {
+  limit?: number;
+  page?: number;
+  verification?: string;
+  status?: string;
+  search?: string;
+  fromDate?: string; // YYYY-MM-DD
+  toDate?: string;   // YYYY-MM-DD
+  closed?: boolean;
 }
 
-export const getAllJobs = async (): Promise<ApiJob[]> => {
-  const { data } = await axiosInstance.get<JobsPaginatedResponse>("/jobs");
-  return data.data.data;  // ← unwrap nested array
-};
+export interface JobsListResult {
+  jobs: ApiJob[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
 
-export const getJobById = async (id: string): Promise<ApiJob> => {
-  const { data } = await axiosInstance.get<JobByIdResponse>(`/jobs/${id}`);
-  return data.data;
-};
-
-export const closeJob = async (id: string): Promise<void> => {
-  await axiosInstance.put(`/jobs/${id}/close`);
-};
-
-export const deleteJob = async (id: string): Promise<void> => {
-  await axiosInstance.delete(`/jobs/${id}`);
+export const getAllJobs = async (
+  params?: GetJobsParams
+): Promise<JobsListResult> => {
+  const { data } = await axiosInstance.get<JobsPaginatedResponse>(
+    "/admin/jobs",
+    { params }
+  );
+  const { data: jobs, total, page, limit, pages } = data.data;
+  return { jobs, total, page, limit, pages };
 };

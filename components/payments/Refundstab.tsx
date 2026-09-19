@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { refundTransactionThunk } from "@/lib/redux/paymentSlice";
 
-// ── Mock recent refunds for display ───────────────────────
 
 
 const inp: React.CSSProperties = {

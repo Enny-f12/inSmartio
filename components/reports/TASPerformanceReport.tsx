@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { UserCog, Users, Wallet, Gauge, Eye } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchDetailedReport, downloadReport, setReportType, clearDownloadUrl } from "@/lib/redux/reportDetailSlice";
-import type { ReportType, ReportFormat } from "@/lib/api/detailedReportApi";
+import type { ReportType, ReportFormat, TasLocation } from "@/lib/api/detailedReportApi";
 import { colors, card, kpiCard, kpiLabel, kpiValue, th, thFirst, td, tdFirst, fmtNaira } from "./shared";
 import { ExportMenuButton } from "./ExportMenuButton";
 import { SkelKPIRow, SkelTableRows, SkelCardRows } from "./Skeleton";
@@ -16,20 +16,9 @@ const REPORT_TYPE: ReportType = "tas-performance";
 
 type Row = Record<string, unknown>;
 
-interface Location {
-  area?: string;
-  city?: string;
-  state?: string;
-  address?: string;
-  country?: string;
-}
-
-const PERIOD_OPTIONS = ["July 2026", "June 2026", "Q2 2026"];
-const TIER_OPTIONS = ["All Tiers", "1", "2", "3", "4", "5"];
-
-function getLocation(row: Row): Location | undefined {
+function getLocation(row: Row): TasLocation | undefined {
   const raw = row["location"];
-  return raw && typeof raw === "object" ? (raw as Location) : undefined;
+  return raw && typeof raw === "object" ? (raw as TasLocation) : undefined;
 }
 
 // The API has no separate "zone"/"region" field — the closest real signal
@@ -39,6 +28,8 @@ function pickState(row: Row): string {
   const state = getLocation(row)?.state;
   return state && state.trim() ? state.trim() : "—";
 }
+
+const TIER_OPTIONS = ["All Tiers", "1", "2", "3", "4", "5"];
 
 function statusPill(status: string) {
   const s = status.toLowerCase();
@@ -55,15 +46,26 @@ export default function TASPerformanceReport() {
   const dispatch = useAppDispatch();
   const { summary, rows, pagination, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
 
-  useEffect(() => {
-    dispatch(setReportType(REPORT_TYPE));
-    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE }));
-  }, [dispatch]);
-
-  const [period, setPeriod] = useState("July 2026");
+  // No more preset periods — just a from/to range. Empty means "all time".
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [tier, setTier] = useState("All Tiers");
   const [zone, setZone] = useState("All Zones");
   const [selected, setSelected] = useState<Row | null>(null);
+
+  useEffect(() => {
+    dispatch(setReportType(REPORT_TYPE));
+  }, [dispatch]);
+
+  // Fetch on mount (full range), and again whenever both ends of the range
+  // are filled in. If only one date is picked we wait for the other rather
+  // than firing a lopsided request.
+  useEffect(() => {
+    const bothEmpty = !fromDate && !toDate;
+    const bothFilled = fromDate && toDate;
+    if (!bothEmpty && !bothFilled) return;
+    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE, fromDate: fromDate || undefined, toDate: toDate || undefined }));
+  }, [dispatch, fromDate, toDate]);
 
   const loading = listStatus === "loading" || listStatus === "idle";
 
@@ -92,7 +94,7 @@ export default function TASPerformanceReport() {
   const avgEarnings = totalAgents && totalAgents > 0 && totalEarnings != null ? totalEarnings / totalAgents : undefined;
 
   const handleExport = async (format: ReportFormat) => {
-    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format }));
+    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format, fromDate: fromDate || undefined, toDate: toDate || undefined }));
     if (downloadReport.fulfilled.match(action)) {
       const a = document.createElement("a");
       a.href = action.payload;
@@ -104,11 +106,46 @@ export default function TASPerformanceReport() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      
+      <style>{`
+        .rp-select, .rp-date-input {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        .rp-select:hover, .rp-date-input:hover {
+          border-color: ${colors.textFaint};
+        }
+        .rp-select:focus, .rp-date-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+      `}</style>
+
       {selected && <TASDetailModal row={selected} onClose={() => setSelected(null)} />}
 
-      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <select className="rp-select" value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIOD_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
+      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="From date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+            <span style={{ fontSize: "12px", color: colors.textFaint }}>to</span>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="To date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+          </div>
+
           <select className="rp-select" value={tier} onChange={(e) => setTier(e.target.value)}>{TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
           <select className="rp-select" value={zone} onChange={(e) => setZone(e.target.value)}>{zoneOptions.map((o) => <option key={o}>{o}</option>)}</select>
         </div>

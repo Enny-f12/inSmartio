@@ -54,9 +54,7 @@ export default function TransactionDetailReport() {
 
   const loading = listStatus === "loading" || listStatus === "idle";
 
-  // The API's `type` field is free text (e.g. "job_posting", "Expert Premium
-  // Monthly Subscription", "Payment for job posting: Ironing"), not a fixed
-  // enum — so the dropdown is built from whatever values are actually loaded.
+  
   const typeOptions = useMemo(() => uniqueValues(rows as Row[], ["type"]), [rows]);
 
   const filtered = (rows as Row[]).filter((r) => {

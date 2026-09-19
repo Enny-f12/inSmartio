@@ -1,8 +1,4 @@
 "use client";
-
-// components/dashboard/AuditLogsWidget.tsx
-// Drop this into your dashboard page alongside your stats cards.
-
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Shield, ArrowRight } from "lucide-react";

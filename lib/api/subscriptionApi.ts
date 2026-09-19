@@ -1,4 +1,4 @@
-import axiosInstance from "@/lib/api/axiosInstance"; // adjust path as needed
+import axiosInstance from "@/lib/api/axiosInstance"; 
 import type {
   SubscriptionPlan,
   CreateSubscriptionPayload,

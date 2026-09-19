@@ -78,11 +78,7 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-// InfoRow now stacks label-above-value on mobile instead of relying on
-// flex-wrap, which was unstable between ~340px–430px (label's 220px
-// minWidth left just enough leftover space for the value to get squeezed
-// into a narrow column and wrap word-by-word instead of dropping to a
-// clean new line).
+
 function InfoRow({
   label,
   value,

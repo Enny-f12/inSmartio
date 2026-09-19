@@ -146,14 +146,7 @@ export function DocListPicker({
   );
 }
 
-/**
- * Fixed set of named document upload slots (NIN slip, BVN consent, Government
- * ID, plus optional Guarantor form / Police clearance for Tier 3), matching
- * the mobile app's "Required Documents" screen. Unlike DocListPicker, the
- * admin can't add arbitrary types or duplicates — each slot holds at most one
- * file, so the resulting `documents` array is always exactly one entry per
- * declared type, which is what the backend enforces.
- */
+
 export function FixedDocSlots({
   slots, docs, onChange,
 }: {

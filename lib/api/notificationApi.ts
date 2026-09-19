@@ -1,5 +1,5 @@
 // lib/api/notificationApi.ts
-import axiosInstance from "./axiosInstance"; // adjust path as needed
+import axiosInstance from "./axiosInstance";
 
 /* ── Types ───────────────────────────────────────────────── */
 export interface ApiNotification {

@@ -94,13 +94,13 @@ export const toggleCommissionStatus = async (id: string): Promise<ApiCommission>
 
 // ── Active payment model endpoints ──────────────────────────────────────────
 
-// GET /settings/active-model — public, no auth required
+// GET /settings/active-model;public, no auth required
 export const getActiveModel = async (): Promise<ActiveModel> => {
   const { data } = await axiosInstance.get<ActiveModelGetResponse>("/settings/active-model");
   return data.data.activePaymentModel;
 };
 
-// PATCH /settings/commission/active-model — admin only, sets an explicit model
+// PATCH /settings/commission/active-model; admin only, sets an explicit model
 export const setActiveModel = async (model: ActiveModel): Promise<ApiCommission> => {
   const { data } = await axiosInstance.patch<CommissionSingleResponse>(
     "/settings/commission/active-model",
@@ -118,7 +118,7 @@ export const toggleActiveModel = async (): Promise<ApiCommission> => {
   return data.data;
 };
 
-// PATCH /settings/commission/{id}/active-model/toggle — admin only,
+// PATCH /settings/commission/{id}/active-model/toggle; admin only,
 // toggles the model for one specific commission settings record
 export const toggleCommissionActiveModel = async (id: string): Promise<ApiCommission> => {
   const { data } = await axiosInstance.patch<CommissionSingleResponse>(

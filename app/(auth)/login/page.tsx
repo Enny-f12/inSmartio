@@ -48,7 +48,7 @@ export default function LoginPage() {
     }
     if (status === "failed" && authError) {
       if (requires2FA) {
-        // Not a real failure — just prompt for the code, don't clear the form.
+        // Not a failure, just prompt for the code, form isn't cleared
         toast.info("2FA code required", { description: authError });
       } else {
         toast.error("Login failed", { description: authError });
@@ -104,7 +104,7 @@ export default function LoginPage() {
           ))}
         </div>
 
-        {/* ── RIGHT: Form Panel — full width on mobile ── */}
+        {/* RIGHT: Form Panel , full width on mobile */}
         <div className="flex flex-1 flex-col justify-center items-center px-5 py-10 sm:px-10 sm:py-14 bg-surface">
 
           {/* Brand */}
@@ -114,7 +114,7 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* Card — no border/shadow on mobile, card style on sm+ */}
+          {/* Card no border/shadow on mobile, card style on sm+ */}
           <div className="w-full max-w-md rounded-2xl p-0 sm:p-9 sm:bg-white sm:border sm:border-border sm:shadow-sm">
             <h1 className="text-base sm:text-lg font-bold text-center  mt-5 mb-5 sm:mb-7 text-text-main">
               Admin Dashboard
@@ -173,7 +173,7 @@ export default function LoginPage() {
                 </a>
               </div>
 
-              {/* 2FA — optional by default, becomes required once the backend asks for it */}
+              {/* 2FA, optional by default, becomes required once the backend asks for it */}
               <div className="mb-6 sm:mb-7">
                 <label htmlFor="twofa" className="block text-[13px] font-medium mb-1.5 text-text-main">
                   2FA Code{" "}

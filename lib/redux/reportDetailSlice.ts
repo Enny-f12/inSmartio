@@ -1,14 +1,4 @@
 // lib/redux/reportDetailSlice.ts
-//
-// Drives the Reports feature (ReportPicker + each report screen + the
-// dashboard) against the live endpoints in lib/api/detailedReportApi.ts.
-//
-// Named `reportDetail` (not `report`) because a `reportSlice` already exists
-// in the store for other pages — this is a separate, new slice.
-//
-// Follows the same shape as lib/redux/adminSlice.ts: try/catch thunks with
-// axios.isAxiosError error extraction, no extra hook layer — components
-// dispatch these directly via useAppDispatch/useAppSelector.
 
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";

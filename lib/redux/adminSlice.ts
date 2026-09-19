@@ -57,7 +57,7 @@ export const removeAdmin = createAsyncThunk(
 );
 
 // NOTE: backend endpoint is GET /admin/toggle-2fa/{id}?enable=true|false
-// `enable` is a required boolean query param, not an implicit flip —
+// `enable` is a required boolean query param, not an implicit flip 
 // so the thunk must take the desired target state explicitly.
 export const toggleAdmin2FA = createAsyncThunk(
   "admin/toggle2fa",

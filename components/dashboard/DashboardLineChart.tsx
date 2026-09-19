@@ -9,7 +9,7 @@ interface DashboardLineChartProps {
   data:       number[];
   labels:     string[];
   color?:     string;
-  statValue?: string;  // real value from API e.g. "4 users" or "₦0"
+  statValue?: string;  
 }
 
 interface Tooltip {

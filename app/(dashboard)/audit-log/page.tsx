@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Download, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Loader2, Download, ChevronDown, SlidersHorizontal, Search } from "lucide-react";
 import { toast } from "sonner";
 import Topbar from "@/components/layout/Navbar";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
@@ -55,19 +55,23 @@ const DATE_OPTIONS = [
 
 // ── Helpers ───────────────────────────────────────────────
 
-const actionColor = (action: string): { color: string; bg: string; border: string } => {
-  if (action.includes("DELETED")    || action.includes("REJECTED"))
-    return { color: "#dc2626", bg: "#fef2f2", border: "#fecaca" };
+const actionColorClasses = (action: string): string => {
+  if (action.includes("DELETED") || action.includes("REJECTED"))
+    return "text-red-600 bg-red-50 border-red-200";
   if (action.includes("SUSPENDED"))
-    return { color: "#d97706", bg: "#fffbeb", border: "#fde68a" };
-  if (action.includes("CREATED")    || action.includes("ACTIVATED")
-    || action.includes("PROCESSED") || action.includes("VERIFIED"))
-    return { color: "#16a34a", bg: "#f0fdf4", border: "#86efac" };
-  if (action.includes("LOGIN")      || action.includes("LOGOUT"))
-    return { color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" };
-  if (action.includes("UPDATED")    || action.includes("ADJUSTED") || action.includes("RESOLVED"))
-    return { color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" };
-  return { color: "#6B7280", bg: "#F9FAFB", border: "#E5E7EB" };
+    return "text-amber-600 bg-amber-50 border-amber-200";
+  if (
+    action.includes("CREATED") ||
+    action.includes("ACTIVATED") ||
+    action.includes("PROCESSED") ||
+    action.includes("VERIFIED")
+  )
+    return "text-green-600 bg-green-50 border-green-200";
+  if (action.includes("LOGIN") || action.includes("LOGOUT"))
+    return "text-blue-600 bg-blue-50 border-blue-200";
+  if (action.includes("UPDATED") || action.includes("ADJUSTED") || action.includes("RESOLVED"))
+    return "text-violet-600 bg-violet-50 border-violet-200";
+  return "text-text-muted bg-background border-border";
 };
 
 const fmtAction = (a: string) =>
@@ -85,26 +89,15 @@ const isoDate = (offsetDays: number) => {
   return d.toISOString().split("T")[0];
 };
 
-// ── Styles ────────────────────────────────────────────────
-
-const TH: React.CSSProperties = {
-  textAlign: "left", padding: "12px 20px", fontSize: "11px", fontWeight: 700,
-  color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em",
-  borderBottom: "2px solid #E5E7EB", whiteSpace: "nowrap", backgroundColor: "#F9FAFB",
-};
-const TD: React.CSSProperties = {
-  padding: "14px 20px", fontSize: "13px", color: "#374151",
-  borderBottom: "1px solid #F3F4F6", verticalAlign: "middle",
-};
-
 // ── Sub-components ────────────────────────────────────────
 
 function ActionBadge({ action }: { action: string }) {
-  const { color, bg, border } = actionColor(action);
   return (
-    <span style={{ fontSize: "11px", fontWeight: 600, padding: "5px 12px",
-      borderRadius: "20px", whiteSpace: "nowrap", display: "inline-block",
-      color, backgroundColor: bg, border: `1px solid ${border}` }}>
+    <span
+      className={`inline-block whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors duration-150 ${actionColorClasses(
+        action
+      )}`}
+    >
       {fmtAction(action)}
     </span>
   );
@@ -116,15 +109,18 @@ function NativeSelect({ value, onChange, options }: {
   options:  { label: string; value: string }[];
 }) {
   return (
-    <div style={{ position: "relative" }}>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ padding: "9px 36px 9px 14px", borderRadius: "10px", fontSize: "13px",
-          border: "1px solid #E5E7EB", backgroundColor: "#F9FAFB", color: "#374151",
-          outline: "none", appearance: "none", cursor: "pointer" }}>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cursor-pointer appearance-none rounded-[10px] border border-border bg-background py-2.25l-3.5 pr-9 text-[13px] text-text-main outline-none transition-colors duration-150 hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+      >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      <ChevronDown size={14} style={{ position: "absolute", right: "11px", top: "50%",
-        transform: "translateY(-50%)", color: "#6B7280", pointerEvents: "none" }} />
+      <ChevronDown
+        size={14}
+        className="pointer-events-none absolute right-2.75 top-1/2 -translate-y-1/2 text-text-muted"
+      />
     </div>
   );
 }
@@ -209,56 +205,40 @@ export default function AuditLogsPage() {
   const to         = Math.min(page * limit, total);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", flex:1, backgroundColor:"#F9FAFB" }}>
+    <div className="flex flex-1 flex-col bg-background">
       <Topbar title="Audit Logs" />
 
-      <style>{`
-        .al-wrap    { padding: 20px 16px; }
-        @media (min-width:640px) { .al-wrap { padding: 24px 32px; } }
-        .al-mobile  { display: flex; flex-direction: column; gap: 10px; }
-        .al-desktop { display: none; }
-        @media (min-width:860px) { .al-desktop { display:block; } .al-mobile { display:none; } }
-      `}</style>
-
-      <div className="al-wrap" style={{ flex:1 }}>
+      <div className="flex-1 px-4 py-5 sm:px-8 sm:py-6">
 
         {/* ── Page header ── */}
-        <div style={{ display:"flex", alignItems:"center",
-          justifyContent:"space-between", marginBottom:"20px" }}>
-          <p style={{ fontSize:"13px", color:"#6B7280", margin:0 }}>
+        <div className="mb-5 flex items-center justify-between">
+          <p className="m-0 text-[13px] text-text-muted">
             All admin activity on the platform
           </p>
         </div>
 
         {/* ── Single card ── */}
-        <div style={{ backgroundColor:"#fff", borderRadius:"16px",
-          border:"1px solid #E5E7EB", overflow:"hidden" }}>
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
 
           {/* Card header: filters + export */}
-          <div style={{ padding:"14px 20px", borderBottom:"1px solid #F3F4F6",
-            display:"flex", alignItems:"center", gap:"10px", flexWrap:"wrap" }}>
+          <div className="flex flex-wrap items-center gap-2.5 border-b border-border/70 px-5 py-3.5">
 
-            <div style={{ display:"flex", alignItems:"center", gap:"6px", marginRight:"4px" }}>
-              <SlidersHorizontal size={14} color="#6B7280" />
-              <span style={{ fontSize:"13px", fontWeight:600, color:"#374151" }}>Filter</span>
+            <div className="mr-1 flex items-center gap-1.5">
+              <SlidersHorizontal size={14} className="text-text-muted" />
+              <span className="text-[13px] font-semibold text-text-main">Filter</span>
             </div>
 
-            <div style={{ position:"relative", flex:1, minWidth:"180px" }}>
-              <svg style={{ position:"absolute", left:"13px", top:"50%",
-                transform:"translateY(-50%)", color:"#9CA3AF" }}
-                width="14" height="14" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
+            <div className="relative min-w-45 flex-1">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+              />
               <input
                 type="text"
                 placeholder="Search name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ width:"100%", paddingLeft:"36px", paddingRight:"14px",
-                  paddingTop:"9px", paddingBottom:"9px", borderRadius:"10px",
-                  fontSize:"13px", border:"1px solid #E5E7EB", backgroundColor:"#F9FAFB",
-                  outline:"none", color:"#111827", boxSizing:"border-box" }}
+                className="w-full rounded-[10px] border border-border bg-background py-2.25 pl-9 pr-3.5 text-[13px] text-text-main outline-none transition-colors duration-150 placeholder:text-gray-400 hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -280,12 +260,11 @@ export default function AuditLogsPage() {
               options={DATE_OPTIONS.map((o, i) => ({ label: o.label, value: String(i) }))}
             />
 
-            <button onClick={() => handleExport("csv")} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:"6px",
-                padding:"9px 16px", borderRadius:"10px", fontSize:"13px", fontWeight:500,
-                border:"1px solid #E5E7EB", backgroundColor:"#F9FAFB", color:"#374151",
-                cursor:"pointer", opacity: exporting ? 0.7 : 1, whiteSpace:"nowrap",
-                marginLeft:"auto" }}>
+            <button
+              onClick={() => handleExport("csv")}
+              disabled={exporting}
+              className="ml-auto flex items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-background px-4 py-2.25 text-[13px] font-medium text-text-main transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 hover:text-primary active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:scale-100"
+            >
               {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
               Export
             </button>
@@ -293,22 +272,20 @@ export default function AuditLogsPage() {
 
           {/* ── States ── */}
           {listStatus === "loading" && (
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-              padding:"64px", gap:"10px", color:"#9CA3AF" }}>
+            <div className="flex items-center justify-center gap-2.5 px-16 py-16 text-gray-400">
               <Loader2 size={18} className="animate-spin" />
-              <span style={{ fontSize:"13px" }}>Loading audit logs...</span>
+              <span className="text-[13px]">Loading audit logs...</span>
             </div>
           )}
           {listStatus === "failed" && (
-            <div style={{ textAlign:"center", padding:"48px" }}>
-              <p style={{ fontSize:"13px", color:"#ef4444", marginBottom:"12px" }}>
+            <div className="px-12 py-12 text-center">
+              <p className="mb-3 text-[13px] text-red-500">
                 {listError ?? "Failed to load audit logs."}
               </p>
               <button
                 onClick={() => dispatch(fetchAuditLogs(activeFilters))}
-                style={{ padding:"8px 18px", borderRadius:"8px", fontSize:"13px",
-                  border:"1px solid #E5E7EB", backgroundColor:"#fff",
-                  color:"#374151", cursor:"pointer" }}>
+                className="rounded-lg border border-border bg-surface px-4.5 py-2 text-[13px] text-text-main transition-colors duration-150 hover:bg-background active:scale-[0.97]"
+              >
                 Retry
               </button>
             </div>
@@ -317,46 +294,50 @@ export default function AuditLogsPage() {
           {(listStatus === "succeeded" || listStatus === "idle") && (
             <>
               {/* Desktop table */}
-              <div className="al-desktop" style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      <th style={TH}>Timestamp</th>
-                      <th style={TH}>Admin</th>
-                      <th style={TH}>Action</th>
-                      <th style={TH}>Details</th>
-                      <th style={TH}>IP</th>
+                      {["Timestamp", "Admin", "Action", "Details", "IP"].map((h) => (
+                        <th
+                          key={h}
+                          className="whitespace-nowrap border-b-2 border-border bg-background px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted"
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {reversedLogs.length === 0 ? (
-                      <tr><td colSpan={5} style={{ textAlign:"center", padding:"56px",
-                        fontSize:"14px", color:"#9CA3AF" }}>No audit logs found.</td></tr>
+                      <tr>
+                        <td colSpan={5} className="px-5 py-14 text-center text-sm text-gray-400">
+                          No audit logs found.
+                        </td>
+                      </tr>
                     ) : reversedLogs.map((log: AuditLog) => (
-                      <tr key={log.id}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FAFAFA")}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}>
-                        <td style={{ ...TD, color:"#6B7280", fontSize:"12px",
-                          whiteSpace:"nowrap", minWidth:"130px" }}>
+                      <tr
+                        key={log.id}
+                        className="transition-colors duration-150 hover:bg-gray-50/80"
+                      >
+                        <td className="min-w-32.5 whitespace-nowrap border-b border-gray-100 px-5 py-3.5 text-[12px] text-text-muted">
                           {fmtTimestamp(log.timestamp)}
                         </td>
-                        <td style={{ ...TD, minWidth:"140px" }}>
-                          <p style={{ fontWeight:600, color:"#111827", fontSize:"13px", margin:0 }}>
+                        <td className="min-w-35 border-b border-gray-100 px-5 py-3.5">
+                          <p className="m-0 text-[13px] font-semibold text-text-main">
                             {log.adminEmail.split("@")[0]}@
                           </p>
-                          <p style={{ fontSize:"11px", color:"#9CA3AF", margin:0 }}>
+                          <p className="m-0 text-[11px] text-gray-400">
                             {log.adminName}
                           </p>
                         </td>
-                        <td style={{ ...TD, minWidth:"150px" }}>
+                        <td className="min-w-37.5 border-b border-gray-100 px-5 py-3.5">
                           <ActionBadge action={log.action} />
                         </td>
-                        <td style={{ ...TD, fontSize:"12px", color:"#374151",
-                          lineHeight:1.6, maxWidth:"300px" }}>
+                        <td className="max-w-75 border-b border-gray-100 px-5 py-3.5 text-[12px] leading-relaxed text-text-main">
                           {log.details}
                         </td>
-                        <td style={{ ...TD, fontSize:"12px", color:"#6B7280",
-                          fontFamily:"monospace", whiteSpace:"nowrap" }}>
+                        <td className="whitespace-nowrap border-b border-gray-100 px-5 py-3.5 font-mono text-[12px] text-text-muted">
                           {log.ipAddress}
                         </td>
                       </tr>
@@ -366,79 +347,85 @@ export default function AuditLogsPage() {
               </div>
 
               {/* Mobile cards */}
-              <div className="al-mobile" style={{ padding:"12px", backgroundColor:"#F9FAFB" }}>
+              <div className="flex flex-col gap-2.5 bg-background p-3 md:hidden">
                 {reversedLogs.length === 0 ? (
-                  <p style={{ textAlign:"center", padding:"40px",
-                    fontSize:"13px", color:"#9CA3AF" }}>No audit logs found.</p>
+                  <p className="px-4 py-10 text-center text-[13px] text-gray-400">
+                    No audit logs found.
+                  </p>
                 ) : reversedLogs.map((log: AuditLog) => (
-                  <div key={log.id} style={{ padding:"14px 16px", borderRadius:"12px",
-                    border:"1px solid #E5E7EB", backgroundColor:"#fff" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between",
-                      alignItems:"flex-start", marginBottom:"8px" }}>
+                  <div
+                    key={log.id}
+                    className="rounded-xl border border-border bg-surface px-4 py-3.5 transition-shadow duration-150 hover:shadow-sm"
+                  >
+                    <div className="mb-2 flex items-start justify-between">
                       <div>
-                        <p style={{ fontWeight:600, fontSize:"13px", color:"#111827", margin:"0 0 2px" }}>
+                        <p className="m-0 mb-0.5 text-[13px] font-semibold text-text-main">
                           {log.adminName}
                         </p>
-                        <p style={{ fontSize:"11px", color:"#9CA3AF", margin:0 }}>
+                        <p className="m-0 text-[11px] text-gray-400">
                           {fmtTimestamp(log.timestamp)}
                         </p>
                       </div>
                       <ActionBadge action={log.action} />
                     </div>
-                    <p style={{ fontSize:"12px", color:"#374151", margin:"0 0 8px", lineHeight:1.5 }}>
+                    <p className="m-0 mb-2 text-[12px] leading-relaxed text-text-main">
                       {log.details}
                     </p>
-                    <div style={{ display:"flex", justifyContent:"space-between",
-                      paddingTop:"8px", borderTop:"1px solid #F3F4F6",
-                      fontSize:"11px", color:"#9CA3AF" }}>
+                    <div className="flex justify-between border-t border-gray-100 pt-2 text-[11px] text-gray-400">
                       <span>{log.targetId ?? "—"}</span>
-                      <span style={{ fontFamily:"monospace" }}>{log.ipAddress}</span>
+                      <span className="font-mono">{log.ipAddress}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Footer */}
-              <div style={{ padding:"12px 20px", borderTop:"1px solid #F3F4F6",
-                display:"flex", flexWrap:"wrap", alignItems:"center",
-                justifyContent:"space-between", gap:"10px" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-gray-100 px-5 py-3">
 
-                <div style={{ display:"flex", gap:"16px" }}>
-                  {(["Export Logs","Filter by User","Filter by Action"] as const).map((lbl) => (
-                    <button key={lbl}
+                <div className="flex gap-4">
+                  {(["Export Logs", "Filter by User", "Filter by Action"] as const).map((lbl) => (
+                    <button
+                      key={lbl}
                       onClick={() => lbl === "Export Logs" && handleExport("csv")}
-                      style={{ fontSize:"12px", color:"#2563eb", background:"none",
-                        border:"none", cursor:"pointer", padding:0, fontWeight:500 }}>
+                      className="border-none bg-transparent p-0 text-[12px] font-medium text-primary transition-opacity duration-150 hover:opacity-70"
+                    >
                       [{lbl}]
                     </button>
                   ))}
                 </div>
 
                 {/* Pagination */}
-                <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-                  <span style={{ fontSize:"12px", color:"#6B7280" }}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[12px] text-text-muted">
                     {total === 0 ? "No results" : `${from}–${to} of ${total}`}
                   </span>
-                  <button onClick={() => handlePageChange(page - 1)} disabled={page === 1}
-                    style={{ padding:"5px 12px", borderRadius:"7px", fontSize:"12px",
-                      border:"1px solid #E5E7EB", backgroundColor:"#fff", color:"#6B7280",
-                      cursor: page === 1 ? "not-allowed" : "pointer",
-                      opacity: page === 1 ? 0.4 : 1 }}>‹</button>
+                  <button
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page === 1}
+                    className="rounded-[7px] border border-border bg-surface px-3 py-1 text-[12px] text-text-muted transition-all duration-150 hover:bg-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface"
+                  >
+                    ‹
+                  </button>
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
-                    <button key={p} onClick={() => handlePageChange(p)}
-                      style={{ width:"30px", height:"30px", borderRadius:"7px", fontSize:"12px",
-                        fontWeight: p === page ? 700 : 400,
-                        border: p === page ? "none" : "1px solid #E5E7EB",
-                        backgroundColor: p === page ? "#2563eb" : "#fff",
-                        color: p === page ? "#fff" : "#6B7280", cursor:"pointer" }}>
+                    <button
+                      key={p}
+                      onClick={() => handlePageChange(p)}
+                      className={`h-7.5 w-7.5 rounded-[7px] text-[12px] transition-all duration-150 ${
+                        p === page
+                          ? "bg-primary font-bold text-white"
+                          : "border border-border bg-surface font-normal text-text-muted hover:bg-background"
+                      }`}
+                    >
                       {p}
                     </button>
                   ))}
-                  <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages}
-                    style={{ padding:"5px 12px", borderRadius:"7px", fontSize:"12px",
-                      border:"1px solid #E5E7EB", backgroundColor:"#fff", color:"#6B7280",
-                      cursor: page === totalPages ? "not-allowed" : "pointer",
-                      opacity: page === totalPages ? 0.4 : 1 }}>›</button>
+                  <button
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page === totalPages}
+                    className="rounded-[7px] border border-border bg-surface px-3 py-1 text-[12px] text-text-muted transition-all duration-150 hover:bg-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface"
+                  >
+                    ›
+                  </button>
                 </div>
               </div>
             </>

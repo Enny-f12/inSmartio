@@ -16,29 +16,15 @@ import { pick, pickSummary, matchesFilter } from "./rowUtils";
 import { userGrowthByRegion } from "./mockData";
 import { RowDetailModal } from "./RowDetailModal";
 
-// This screen genuinely needs two different live endpoints:
-//   - user-growth   -> KPI stats only (newUsers/growthRate/churnRate/activeUsers)
-//   - expert-details -> the table rows (name/tier/paymentModel/category/region/status/joined)
-// The table's redux slice (reportDetail) stays wired to expert-details, same
-// as before. The KPI stats and the trend chart are fetched separately,
-// straight from the API module, so they don't clobber the table's
-// summary/rows in the shared slice.
 const TABLE_REPORT_TYPE: ReportType = "expert-details";
 const STATS_REPORT_TYPE: ReportType = "user-growth";
 
 type Row = Record<string, unknown>;
 
-const PERIOD_OPTIONS = ["July 2026", "June 2026", "May 2026", "Q2 2026"];
 const USER_TYPE_OPTIONS = ["All User Types", "Clients", "Experts", "TAS"];
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 
-/**
- * Labels every 5th point by its position in the series (1, 5, 10, 15...)
- * rather than a calendar date. Calendar-day-of-month labeling breaks when
- * the series crosses a month boundary (e.g. day 30 followed by day 5 of the
- * next month reads as if the axis went backwards) — position-based labels
- * always read in a straight, increasing line regardless of date range.
- */
+
 function buildIndexLabels(length: number, every = 5): string[] {
   return Array.from({ length }, (_, i) => ((i + 1) % every === 0 ? String(i + 1) : ""));
 }
@@ -87,11 +73,23 @@ export default function UserGrowthReport() {
   const dispatch = useAppDispatch();
   const { rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
 
-  // Table data — unchanged, still the expert-details fetch via the shared slice.
+  // No more preset periods — just a from/to range. Empty means "all time".
+  // Every fetch below (table, KPI stats, trend) is gated on the same rule:
+  // fire when both dates are empty (full range) or both are filled in.
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const rangeReady = (!fromDate && !toDate) || (fromDate && toDate);
+  const rangeLabel = fromDate && toDate ? `${fromDate} – ${toDate}` : "All Time";
+
   useEffect(() => {
     dispatch(setReportType(TABLE_REPORT_TYPE));
-    dispatch(fetchDetailedReport({ reportType: TABLE_REPORT_TYPE }));
   }, [dispatch]);
+
+  // Table data — expert-details, re-fetched whenever the range changes.
+  useEffect(() => {
+    if (!rangeReady) return;
+    dispatch(fetchDetailedReport({ reportType: TABLE_REPORT_TYPE, fromDate: fromDate || undefined, toDate: toDate || undefined }));
+  }, [dispatch, fromDate, toDate, rangeReady]);
 
   // KPI stats — separate fetch straight from the API module, since these
   // come from a different endpoint (user-growth) than the table rows.
@@ -99,33 +97,34 @@ export default function UserGrowthReport() {
   const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
+    if (!rangeReady) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatsLoading(true);
-    getDetailedReport({ reportType: STATS_REPORT_TYPE })
+    getDetailedReport({ reportType: STATS_REPORT_TYPE, fromDate: fromDate || undefined, toDate: toDate || undefined })
       .then((res) => { if (!cancelled) setStats(res.summary); })
       .catch(() => { if (!cancelled) setStats(null); })
       .finally(() => { if (!cancelled) setStatsLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [fromDate, toDate, rangeReady]);
 
   // Trend chart — real data from GET /reports/detailed/user-growth/trend,
-  // replacing the previous hardcoded illustrative series.
+  // re-fetched whenever the range changes.
   const [trend, setTrend] = useState<ReportTrendPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
 
   useEffect(() => {
+    if (!rangeReady) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrendLoading(true);
-    getReportTrend({ reportType: STATS_REPORT_TYPE, groupBy: "day" })
+    getReportTrend({ reportType: STATS_REPORT_TYPE, groupBy: "day", fromDate: fromDate || undefined, toDate: toDate || undefined })
       .then((res) => { if (!cancelled) setTrend(Array.isArray(res) ? res : []); })
       .catch(() => { if (!cancelled) setTrend([]); })
       .finally(() => { if (!cancelled) setTrendLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [fromDate, toDate, rangeReady]);
 
-  const [period, setPeriod] = useState("July 2026");
   const [userType, setUserType] = useState("All User Types");
   const [region, setRegion] = useState("All Regions");
   const [tier, setTier] = useState("All Tiers");
@@ -134,7 +133,7 @@ export default function UserGrowthReport() {
   const loading = listStatus === "loading" || listStatus === "idle";
 
   const handleExport = async (format: ReportFormat) => {
-    const action = await dispatch(downloadReport({ reportType: TABLE_REPORT_TYPE, format }));
+    const action = await dispatch(downloadReport({ reportType: TABLE_REPORT_TYPE, format, fromDate: fromDate || undefined, toDate: toDate || undefined }));
     if (downloadReport.fulfilled.match(action)) {
       const a = document.createElement("a");
       a.href = action.payload;
@@ -171,16 +170,49 @@ export default function UserGrowthReport() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {/* Local styles for smooth hover/focus transitions on the date inputs
+          and filters, without pulling in a full CSS-in-JS lib. */}
+      <style>{`
+        .rp-select, .rp-date-input {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        .rp-select:hover, .rp-date-input:hover {
+          border-color: ${colors.textFaint};
+        }
+        .rp-select:focus, .rp-date-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+      `}</style>
+
       {selected && (
         <RowDetailModal title="User Detail" row={selected} onClose={() => setSelected(null)} />
       )}
 
       {/* Controls */}
-      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <select className="rp-select" value={period} onChange={(e) => setPeriod(e.target.value)}>
-            {PERIOD_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-          </select>
+      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="From date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+            <span style={{ fontSize: "12px", color: colors.textFaint }}>to</span>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="To date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+          </div>
           <select className="rp-select" value={userType} onChange={(e) => setUserType(e.target.value)}>
             {USER_TYPE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
           </select>
@@ -303,11 +335,11 @@ export default function UserGrowthReport() {
         )}
       </div>
 
-      {/* Growth by region — no backend aggregation exists yet; kept as an illustrative placeholder. */}
+      {/* Growth by region */}
       {loading ? <SkelChart height={140} /> : (
         <div style={card}>
           <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 4px" }}>
-            User Growth by Region ({period})
+            User Growth by Region ({rangeLabel})
           </p>
           <p style={{ fontSize: "11.5px", color: colors.textFaint, margin: "0 20px 10px" }}>Illustrative — pending a backend region breakdown.</p>
           <div style={{ padding: "0 20px 20px" }}>

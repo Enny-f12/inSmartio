@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -125,7 +126,11 @@ export default function Sidebar() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = useAppSelector((s) => (s.auth as any).admin);
-  const role  = admin?.role ?? "view";
+  const realRole = admin?.role ?? "view";
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMounted(true); }, []);
+  const role = mounted ? realRole : "view";
 
   const handleLogout = () => {
     clearAuth();

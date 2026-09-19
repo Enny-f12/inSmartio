@@ -1,10 +1,10 @@
-// components/auth/ResetPasswordScreen.tsx
+
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Lock, Eye, EyeOff, CheckCircle2, Loader2, Check, X, KeyRound } from "lucide-react";
 import { forgotPassword, resetPassword } from "@/lib/api/authApi";
@@ -91,8 +91,17 @@ function PasswordField({
 }
 
 function ResetPasswordScreenInner({ onGoToLogin, id }: Props) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const identifier = id ?? searchParams.get("email") ?? "";
+
+  const handleGoToLogin = () => {
+    if (onGoToLogin) {
+      onGoToLogin();
+    } else {
+      router.push("/login");
+    }
+  };
 
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -102,8 +111,8 @@ function ResetPasswordScreenInner({ onGoToLogin, id }: Props) {
   const [touched, setTouched] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
   const [apiError, setApiError] = useState<string | null>(null);
-  // True once the user has actually clicked "Reset password" — separate
-  // from `touched` (which fires on blur) so we only show the blocked-
+  // True once the user has actually clicked "Reset password"
+  //  separate from `touched` (which fires on blur) so we only show the blocked-
   // submission summary after a real attempt, not while still typing.
   const [attempted, setAttempted] = useState(false);
 
@@ -144,7 +153,7 @@ function ResetPasswordScreenInner({ onGoToLogin, id }: Props) {
 
   const canSubmit = allRulesPass && passwordsMatch && code.trim().length > 0 && !!identifier;
 
-  // Why the button won't submit yet, in priority order — shown only after
+  // Why the button won't submit yet, in priority order, shown only after
   // a real submit attempt so the click never appears to "do nothing".
   const blockedReason = !identifier
     ? "We couldn't find the email for this reset. Please request a new code."
@@ -321,7 +330,7 @@ function ResetPasswordScreenInner({ onGoToLogin, id }: Props) {
                   Your password has been updated. You can now log in with your new password.
                 </p>
                 <button
-                  onClick={onGoToLogin}
+                  onClick={handleGoToLogin}
                   className="w-full cursor-pointer rounded-[10px] bg-blue-600 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-700 active:scale-[0.98]"
                 >
                   Back to login
