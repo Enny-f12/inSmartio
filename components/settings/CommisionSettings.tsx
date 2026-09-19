@@ -280,12 +280,7 @@ function describeModel(model: ActiveModel, source?: Pick<ApiCommission, "modelIS
   }
 }
 
-// Global "active payment model" bar — shown at the top of the Commission
-// card. Renders as a dropdown so any of the three states can be selected
-// directly (calls the explicit-set endpoint), rather than cycling through
-// them one click at a time. Toggling is admin-only server-side; swap
-// `isAdmin` for your real role check (e.g. useAppSelector selecting
-// auth.user.role).
+// Global "active payment model" bar
 function ActiveModelBar({ isAdmin = true }: { isAdmin?: boolean }) {
   const dispatch = useAppDispatch();
   const { activeModel, activeModelStatus, list } = useAppSelector((s) => s.commission);

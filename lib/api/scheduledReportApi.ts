@@ -1,5 +1,7 @@
 import axiosInstance from "@/lib/api/axiosInstance";
 
+export type ReportFormat = "csv" | "pdf";
+
 export interface ScheduleObject {
   frequency:   "daily" | "weekly" | "monthly";
   time?:       string;   // e.g. "09:00"
@@ -13,6 +15,7 @@ export interface ScheduledReport {
   name:       string;
   schedule:   ScheduleObject;
   recipients: string[];
+  format?:    ReportFormat;
   lastRunAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -23,6 +26,7 @@ export interface ScheduledReportPayload {
   name:       string;
   schedule:   ScheduleObject;
   recipients: string[];
+  format?:    ReportFormat;
 }
 
 export const getScheduledReports = (): Promise<ScheduledReport[]> =>

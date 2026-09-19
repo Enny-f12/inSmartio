@@ -19,12 +19,21 @@ const parseJwt = (token: string): Record<string, unknown> => {
   }
 };
 
+// Matches the backend's 2FA-required message so we can branch on it
+// instead of showing it as a plain login failure.
+const is2FARequiredMessage = (message: string | undefined | null) =>
+  !!message && message.toLowerCase().includes("two-factor authentication is enabled");
+
 interface AuthState {
-  token:  string | null;
-  admin:  Admin  | null;
-  role:   string | null;
-  status: "idle" | "loading" | "succeeded" | "failed";
-  error:  string | null;
+  token:        string | null;
+  admin:        Admin  | null;
+  role:         string | null;
+  status:       "idle" | "loading" | "succeeded" | "failed";
+  error:        string | null;
+  // True right after the backend responds 401 asking for a 2FA code.
+  // The login form should switch the 2FA field from optional to required
+  // and resubmit with the code once the user enters it.
+  requires2FA:  boolean;
 }
 
 const storedToken = Cookies.get("token") ?? null;
@@ -41,11 +50,12 @@ const storedAdmin = (() => {
 
 const initialState: AuthState = {
   token:  storedToken,
-  // ✅ If stored admin has a role, trust it; otherwise fall back to JWT claim
+  //  If stored admin has a role, trust it; otherwise fall back to JWT claim
   admin:  storedAdmin ?? (storedRole ? { role: storedRole } as Admin : null),
   role:   storedAdmin?.role ?? storedRole,
   status: "idle",
   error:  null,
+  requires2FA: false,
 };
 
 export const login = createAsyncThunk(
@@ -61,10 +71,15 @@ export const login = createAsyncThunk(
       });
       return data;
     } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? err.response?.data?.message ?? "Login failed"
-        : "Login failed";
-      return rejectWithValue(message);
+      if (axios.isAxiosError(err)) {
+        const message = err.response?.data?.message ?? "Login failed";
+        if (err.response?.status === 401 && is2FARequiredMessage(message)) {
+          // Special-case: not a real failure, just needs the code now.
+          return rejectWithValue({ requires2FA: true, message });
+        }
+        return rejectWithValue({ requires2FA: false, message });
+      }
+      return rejectWithValue({ requires2FA: false, message: "Login failed" });
     }
   }
 );
@@ -79,6 +94,7 @@ const authSlice = createSlice({
       state.role   = null;
       state.status = "idle";
       state.error  = null;
+      state.requires2FA = false;
       Cookies.remove("token", { path: "/" });
       try { localStorage.removeItem("admin"); } catch { /* noop */ }
     },
@@ -96,13 +112,14 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         const claims = parseJwt(action.payload.token);
 
-        // ✅ API response role takes priority over JWT claim.
+        //  API response role takes priority over JWT claim.
         // JWT can be stale if the role was changed after the token was issued.
         const role = action.payload.data.role || (claims.role as string) || "";
 
         state.status = "succeeded";
         state.token  = action.payload.token;
         state.role   = role;
+        state.requires2FA = false;
         state.admin  = {
           ...action.payload.data,
           role,
@@ -112,8 +129,10 @@ const authSlice = createSlice({
         } catch { /* noop */ }
       })
       .addCase(login.rejected, (state, action) => {
+        const payload = action.payload as { requires2FA: boolean; message: string } | undefined;
         state.status = "failed";
-        state.error  = action.payload as string;
+        state.requires2FA = payload?.requires2FA ?? false;
+        state.error  = payload?.message ?? "Login failed";
       });
   },
 });

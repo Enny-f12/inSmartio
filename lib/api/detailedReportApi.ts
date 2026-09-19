@@ -6,8 +6,7 @@
 //   GET /api/reports/detailed/dashboard                -> dashboard KPIs, revenue trend, quick reports, recent activity
 //   GET /api/reports/detailed/{reportType}/trend        -> time-bucketed trend series for charting
 //
-// Follows the same shape as lib/api/adminApi.ts: typed axios calls, response
-// unwrapped from the standard { status, message, data } envelope.
+
 import axiosInstance from "./axiosInstance";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -47,13 +46,7 @@ export interface DownloadDetailedReportParams extends DetailedReportQuery {
   format:     ReportFormat;
 }
 
-/**
- * Confirmed shape from the real tas-performance response:
- *   "summary": { "totalTasAgents": 6, "expertsRecruited": 23, "totalEarnings": 0 }
- * i.e. a flat object of numbers, keyed per report type — NOT an array, and
- * with no delta/% change field. Other report types are assumed to follow the
- * same `summary` pattern with their own keys until confirmed individually.
- */
+
 export type ReportSummary = Record<string, number>;
 
 export interface DetailedReportPagination {
@@ -73,6 +66,44 @@ export interface DetailedReportResponse<Row = Record<string, unknown>> {
   status:  boolean;
   message: string;
   data:    DetailedReportData<Row>;
+}
+
+// ── TAS performance row (confirmed 2026-09-16) ────────────────────
+//
+// The backend now returns a fully populated `location` object and a new
+// `bankDetails` object on every row. Both are typed below so consumers
+// (tables, detail modals, exports)
+export interface TasLocation {
+  area:    string;
+  city:    string;
+  state:   string;
+  address: string;
+  country: string;
+}
+
+/** `bvn` is present in the payload but is routinely returned empty by the API. */
+export interface TasBankDetails {
+  bvn:           string;
+  bankName:      string;
+  accountCode:   string;
+  accountName:   string;
+  accountNumber: string;
+}
+
+export type TasAgentStatus = "active" | "inactive" | "suspended" | string;
+
+export interface TasPerformanceRow {
+  id:               string;
+  name:             string;
+  phone:            string;
+  email:            string;
+  tier:             number;
+  status:           TasAgentStatus;
+  expertsRecruited: number;
+  earnings:         number;
+  joined:           string; // ISO datetime, e.g. "2026-09-15T17:49:09.676Z"
+  location:         TasLocation;
+  bankDetails:      TasBankDetails;
 }
 
 // ── Calls ──────────────────────────────────────────────────────────
@@ -100,7 +131,7 @@ export const getDetailedReport = async <Row = Record<string, unknown>>(
 
 /**
  * GET /api/reports/detailed/{reportType}/download
- * Returns an object URL for the downloaded blob — hand it to an <a download>
+ * Returns an object URL for the downloaded blob, hand it to an <a download>
  * the same way handleExport() does in jobs/page.tsx, then URL.revokeObjectURL it.
  */
 export const downloadDetailedReport = async (
@@ -121,11 +152,13 @@ export const downloadDetailedReport = async (
 
 export type DashboardRange = "7d" | "30d" | "month" | "quarter" | "custom";
 
-export interface GetDashboardParams {
-  range?:    DashboardRange;
-  fromDate?: string;   // required when range === "custom"
-  toDate?:   string;   // required when range === "custom"
-}
+/**
+ * `fromDate`/`toDate` are required when range === "custom" and disallowed
+ * otherwise, this discriminated union enforces that at compile time.
+ */
+export type GetDashboardParams =
+  | { range?: Exclude<DashboardRange, "custom">; fromDate?: never; toDate?: never }
+  | { range: "custom"; fromDate: string; toDate: string };
 
 export interface QuickReportItem {
   key:   string;
@@ -149,18 +182,9 @@ export interface RecentActivityItem {
 }
 
 /**
- * CONFIRMED against a live response (2026-08-06):
+ 
  *   GET /api/reports/detailed/dashboard
- * {
- *   "status": true, "message": "Reports dashboard retrieved",
- *   "data": {
- *     "range": { "from": "...", "to": "..." },
- *     "cards": { "totalUsers": {value,changePercent}, "jobs": {...}, "revenue": {...}, "tasAgents": {...} },
- *     "revenueTrend": { "title": "...", "total": 36900, "series": [{date,value}, ...] },
- *     "quickReports": [{key,label}, ...],
- *     "recentActivity": [{type,message,timestamp}, ...]
- *   }
- * }
+
  */
 export interface ReportsDashboardData {
   range: {

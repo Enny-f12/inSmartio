@@ -18,7 +18,7 @@ export default function LoginPage() {
   const dispatch = useAppDispatch();
   const router   = useRouter();
 
-  const { status, error: authError } = useAppSelector((state) => state.auth);
+  const { status, error: authError, requires2FA } = useAppSelector((state) => state.auth);
   const isLoading = status === "loading";
 
   const [email,        setEmail]        = useState("");
@@ -47,10 +47,15 @@ export default function LoginPage() {
       router.push("/dashboard");
     }
     if (status === "failed" && authError) {
-      toast.error("Login failed", { description: authError });
+      if (requires2FA) {
+        // Not a failure, just prompt for the code, form isn't cleared
+        toast.info("2FA code required", { description: authError });
+      } else {
+        toast.error("Login failed", { description: authError });
+      }
       dispatch(resetAuthStatus());
     }
-  }, [status, authError, router, dispatch]);
+  }, [status, authError, requires2FA, router, dispatch]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +63,15 @@ export default function LoginPage() {
       toast.warning("Missing fields", { description: "Please fill in your email and password." });
       return;
     }
-    dispatch(login({ email, password }));
+    if (requires2FA && !twoFa) {
+      toast.warning("2FA code required", { description: "Check your email for the 6-digit code." });
+      return;
+    }
+    dispatch(login({
+      email,
+      password,
+      ...(twoFa ? { code: twoFa } : {}),
+    }));
   };
 
   return (
@@ -91,7 +104,7 @@ export default function LoginPage() {
           ))}
         </div>
 
-        {/* ── RIGHT: Form Panel — full width on mobile ── */}
+        {/* RIGHT: Form Panel , full width on mobile */}
         <div className="flex flex-1 flex-col justify-center items-center px-5 py-10 sm:px-10 sm:py-14 bg-surface">
 
           {/* Brand */}
@@ -101,7 +114,7 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* Card — no border/shadow on mobile, card style on sm+ */}
+          {/* Card no border/shadow on mobile, card style on sm+ */}
           <div className="w-full max-w-md rounded-2xl p-0 sm:p-9 sm:bg-white sm:border sm:border-border sm:shadow-sm">
             <h1 className="text-base sm:text-lg font-bold text-center  mt-5 mb-5 sm:mb-7 text-text-main">
               Admin Dashboard
@@ -120,8 +133,9 @@ export default function LoginPage() {
                   placeholder="admin@helpme.com"
                   autoComplete="username"
                   value={email}
+                  disabled={requires2FA}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 disabled:opacity-60"
                 />
               </div>
 
@@ -137,8 +151,9 @@ export default function LoginPage() {
                     placeholder="help1234"
                     autoComplete="current-password"
                     value={password}
+                    disabled={requires2FA}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-all bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    className="w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none transition-all bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10 disabled:opacity-60"
                   />
                   <button
                     type="button"
@@ -153,16 +168,18 @@ export default function LoginPage() {
 
               {/* Forgot password */}
               <div className="flex justify-end mb-4 sm:mb-5">
-                <a href="#" className="text-xs text-primary opacity-80 hover:opacity-100 transition-opacity">
+                <a href="/forgot-password" className="text-xs text-primary opacity-80 hover:opacity-100 transition-opacity">
                   Forgot password?
                 </a>
               </div>
 
-              {/* 2FA */}
+              {/* 2FA, optional by default, becomes required once the backend asks for it */}
               <div className="mb-6 sm:mb-7">
                 <label htmlFor="twofa" className="block text-[13px] font-medium mb-1.5 text-text-main">
                   2FA Code{" "}
-                  <span className="text-text-muted font-normal">(optional)</span>
+                  <span className="text-text-muted font-normal">
+                    {requires2FA ? "(check your email)" : "(optional)"}
+                  </span>
                 </label>
                 <input
                   id="twofa"
@@ -170,6 +187,7 @@ export default function LoginPage() {
                   placeholder="Enter 2FA code..."
                   autoComplete="one-time-code"
                   maxLength={6}
+                  autoFocus={requires2FA}
                   value={twoFa}
                   onChange={(e) => setTwoFa(e.target.value.replace(/\D/g, ""))}
                   className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all bg-background border border-border text-text-main placeholder:text-text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
@@ -184,7 +202,7 @@ export default function LoginPage() {
               >
                 {isLoading
                   ? <><Loader2 size={16} className="animate-spin" /> Logging in...</>
-                  : "Login"
+                  : requires2FA ? "Verify & Login" : "Login"
                 }
               </button>
 

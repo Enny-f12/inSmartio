@@ -380,6 +380,16 @@ export default function UsersPage() {
         <div style={{ display: "flex", alignItems: "center",
           justifyContent: "space-between", marginBottom: "20px" }}>
           <p style={{ fontSize: "13px", color: "#6B7280", margin: 0 }}>Manage all users</p>
+
+          {/*
+            This "Add User" button is NOT functional 
+
+            User creation here hits the SAME endpoint the mobile app
+            uses for signup. If there is any error on the mobile app to add users
+            admin doesn't fix it, it's the same endpoint, the backend should be looked into
+
+            AddUserModal below is currently just a UI shell for this reason.
+          */}
           <button
             onClick={() => setAddModalOpen(true)}
             style={{ display: "flex", alignItems: "center", gap: "7px",

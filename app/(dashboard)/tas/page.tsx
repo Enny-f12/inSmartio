@@ -13,8 +13,7 @@ import type { MainTab } from "@/components/tas/shared";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Applications = anyone who has gone through the verify flow (has a `verify` field).
-// Includes pending, approved, and rejected — so approved agents appear in both tabs.
+
 const isApplication = (t: ApiTas): boolean => {
   const ext = t as Record<string, unknown>;
   return ext.verify !== undefined && ext.verify !== null;

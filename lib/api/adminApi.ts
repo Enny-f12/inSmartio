@@ -25,15 +25,17 @@ export interface AdminResponse {
 }
 
 export interface RegisterAdminPayload {
-  name:     string;
-  email:    string;
-  password: string;
-  role?:    string;
+  name:           string;
+  email:          string;
+  password:       string;
+  role?:          string;
+  twoFactorAuth?: boolean;
 }
 
 export interface UpdateAdminPayload {
-  name?:  string;
-  email?: string;
+  name?:          string;
+  email?:         string;
+  twoFactorAuth?: boolean;
 }
 
 export interface ChangeRolePayload {
@@ -69,7 +71,10 @@ export const deleteAdmin = async (id: string): Promise<void> => {
   await axiosInstance.delete(`/admin/${id}`);
 };
 
-export const toggle2FA = async (id: string): Promise<Admin> => {
-  const { data } = await axiosInstance.get<AdminResponse>(`/admin/toggle-2fa/${id}`);
+
+export const toggle2FA = async (id: string, enable: boolean): Promise<Admin> => {
+  const { data } = await axiosInstance.get<AdminResponse>(`/admin/toggle-2fa/${id}`, {
+    params: { enable },
+  });
   return data.data;
 };

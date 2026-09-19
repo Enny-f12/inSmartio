@@ -43,7 +43,7 @@ export interface ApiVerificationSummary {
   email:          string;
   phone?:         string;
   tier?:          string;  // "1" | "2" | "3" from backend
-  status:         string;  // account status — NOT verification status
+  status:         string;  
   verify?:        boolean | string;
   submitted:      string;
   documents:      VerificationDocument[] | number;

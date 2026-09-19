@@ -8,10 +8,7 @@ import { colors } from "./shared";
 
 type Row = Record<string, unknown>;
 
-// Shape of a single entry in row.document — matches the verification
-// detailed-report API (report rows already return `document` as a flat
-// array, unlike the single-applicant detail endpoint which returns it as
-// an index-keyed object).
+
 interface ApiDoc {
   url?: string;
   type?: string;

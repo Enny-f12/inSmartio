@@ -1,23 +1,23 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import {
   getRecentActivity,
-  getPendingAlerts,
+  getAlerts,
   type RecentActivityItem,
-  type PendingAlerts,
+  type AlertsSummary,
 } from "@/lib/api/dashboardApi";
 
 interface DashboardState {
   recentActivity:       RecentActivityItem[];
   recentActivityStatus: "idle" | "loading" | "succeeded" | "failed";
-  pendingAlerts:        PendingAlerts | null;
-  pendingAlertsStatus:  "idle" | "loading" | "succeeded" | "failed";
+  alerts:                AlertsSummary | null;
+  alertsStatus:          "idle" | "loading" | "succeeded" | "failed";
 }
 
 const initialState: DashboardState = {
   recentActivity:       [],
   recentActivityStatus: "idle",
-  pendingAlerts:        null,
-  pendingAlertsStatus:  "idle",
+  alerts:                null,
+  alertsStatus:          "idle",
 };
 
 export const fetchRecentActivityThunk = createAsyncThunk(
@@ -31,11 +31,11 @@ export const fetchRecentActivityThunk = createAsyncThunk(
   }
 );
 
-export const fetchPendingAlertsThunk = createAsyncThunk(
-  "dashboard/fetchPendingAlerts",
+export const fetchAlertsThunk = createAsyncThunk(
+  "dashboard/fetchAlerts",
   async (_, { rejectWithValue }) => {
     try {
-      return await getPendingAlerts();
+      return await getAlerts();
     } catch {
       return rejectWithValue("failed");
     }
@@ -55,12 +55,12 @@ const dashboardSlice = createSlice({
       })
       .addCase(fetchRecentActivityThunk.rejected,  (s) => { s.recentActivityStatus = "failed"; })
 
-      .addCase(fetchPendingAlertsThunk.pending,   (s) => { s.pendingAlertsStatus = "loading"; })
-      .addCase(fetchPendingAlertsThunk.fulfilled, (s, a) => {
-        s.pendingAlertsStatus = "succeeded";
-        s.pendingAlerts       = a.payload;
+      .addCase(fetchAlertsThunk.pending,   (s) => { s.alertsStatus = "loading"; })
+      .addCase(fetchAlertsThunk.fulfilled, (s, a) => {
+        s.alertsStatus = "succeeded";
+        s.alerts       = a.payload;
       })
-      .addCase(fetchPendingAlertsThunk.rejected,  (s) => { s.pendingAlertsStatus = "failed"; });
+      .addCase(fetchAlertsThunk.rejected,  (s) => { s.alertsStatus = "failed"; });
   },
 });
 

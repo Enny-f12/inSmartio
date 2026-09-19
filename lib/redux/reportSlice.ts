@@ -1,4 +1,8 @@
 // lib/redux/reportSlice.ts
+// Note: this is the former report page 
+// we created a detailed report 
+// check @/lib/redux/reportDetailSlice.ts
+// This is the live code
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import {

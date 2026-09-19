@@ -18,7 +18,7 @@ interface Props {
   onBack:   () => void;
 }
 
-// Full expert profile shape, as returned in `data.experts[]` / `expertCount.activeExperts[]`
+// Full expert profile shape, as returned in `data.expert.experts[]` / `data.expert.activeExperts[]`
 interface FullExpert {
   id?:                   string;
   name?:                 string;
@@ -38,6 +38,14 @@ interface FullExpert {
   location?:             { area?: string; city?: string; state?: string; country?: string };
   category?:             { name?: string; sub?: string[] }[];
   skill?:                { area?: string; role?: string[]; experience?: number };
+}
+
+// Shape of `data.expert` — the recruit summary + roster object
+interface ExpertSummary {
+  total?:         number;
+  active?:        number;
+  activeExperts?: FullExpert[];
+  experts?:       FullExpert[];
 }
 
 // ── Mobile-aware InfoRow ──────────────────────────────────────────────────────
@@ -182,13 +190,20 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
   const isLoading = selectedStatus === "loading";
   const tierNum   = Number(agent.tier ?? 1);
 
-  const ext              = agent as Record<string, unknown>;
-  const expertsObj       = ext.expertCount as { total?: number; active?: number } | null
-                        ?? ext.experts as { total?: number; active?: number } | null;
-  const totalEarnings    = fmtMoney(ext.totalEarnings    as number | undefined);
-  const thisMonth        = fmtMoney(ext.thisMonth        as number | undefined);
-  const availableBalance = fmtMoney(ext.availableBalance as number | undefined);
-  const pendingBalance   = fmtMoney(ext.pendingBalance   as number | undefined);
+  const ext = agent as Record<string, unknown>;
+
+  // ── Recruit summary object — backend key is `expert` (singular) ──
+  const expertsObj = ext.expert as ExpertSummary | undefined;
+
+  // ── Balances / earnings — mapped to the actual backend field names ──
+  // currentBalance  → "Available Balance"
+  // thisMonthEarnings → "This Month"
+  // earnings        → "Total Earnings"
+  // pendingBalance  → "Pending Balance"
+  const totalEarnings    = fmtMoney(ext.earnings           as number | undefined);
+  const thisMonth        = fmtMoney(ext.thisMonthEarnings  as number | undefined);
+  const availableBalance = fmtMoney(ext.currentBalance      as number | undefined);
+  const pendingBalance   = fmtMoney(ext.pendingBalance      as number | undefined);
 
   const rawCommissions = ext.commissions ?? ext.commissionsGiven;
   const commissions = (Array.isArray(rawCommissions) ? rawCommissions : []) as {
@@ -214,16 +229,14 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
     expert?: FullExpert; // full profile for the detail modal, when available
   };
 
-  // Full expert profiles live at `data.experts[]` (all recruits) — this is the
-  // richest source and what the detail modal needs. Fall back to
-  // `expertCount.activeExperts[]`, then finally to commissions-derived rows
+  // Full expert profiles live at `data.expert.experts[]` (the complete roster) —
+  // this is the richest source and what the detail modal needs. Fall back to
+  // `data.expert.activeExperts[]`, then finally to commissions-derived rows
   // (no name available from commissions alone).
-  const topLevelExperts  = ext.experts as FullExpert[] | undefined;
-  const activeExpertsArr = (expertsObj as { activeExperts?: FullExpert[] } | null)?.activeExperts;
   const rawFullExperts: FullExpert[] =
-    (Array.isArray(topLevelExperts) && topLevelExperts.length > 0)
-      ? topLevelExperts
-      : (Array.isArray(activeExpertsArr) ? activeExpertsArr : []);
+    (Array.isArray(expertsObj?.experts) && expertsObj.experts.length > 0)
+      ? expertsObj.experts
+      : (Array.isArray(expertsObj?.activeExperts) ? expertsObj.activeExperts : []);
 
   const recruitedExperts: ExpertRow[] = rawFullExperts.length > 0
     ? rawFullExperts.map((e) => ({
@@ -327,7 +340,7 @@ export default function AgentDetail({ agentId, fallback, onBack }: Props) {
             <div style={{ padding: sectionPad, borderBottom: "1px solid #E5E7EB" }}>
               <p style={sectionLabel}>Performance Metrics</p>
               <InfoRow label="Total Experts Recruited:" value={
-                expertsObj?.total ? String(expertsObj.total) : String(recruitedExperts.length)
+                expertsObj?.total != null ? String(expertsObj.total) : String(recruitedExperts.length)
               } />
               <InfoRow label="Active Experts:"          value={expertsObj?.active != null ? String(expertsObj.active) : "—"} />
               <InfoRow label="Total Earnings:"          value={totalEarnings} />

@@ -21,11 +21,7 @@ export function computeStatus(docs: { verified: boolean; rejected: boolean }[]):
   return "pending";
 }
 
-// ── Cloudinary download fix ────────────────────────────────────────────────────
-// The HTML `download` attribute is ignored by browsers for cross-origin URLs
-// (files live on res.cloudinary.com, app runs elsewhere), so it silently
-// opens the file instead of downloading it. `fl_attachment` forces a real
-// download regardless of origin.
+
 function toDownloadUrl(url: string): string {
   if (!url.includes("res.cloudinary.com")) return url;
   if (url.includes("/fl_attachment")) return url;

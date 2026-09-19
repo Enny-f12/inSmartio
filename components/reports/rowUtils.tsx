@@ -1,10 +1,4 @@
 // app/(dashboard)/reports/components/rowUtils.ts
-//
-// The exact field names in each report's `rows[]` aren't confirmed yet (the
-// Swagger screenshots didn't expose a response schema). These helpers let the
-// UI degrade gracefully — showing "—" instead of crashing — for whichever
-// key name the API actually uses, and make it a one-line fix per column once
-// the real shape is confirmed (just add/reorder the candidate keys).
 
 export function pick(row: Record<string, unknown>, keys: string[], fallback = "—"): string {
   for (const k of keys) {

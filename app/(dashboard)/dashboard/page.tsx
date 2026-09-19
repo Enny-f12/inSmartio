@@ -15,7 +15,7 @@ import {
 } from "@/lib/redux/reportSlice";
 import {
   fetchRecentActivityThunk,
-  fetchPendingAlertsThunk,
+  fetchAlertsThunk,
 } from "@/lib/redux/dashboardSlice";
 
 const CHART_COLORS = ["#2563eb", "#F9A826", "#2E7D32", "#7B3F9E", "#db2777", "#0891b2"];
@@ -39,7 +39,7 @@ const today      = new Date().toISOString().split("T")[0];
 const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const query      = { fromDate: oneYearAgo, toDate: today };
 
-const PENDING_ALERTS: { label: string; value: string; sub: string; color: string; bg: string }[] = [
+const ALERTS_FALLBACK: { label: string; value: string; sub: string; color: string; bg: string }[] = [
   { label: "Pending verifications", value: "156", sub: "45 Tier 1 · 32 Tier 2 · 12 Tier 3",      color: "#7c3aed", bg: "#F5F3FF" },
   { label: "Open disputes",         value: "25",  sub: "12 new · 8 in progress · 5 in mediation", color: "#EF4444", bg: "#FEF2F2" },
   { label: "TAS applications",      value: "8",   sub: "Pending review",                          color: "#F9A826", bg: "#FFFBEB" },
@@ -87,7 +87,7 @@ export default function DashboardPage() {
   } = useAppSelector((s) => s.report);
   const {
     recentActivity,  recentActivityStatus,
-    pendingAlerts,   pendingAlertsStatus,
+    alerts,          alertsStatus,
   } = useAppSelector((s) => s.dashboard);
 
   useEffect(() => {
@@ -97,10 +97,10 @@ export default function DashboardPage() {
     if (topCategoriesStatus  === "idle") dispatch(fetchTopCategoriesThunk(query));
     if (topCitiesStatus      === "idle") dispatch(fetchTopCitiesThunk(query));
     if (recentActivityStatus === "idle") dispatch(fetchRecentActivityThunk());
-    if (pendingAlertsStatus  === "idle") dispatch(fetchPendingAlertsThunk());
+    if (alertsStatus         === "idle") dispatch(fetchAlertsThunk());
   }, [
     dispatch, statsStatus, userGrowthStatus, revenueTrendStatus,
-    topCategoriesStatus, topCitiesStatus, recentActivityStatus, pendingAlertsStatus,
+    topCategoriesStatus, topCitiesStatus, recentActivityStatus, alertsStatus,
   ]);
 
   // ── Stat cards ────────────────────────────────────────────────────────────
@@ -183,9 +183,7 @@ export default function DashboardPage() {
   }
 
   // ── Top Cities ────────────────────────────────────────────────────────────
-  // Merge "Unknown"/blank entries into "Lagos" using a Map keyed by normalized
-  // city name, so it doesn't matter which order the entries arrive in — there
-  // will only ever be a single "Lagos" bucket, never a duplicate.
+  
   const isCitiesLoading = topCitiesStatus === "loading" || topCitiesStatus === "idle";
   const cityBars = (() => {
     if (!topCitiesData?.cities?.length) return FALLBACK_CITIES;
@@ -226,37 +224,36 @@ export default function DashboardPage() {
       }))
     : [];
 
-  // ── Pending Alerts — live or mock ─────────────────────────────────────────
-  const pa = pendingAlerts;
+  // ── Alerts — live (GET /admin/alerts) or mock ─────────────────────────────
   const alertRows: { label: string; value: string; sub: string; color: string; bg: string }[] =
-    pendingAlertsStatus === "succeeded" && pa
+    alertsStatus === "succeeded" && alerts
       ? [
           {
             label: "Pending verifications",
-            value: String(pa.pendingVerifications.total),
-            sub:   `${pa.pendingVerifications.tier1} Tier 1 · ${pa.pendingVerifications.tier2} Tier 2 · ${pa.pendingVerifications.tier3} Tier 3`,
+            value: String(alerts.verification.total),
+            sub:   `${alerts.verification.tier1} Tier 1 · ${alerts.verification.tier2} Tier 2 · ${alerts.verification.tier3} Tier 3`,
             color: "#7c3aed", bg: "#F5F3FF",
           },
           {
             label: "Open disputes",
-            value: String(pa.openDisputes.total),
-            sub:   `${pa.openDisputes.new} new · ${pa.openDisputes.inProgress} in progress · ${pa.openDisputes.inMediation} in mediation`,
+            value: String(alerts.dispute.total),
+            sub:   `${alerts.dispute.new} new · ${alerts.dispute.inProgress} in progress · ${alerts.dispute.mediation} in mediation`,
             color: "#EF4444", bg: "#FEF2F2",
           },
           {
             label: "TAS applications",
-            value: String(pa.tasApplications.total),
-            sub:   "Pending review",
+            value: String(alerts.tas.total),
+            sub:   `${alerts.tas.pendingReview} pending review · ${alerts.tas.rejectedDocuments} rejected · ${alerts.tas.pendingPayout} payout`,
             color: "#F9A826", bg: "#FFFBEB",
           },
           {
             label: "Pending payouts",
-            value: String(pa.pendingPayouts.total),
-            sub:   `₦${pa.pendingPayouts.amountNaira.toLocaleString()} total`,
+            value: String(alerts.payouts.count),
+            sub:   alerts.payouts.formattedTotalAmount || `₦${alerts.payouts.totalAmount.toLocaleString()} total`,
             color: "#16a34a", bg: "#F0FDF4",
           },
         ]
-      : PENDING_ALERTS;
+      : ALERTS_FALLBACK;
 
   // ── Shared card style ─────────────────────────────────────────────────────
   const card: React.CSSProperties = {
@@ -353,7 +350,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Recent Activity + Pending Alerts ── */}
+        {/* ── Recent Activity + Alerts ── */}
         <div className="db-2col">
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
@@ -388,23 +385,27 @@ export default function DashboardPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
               <p className="section-title" style={{ margin: 0 }}>
                 <AlertTriangle size={15} color="#F9A826" />
-                Pending Alerts
+                Alerts
               </p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {alertRows.map((alert) => (
-                <div key={alert.label} className="alert-pill" style={{ backgroundColor: alert.bg }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "10px",
-                    backgroundColor: alert.color, display: "flex", alignItems: "center",
-                    justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{alert.value}</span>
+              {alertsStatus === "loading" || alertsStatus === "idle" ? (
+                <div className="db-skeleton" style={{ height: 160 }}><div className="db-spin" /> Loading alerts…</div>
+              ) : (
+                alertRows.map((alert) => (
+                  <div key={alert.label} className="alert-pill" style={{ backgroundColor: alert.bg }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "10px",
+                      backgroundColor: alert.color, display: "flex", alignItems: "center",
+                      justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{alert.value}</span>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", margin: "0 0 2px" }}>{alert.label}</p>
+                      <p style={{ fontSize: "11px", color: "#6B7280", margin: 0 }}>{alert.sub}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p style={{ fontSize: "13px", fontWeight: 600, color: "#111827", margin: "0 0 2px" }}>{alert.label}</p>
-                    <p style={{ fontSize: "11px", color: "#6B7280", margin: 0 }}>{alert.sub}</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

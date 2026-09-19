@@ -47,7 +47,7 @@ export const fetchTasById = createAsyncThunk(
     { }
   ) => {
     try { return await getTasById(id); }
-    catch { return fallback; }  // API not ready — use list item
+    catch { return fallback; } 
   }
 );
 
