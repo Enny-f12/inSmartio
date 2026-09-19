@@ -70,6 +70,10 @@ export interface Permissions {
   canViewAnnouncements:     boolean;
   canManageAnnouncements:   boolean;
 
+  // Categories
+  canViewCategories:        boolean;
+  canManageCategories:      boolean;  // ← new
+
   // Notifications
   canViewNotifications:     boolean;
   canManageNotifications:   boolean;
@@ -86,6 +90,10 @@ export interface Permissions {
   canViewFaq:               boolean;
   canManageFaq:             boolean;
 
+  // Subscription
+  canViewSubscription:      boolean;  // ← new
+  canManageSubscription:    boolean;  // ← new
+
   // Admin management
   canViewAdmins:            boolean;
   canCreateAdmin:           boolean;
@@ -95,6 +103,9 @@ export interface Permissions {
   // Audit logs
   canViewAuditLogs:         boolean;
   canExportAuditLogs:       boolean;
+
+  //waitlist
+   canManageWaitlist: boolean; 
 }
 
 // ── Permission definitions per role ───────────────────────
@@ -127,6 +138,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canExportReports:         true,
     canViewAnnouncements:     true,
     canManageAnnouncements:   true,
+    canViewCategories:        true,
+    canManageCategories:      true,
     canViewNotifications:     true,
     canManageNotifications:   true,
     canViewSettings:          true,
@@ -135,12 +148,15 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageCommission:      true,
     canViewFaq:               true,
     canManageFaq:             true,
+    canViewSubscription:      true,
+    canManageSubscription:    true,
     canViewAdmins:            true,
     canCreateAdmin:           true,
     canDeleteAdmin:           true,
     canManageRoles:           true,
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
+     canManageWaitlist: true,
   },
 
   // ── Verification Officer ──────────────────────────────
@@ -154,7 +170,7 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewVerifications:     true,
     canApproveVerification:   true,
     canRejectVerification:    true,
-    canViewJobs:              true,
+    canViewJobs:              false,
     canDeleteJob:             false,
     canFlagJob:               false,
     canViewTas:               true,
@@ -169,6 +185,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canExportReports:         false,
     canViewAnnouncements:     false,
     canManageAnnouncements:   false,
+    canViewCategories:        false,
+    canManageCategories:      false,
     canViewNotifications:     false,
     canManageNotifications:   false,
     canViewSettings:          false,
@@ -177,18 +195,21 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageCommission:      false,
     canViewFaq:               false,
     canManageFaq:             false,
+    canViewSubscription:      false,
+    canManageSubscription:    false,
     canViewAdmins:            false,
     canCreateAdmin:           false,
     canDeleteAdmin:           false,
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        false,
   },
 
   // ── Finance Admin ─────────────────────────────────────
   finance: {
     canViewDashboard:         true,
-    canViewUsers:             true,
+    canViewUsers:             false,
     canCreateUser:            false,
     canEditUser:              false,
     canDeleteUser:            false,
@@ -196,35 +217,40 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canViewVerifications:     false,
     canApproveVerification:   false,
     canRejectVerification:    false,
-    canViewJobs:              true,
+    canViewJobs:              false,
     canDeleteJob:             false,
     canFlagJob:               false,
-    canViewTas:               true,
+    canViewTas:               false,
     canManageTas:             false,
     canAdjustTasTier:         false,
     canViewPayments:          true,
     canProcessPayouts:        true,
     canRejectPayouts:         true,
-    canViewDisputes:          true,
+    canViewDisputes:          false,
     canResolveDisputes:       false,
     canViewReports:           true,
     canExportReports:         true,
     canViewAnnouncements:     false,
     canManageAnnouncements:   false,
+    canViewCategories:        false,
+    canManageCategories:      false,
     canViewNotifications:     false,
     canManageNotifications:   false,
-    canViewSettings:          false,
+    canViewSettings:          true,
     canManageSettings:        false,
     canViewCommission:        true,
     canManageCommission:      true,
     canViewFaq:               false,
     canManageFaq:             false,
+    canViewSubscription:      true,   // ← finance can manage subscription
+    canManageSubscription:    true,   // ← finance can manage subscription
     canViewAdmins:            false,
     canCreateAdmin:           false,
     canDeleteAdmin:           false,
     canManageRoles:           false,
     canViewAuditLogs:         true,
     canExportAuditLogs:       true,
+    canManageWaitlist:        false,
   },
 
   // ── Support Admin ─────────────────────────────────────
@@ -253,6 +279,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canExportReports:         false,
     canViewAnnouncements:     true,
     canManageAnnouncements:   false,
+    canViewCategories:        true,   // ← support can view categories
+    canManageCategories:      true,   // ← support can manage categories
     canViewNotifications:     true,
     canManageNotifications:   false,
     canViewSettings:          false,
@@ -261,12 +289,15 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageCommission:      false,
     canViewFaq:               true,
     canManageFaq:             true,
+    canViewSubscription:      false,
+    canManageSubscription:    false,
     canViewAdmins:            false,
     canCreateAdmin:           false,
     canDeleteAdmin:           false,
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        true,
   },
 
   // ── View Only ─────────────────────────────────────────
@@ -295,6 +326,8 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canExportReports:         false,
     canViewAnnouncements:     true,
     canManageAnnouncements:   false,
+    canViewCategories:        true,
+    canManageCategories:      false,
     canViewNotifications:     true,
     canManageNotifications:   false,
     canViewSettings:          true,
@@ -303,12 +336,15 @@ const PERMISSION_MAP: Record<AdminRole, Permissions> = {
     canManageCommission:      false,
     canViewFaq:               true,
     canManageFaq:             false,
+    canViewSubscription:      true,
+    canManageSubscription:    false,
     canViewAdmins:            false,
     canCreateAdmin:           false,
     canDeleteAdmin:           false,
     canManageRoles:           false,
     canViewAuditLogs:         false,
     canExportAuditLogs:       false,
+    canManageWaitlist:        false,
   },
 };
 

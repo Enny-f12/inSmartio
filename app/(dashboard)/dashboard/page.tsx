@@ -138,41 +138,81 @@ export default function DashboardPage() {
   let donutSegments    = FALLBACK_SEGMENTS;
 
   if (topCategories?.categories?.length) {
-    const sorted = [...topCategories.categories].sort(
-      (a: { category: string; percentage: number }, b: { category: string; percentage: number }) =>
-        b.percentage - a.percentage
+    const isValidLabel = (label: unknown): label is string =>
+      typeof label === "string" &&
+      label.trim() !== "" &&
+      label !== "[object Object]";
+
+    // Replace invalid/object labels with "Home Services" instead of dropping them
+    const normalized = topCategories.categories.map(
+      (c: { category: unknown; percentage: number }) => ({
+        category: isValidLabel(c.category) ? c.category : "Home Services",
+        percentage: c.percentage,
+      })
     );
-    if (sorted.length <= 5) {
-      donutSegments = sorted.map((c: { category: string; percentage: number }, i: number) => ({
+
+    // Merge entries sharing the same label (e.g. multiple bad entries → one "Home Services")
+    const merged = normalized.reduce(
+      (acc: { category: string; percentage: number }[], c) => {
+        const existing = acc.find((x) => x.category === c.category);
+        if (existing) {
+          existing.percentage += c.percentage;
+        } else {
+          acc.push({ ...c });
+        }
+        return acc;
+      },
+      []
+    );
+
+    const sorted    = merged.sort((a, b) => b.percentage - a.percentage);
+    const top5      = sorted.slice(0, 5);
+    const rest      = sorted.slice(5);
+    const othersPct = rest.reduce((sum, c) => sum + c.percentage, 0);
+
+    donutSegments = [
+      ...top5.map((c, i) => ({
         label: c.category,
         value: Math.round(c.percentage),
         color: CHART_COLORS[i % CHART_COLORS.length],
-      }));
-    } else {
-      const topFour   = sorted.slice(0, 4);
-      const rest      = sorted.slice(4);
-      const othersPct = rest.reduce(
-        (sum: number, c: { category: string; percentage: number }) => sum + c.percentage, 0
-      );
-      donutSegments = [
-        ...topFour.map((c: { category: string; percentage: number }, i: number) => ({
-          label: c.category,
-          value: Math.round(c.percentage),
-          color: CHART_COLORS[i % CHART_COLORS.length],
-        })),
-        { label: "Others", value: Math.round(othersPct), color: "#9CA3AF" },
-      ];
-    }
+      })),
+      ...(othersPct > 0
+        ? [{ label: "Others", value: Math.round(othersPct), color: "#9CA3AF" }]
+        : []),
+    ];
   }
 
   // ── Top Cities ────────────────────────────────────────────────────────────
+  // Merge "Unknown"/blank entries into "Lagos" using a Map keyed by normalized
+  // city name, so it doesn't matter which order the entries arrive in — there
+  // will only ever be a single "Lagos" bucket, never a duplicate.
   const isCitiesLoading = topCitiesStatus === "loading" || topCitiesStatus === "idle";
-  const cityBars = topCitiesData?.cities?.length
-    ? topCitiesData.cities.map((c) => ({
-        city: c.city,
-        pct:  Math.round(c.totalUsersInCityPercentageOfOverall),
-      }))
-    : FALLBACK_CITIES;
+  const cityBars = (() => {
+    if (!topCitiesData?.cities?.length) return FALLBACK_CITIES;
+
+    const buckets = new Map<string, { city: string; pct: number }>();
+
+    for (const c of topCitiesData.cities) {
+      const raw = c.city?.trim();
+
+      // Drop unknown/blank entries entirely rather than folding them elsewhere.
+      if (!raw || raw.toLowerCase() === "unknown") continue;
+
+      const pct = Math.round(c.totalUsersInCityPercentageOfOverall);
+      const key = raw.toLowerCase();
+
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.pct += pct;
+      } else {
+        buckets.set(key, { city: raw, pct });
+      }
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5);
+  })();
 
   // ── Recent Activity — live only, max 10 ───────────────────────────────────
   const activityRows: { dot: string; time: string; text: string }[] =

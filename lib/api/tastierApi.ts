@@ -2,8 +2,13 @@
 import axiosInstance from "./axiosInstance";
 
 export interface TierConfig {
-  experts: number;
-  bonus:   number;
+  name?:          string;    // CONFIRMED — e.g. "Bronze"
+  benefits?:      string[];  // CONFIRMED — e.g. ["Basic commission", "Standard support"]
+  minReferrals:   number;    // CONFIRMED
+  commissionRate?: number;   // CONFIRMED — this is the tier's %, not a "bonus"
+  maxReferrals?:  number;    // NOT PRESENT on the backend (confirmed via live inspection).
+                              // Added frontend-only so the UI can capture/display a max value;
+                              // will not persist across refresh until backend adds this field.
 }
 
 export interface TasTierData {

@@ -4,18 +4,25 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Plus, Pencil, Trash2, Upload, Eye, Calendar, Loader2, X, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, Eye, Calendar, Loader2, X, Check, Users } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell } from "./SettingsShared";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { fetchBanners, addBanner, editBanner, removeBanner } from "@/lib/redux/bannerSlice";
-import type { ApiBanner, CreateBannerPayload } from "@/lib/api/bannerApi";
+import type { ApiBanner, CreateBannerPayload, BannerRole } from "@/lib/api/bannerApi";
 
 // ── Image config ──────────────────────────────────────────
 const TARGET_W = 1200;
 const TARGET_H = 600;
 const ASPECT   = TARGET_W / TARGET_H; // 2:1
+
+const ROLE_OPTIONS: { value: BannerRole; label: string }[] = [
+  { value: "all",    label: "All Users"  },
+  { value: "expert", label: "Expert"     },
+  { value: "tas",    label: "TAS"        },
+  { value: "client", label: "Client"     },
+];
 
 // ── Canvas: crop image to blob ────────────────────────────
 function getCroppedBlob(
@@ -67,6 +74,22 @@ const labelStyle: React.CSSProperties = {
   display: "block", fontSize: "12px", fontWeight: 500,
   color: "var(--color-text-muted)", marginBottom: "6px",
 };
+
+// ── RoleBadge ─────────────────────────────────────────────
+function RoleBadge({ role }: { role: BannerRole }) {
+  const map: Record<BannerRole, { bg: string; color: string; border: string }> = {
+    all:    { bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+    expert: { bg: "#faf5ff", color: "#7e22ce", border: "#e9d5ff" },
+    tas:    { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
+    client: { bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" },
+  };
+  const s = map[role] ?? map.all;
+  return (
+    <span style={{ fontSize: "11px", fontWeight: 600, padding: "3px 10px", borderRadius: "999px", backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: "nowrap", flexShrink: 0 }}>
+      {ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role}
+    </span>
+  );
+}
 
 // ── StatusBadge ───────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -171,9 +194,7 @@ function CropModal({
 function ImageUploader({
   preview, onBlob,
 }: {
-  /** Either an object URL (new blob) or a Cloudinary URL (existing banner) */
   preview: string;
-  /** Called with the cropped blob + a local preview URL */
   onBlob: (blob: Blob, preview: string) => void;
 }) {
   const inputRef              = useRef<HTMLInputElement>(null);
@@ -248,9 +269,6 @@ function ImageUploader({
 }
 
 // ── Banner Form Modal ─────────────────────────────────────
-// imageBlob = the cropped Blob ready for multipart upload
-// imagePreview = local object URL shown in the UI
-// imageExisting = Cloudinary URL from an existing banner (edit mode)
 function BannerFormModal({
   banner, onClose, onSave, saving,
 }: {
@@ -259,19 +277,18 @@ function BannerFormModal({
   onSave: (payload: CreateBannerPayload & { status?: string }) => void;
   saving: boolean;
 }) {
-  const [imageBlob,     setImageBlob]     = useState<Blob | null>(null);
-  const [imagePreview,  setImagePreview]  = useState(banner?.image ?? "");
-  const [title,         setTitle]         = useState(banner?.title ?? "");
-  const [subTitle,      setSubTitle]      = useState(banner?.subTitle ?? "");
-  const [ctaText,       setCtaText]       = useState(banner?.ctaButtonText ?? "");
-  const [ctaLink,       setCtaLink]       = useState(banner?.ctaLink ?? "");
-  const [startDate,     setStartDate]     = useState(banner?.startDate?.slice(0, 10) ?? "");
-  const [endDate,       setEndDate]       = useState(banner?.endDate?.slice(0, 10) ?? "");
-  const [active,        setActive]        = useState(banner ? banner.status === "active" : true);
+  const [imageBlob,    setImageBlob]    = useState<Blob | null>(null);
+  const [imagePreview, setImagePreview] = useState(banner?.image ?? "");
+  const [title,        setTitle]        = useState(banner?.title ?? "");
+  const [subTitle,     setSubTitle]     = useState(banner?.subTitle ?? "");
+  const [ctaText,      setCtaText]      = useState(banner?.ctaButtonText ?? "");
+  const [ctaLink,      setCtaLink]      = useState(banner?.ctaLink ?? "");
+  const [startDate,    setStartDate]    = useState(banner?.startDate?.slice(0, 10) ?? "");
+  const [endDate,      setEndDate]      = useState(banner?.endDate?.slice(0, 10) ?? "");
+  const [active,       setActive]       = useState(banner ? banner.status === "active" : true);
+  const [role,         setRole]         = useState<BannerRole>(banner?.role ?? "all");
 
   const handleSave = () => {
-    // If editing and no new image was selected, pass the existing URL string
-    // If new image was cropped, pass the Blob for multipart upload
     const imageValue = imageBlob && imageBlob.size > 0
       ? imageBlob
       : banner?.image ?? "";
@@ -284,6 +301,7 @@ function BannerFormModal({
       ctaLink,
       startDate,
       endDate,
+      role,
       status: active ? "active" : "inactive",
     });
   };
@@ -322,7 +340,6 @@ function BannerFormModal({
           preview={imagePreview}
           onBlob={(blob, preview) => {
             if (!preview) {
-              // user hit the X to remove
               setImageBlob(null);
               setImagePreview("");
             } else {
@@ -347,6 +364,34 @@ function BannerFormModal({
           <div><label style={labelStyle}>End Date</label><input style={inputStyle} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></div>
         </div>
 
+        {/* Role selector */}
+        <div>
+          <label style={labelStyle}>Target Role</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRole(opt.value)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "10px",
+                  border: role === opt.value ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
+                  backgroundColor: role === opt.value ? "color-mix(in srgb, var(--color-primary) 8%, transparent)" : "var(--color-background)",
+                  fontSize: "12px",
+                  fontWeight: role === opt.value ? 600 : 400,
+                  color: role === opt.value ? "var(--color-primary)" : "var(--color-text-muted)",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Active toggle */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: "12px", border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)" }}>
           <div>
             <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-main)", marginBottom: "2px" }}>Active Banner</p>
@@ -411,7 +456,7 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
   const isMutating = mutateStatus === "loading";
 
   useEffect(() => {
-    if (listStatus === "idle") dispatch(fetchBanners());
+    if (listStatus === "idle") dispatch(fetchBanners("all"));
   }, [dispatch, listStatus]);
 
   const handleCreate = (payload: CreateBannerPayload & { status?: string }) => {
@@ -496,6 +541,7 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
           {list.map((banner) => (
             <div key={banner.id} className="banner-card">
               <div className="banner-card-top">
+                {/* Thumbnail */}
                 <div style={{ width: 72, height: 36, borderRadius: "10px", overflow: "hidden", flexShrink: 0, border: "1px solid var(--color-border)" }}>
                   {banner.image
                     // eslint-disable-next-line @next/next/no-img-element
@@ -504,24 +550,29 @@ export default function BannerManagement({ onBack }: { onBack: () => void }) {
                   }
                 </div>
 
+                {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
                     <p style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--color-text-main)" }}>{banner.title}</p>
                     <StatusBadge status={banner.status} />
+                    <RoleBadge role={banner.role ?? "all"} />
                   </div>
                   <p style={{ fontSize: "12px", color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: "6px" }}>{banner.subTitle}</p>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                     <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--color-text-muted)" }}><Calendar size={11} /> {banner.startDate?.slice(0, 10)} – {banner.endDate?.slice(0, 10)}</span>
                     <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--color-text-muted)" }}><Eye size={11} /> {banner.click} clicks</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--color-text-muted)" }}><Users size={11} /> {ROLE_OPTIONS.find((r) => r.value === (banner.role ?? "all"))?.label ?? banner.role}</span>
                   </div>
                 </div>
 
+                {/* Desktop actions */}
                 <div className="banner-actions-inline" style={{ alignItems: "center", gap: "6px", flexShrink: 0 }}>
                   <button onClick={() => setEditTarget(banner)} style={{ padding: "6px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-text-muted)" }}><Pencil size={15} strokeWidth={1.8} /></button>
                   <button onClick={() => setDeleteTarget(banner)} style={{ padding: "6px", borderRadius: "8px", border: "1px solid #fecaca", background: "#fef2f2", cursor: "pointer", color: "#f87171" }}><Trash2 size={15} strokeWidth={1.8} /></button>
                 </div>
               </div>
 
+              {/* Mobile actions */}
               <div className="banner-card-bottom">
                 <p style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Manage banner</p>
                 <div style={{ display: "flex", gap: "8px" }}>

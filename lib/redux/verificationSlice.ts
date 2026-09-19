@@ -10,16 +10,13 @@ import {
   type ApiVerificationDetail,
   type VerificationTier,
   type VerificationType,
+  type VerificationStatus,
   type VerifyExpertPayload,
 } from "@/lib/api/verificationApi";
 
 export type LocalStatus = "approved" | "rejected";
 
 // ── Fetch detail helper ───────────────────────────────────────────────────────
-// Tries "expert" type first.
-// If detail.tier is 3 => also tries "tas" (which has more data for tier 3).
-// If the id is an email (fallback when list has no id), both calls will likely
-// 404 — in that case we return null and the modal shows a skeleton.
 async function fetchDetailBestEffort(
   id: string,
 ): Promise<ApiVerificationDetail | null> {
@@ -31,7 +28,6 @@ async function fetchDetailBestEffort(
     // 404 or network error — will try "tas" below
   }
 
-  // If we got a tier-3 result from the expert call, upgrade to tas
   if (detail && Number(detail.tier) === 3) {
     try {
       const tasDetail = await getVerificationById(id, "tas");
@@ -41,8 +37,6 @@ async function fetchDetailBestEffort(
     }
   }
 
-  // If expert call failed completely, try tas directly
-  // (covers cases where tier is unknown before fetching)
   if (!detail) {
     try {
       detail = await getVerificationById(id, "tas");
@@ -63,7 +57,6 @@ interface VerificationState {
   selected:        ApiVerificationDetail | null;
   selectedStatus:  "idle" | "loading" | "succeeded" | "failed";
   selectedSummary: ApiVerificationSummary | null;
-  // null = full detail loaded; string = warning message (skeleton only)
   selectedWarning: string | null;
   mutateStatus:    "idle" | "loading" | "succeeded" | "failed";
   mutateError:     string | null;
@@ -88,9 +81,14 @@ const errMsg = (err: unknown, fallback: string) =>
 
 // ── Thunks ───────────────────────────────────────────────────────────────────
 
+// Accepts an optional filter for callers that still pass one (page.tsx),
+// but does NOT forward it to the backend — the `verify` query param was
+// confirmed to make the endpoint return an empty list regardless of value,
+// so status filtering happens client-side in page.tsx instead. Pagination
+// (page/limit) is still handled automatically inside getAllVerifications.
 export const fetchVerifications = createAsyncThunk(
   "verifications/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async (_filter: VerificationStatus | undefined, { rejectWithValue }) => {
     try { return await getAllVerifications(); }
     catch (err) { return rejectWithValue(errMsg(err, "Failed to fetch verifications")); }
   }
@@ -102,7 +100,6 @@ export const fetchVerificationById = createAsyncThunk(
     const detail = await fetchDetailBestEffort(id);
 
     if (!detail) {
-      // Could not fetch detail — show skeleton from summary data
       const tierNum = Number(normaliseTier(summary.tier).replace("tier", ""));
       const skeleton: ApiVerificationDetail = {
         id,
@@ -174,6 +171,8 @@ const verificationSlice = createSlice({
       state.selectedSummary = null;
       state.selectedStatus  = "idle";
       state.selectedWarning = null;
+      state.mutateStatus    = "idle";
+      state.mutateError     = null;
     },
     resetMutateStatus: (state) => {
       state.mutateStatus = "idle";
@@ -228,16 +227,22 @@ const verificationSlice = createSlice({
       .addCase(verifyExpertThunk.fulfilled, (state, action) => {
         const { id, localStatus } = action.payload;
         state.mutateStatus = "succeeded";
+
+        // Persist the local override so the list badge updates immediately
         state.localOverrides[id] = localStatus;
+
+        // Update the list item in-place so status badge reflects the change
         const item = state.list.find((e) => e.id === id);
         if (item) {
-          item.status = localStatus;
-          if (localStatus === "approved") item.verify = true;
+          // Use the verify field (not status) so normaliseVerificationStatus
+          // resolves correctly — "approved" → verify:true, "rejected" → "rejected"
+          item.verify = localStatus === "approved" ? true : "rejected";
+          // Keep item.status as-is (it's the account status, not verify status)
         }
-        state.selected        = null;
-        state.selectedSummary = null;
-        state.selectedStatus  = "idle";
-        state.selectedWarning = null;
+
+        // ── Do NOT clear selected/selectedSummary/selectedStatus here ──
+        // The modal stays open so the admin can see the approved/rejected state.
+        // clearSelectedVerification() is called explicitly when they close.
       })
       .addCase(verifyExpertThunk.rejected, (state, action) => {
         state.mutateStatus = "failed";

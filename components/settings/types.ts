@@ -12,7 +12,9 @@ export type SettingsView =
   | "notifications"
   | "admins"
   | "notificationSettings"
-  | "changePassword";          // ← new
+  | "changePassword"
+  | "waitlist"    
+  | "subscription";     // ← new
 
 // ── Categories ───────────────────────────────────────────
 export interface SubCategory { name: string; icon: string; }

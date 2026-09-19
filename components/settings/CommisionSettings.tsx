@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, Loader2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Pencil, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { SubPageShell } from "./SettingsShared";
@@ -10,8 +10,9 @@ import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 // Commission
 import {
   fetchCommissions, addCommission, editCommission, removeCommission, toggleCommission,
+  fetchActiveModel, updateActiveModel,
 } from "@/lib/redux/commissionSlice";
-import type { ApiCommission, CreateCommissionPayload } from "@/lib/api/commissionApi";
+import type { ApiCommission, CreateCommissionPayload, ActiveModel } from "@/lib/api/commissionApi";
 
 // Verification Settings
 import {
@@ -53,6 +54,15 @@ const INP: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+// Same visual language as INP, but tuned for native <select> elements
+// (adds room for the dropdown arrow and normalizes cross-browser appearance)
+const SELECT: React.CSSProperties = {
+  ...INP,
+  paddingRight: "32px",
+  appearance: "auto",
+  cursor: "pointer",
+};
+
 const LABEL_STYLE: React.CSSProperties = {
   display: "block",
   fontSize: "12px",
@@ -60,6 +70,9 @@ const LABEL_STYLE: React.CSSProperties = {
   color: "#6B7280",
   marginBottom: "6px",
 };
+
+// 0–100 inclusive, used for percentage dropdown fields
+const PERCENT_OPTIONS = Array.from({ length: 101 }, (_, i) => i);
 
 // ── Shared display atoms ──────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
@@ -101,16 +114,60 @@ function InactiveInfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating }: {
+// Sliding on/off switch — visually distinct "on" (green, thumb right) vs
+// "off" (grey, thumb left) states, with a CSS transition on the thumb so
+// the change is obviously visible on click. Defaults to OFF whenever
+// `checked` isn't explicitly `true`.
+function ToggleSwitch({ checked, onChange, disabled, title }: {
+  checked?: boolean; onChange: () => void; disabled?: boolean; title?: string;
+}) {
+  const isOn = checked === true; // explicit — anything else (undefined/false) renders OFF
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      title={title ?? (isOn ? "On — click to turn off" : "Off — click to turn on")}
+      onClick={onChange}
+      disabled={disabled}
+      style={{
+        position: "relative",
+        width: "38px",
+        height: "22px",
+        borderRadius: "999px",
+        border: "none",
+        padding: 0,
+        flexShrink: 0,
+        cursor: disabled ? "not-allowed" : "pointer",
+        backgroundColor: isOn ? "#16a34a" : "#D1D5DB",
+        transition: "background-color 160ms ease",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: "2px",
+          left: isOn ? "18px" : "2px",
+          width: "18px",
+          height: "18px",
+          borderRadius: "50%",
+          backgroundColor: "#ffffff",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+          transition: "left 160ms ease",
+        }}
+      />
+    </button>
+  );
+}
+
+function RecordActions({ onToggle, onEdit, onDelete, isActive, isMutating, showToggle = true }: {
   onToggle: () => void; onEdit: () => void; onDelete: () => void;
-  isActive?: boolean; isMutating?: boolean;
+  isActive?: boolean; isMutating?: boolean; showToggle?: boolean;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-      <button onClick={onToggle} disabled={isMutating} title={isActive ? "Disable" : "Enable"}
-        style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: isActive ? "#16a34a" : "#9CA3AF" }}>
-        {isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-      </button>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {showToggle && <ToggleSwitch checked={isActive} onChange={onToggle} disabled={isMutating} />}
       <button onClick={onEdit}
         style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
         <Pencil size={14} strokeWidth={1.8} />
@@ -195,6 +252,119 @@ function AddButton({ onClick }: { onClick: () => void }) {
 
 const naira = (n: number | undefined | null) => n != null ? `₦${Number(n).toLocaleString()}` : "—";
 
+const ACTIVE_MODEL_COLORS: Record<ActiveModel, string> = {
+  protected:   "#2563eb",
+  unprotected: "#d97706",
+  both:        "#16a34a",
+};
+
+const ACTIVE_MODEL_LABELS: Record<ActiveModel, string> = {
+  protected:   "Model 1",
+  unprotected: "Model 2",
+  both:        "Both Models",
+};
+
+// Builds the model description from the actual current numbers instead of a
+// hardcoded example — so if the subscription fee or commission % changes,
+// this text updates automatically without needing a code change.
+function describeModel(model: ActiveModel, source?: Pick<ApiCommission, "modelISubscription" | "model2CommissionRate">): string {
+  const fee  = source?.modelISubscription ?? "the configured fee";
+  const rate = source?.model2CommissionRate != null ? `${source.model2CommissionRate}%` : "the configured rate";
+  switch (model) {
+    case "protected":
+      return `Subscription-based: experts pay ${fee} per month and keep 100% of their earnings.`;
+    case "unprotected":
+      return `Commission-based: experts pay no monthly subscription; ${rate} is deducted from each transaction instead.`;
+    case "both":
+      return `Both models available — Model 1 subscription (${fee}/month, 100% earnings) or Model 2 commission (${rate} per transaction).`;
+  }
+}
+
+// Global "active payment model" bar — shown at the top of the Commission
+// card. Renders as a dropdown so any of the three states can be selected
+// directly (calls the explicit-set endpoint), rather than cycling through
+// them one click at a time. Toggling is admin-only server-side; swap
+// `isAdmin` for your real role check (e.g. useAppSelector selecting
+// auth.user.role).
+function ActiveModelBar({ isAdmin = true }: { isAdmin?: boolean }) {
+  const dispatch = useAppDispatch();
+  const { activeModel, activeModelStatus, list } = useAppSelector((s) => s.commission);
+  const isLoading = activeModelStatus === "loading";
+
+  useEffect(() => {
+    if (activeModelStatus === "idle") dispatch(fetchActiveModel());
+  }, [dispatch, activeModelStatus]);
+
+  // Source live subscription fee / commission rate from whichever commission
+  // record is currently marked active (status: true); fall back to the
+  // first record if none is flagged active yet.
+  const sourceRecord = list.find((c) => c.status) ?? list[0];
+
+  const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!isAdmin) return;
+    const model = e.target.value as ActiveModel;
+    dispatch(updateActiveModel(model)).unwrap()
+      .then((updated) => toast.success(`Active payment model set to ${updated.activePaymentModel ?? model}`))
+      .catch((e: string) => toast.error(e));
+  };
+
+  const color = activeModel ? ACTIVE_MODEL_COLORS[activeModel] : "#9CA3AF";
+  const description = activeModel ? describeModel(activeModel, sourceRecord) : "";
+  const isInitialLoading = activeModelStatus === "loading" && !activeModel;
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: "6px",
+      padding: "10px 14px", borderRadius: "12px", border: "1px solid #E5E7EB",
+      backgroundColor: "#FAFAFA", marginBottom: "14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", rowGap: "8px" }}>
+        <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>Active Payment Model</span>
+        {isInitialLoading ? (
+          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#9CA3AF" }}>
+            <Loader2 size={13} className="animate-spin" /> Loading...
+          </span>
+        ) : isAdmin ? (
+          <div style={{ position: "relative", display: "flex", alignItems: "center", flex: "1 1 160px", minWidth: "140px", maxWidth: "100%" }}>
+            <select
+              value={activeModel ?? ""}
+              onChange={handleSelect}
+              disabled={isLoading || !activeModel}
+              style={{
+                ...SELECT, width: "100%", boxSizing: "border-box", fontWeight: 700, color,
+                borderColor: `${color}40`, backgroundColor: `${color}0d`,
+                paddingRight: isLoading ? "34px" : SELECT.paddingRight,
+              }}
+            >
+              {(["protected", "unprotected", "both"] as ActiveModel[]).map((m) => (
+                <option key={m} value={m}>{ACTIVE_MODEL_LABELS[m]}</option>
+              ))}
+            </select>
+            {isLoading && (
+              <Loader2 size={14} className="animate-spin" style={{ position: "absolute", right: "10px", color }} />
+            )}
+          </div>
+        ) : (
+          <span style={{
+            fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px",
+            color, backgroundColor: `${color}14`, border: `1px solid ${color}30`,
+          }}>
+            {activeModel ? ACTIVE_MODEL_LABELS[activeModel] : "Loading..."}
+          </span>
+        )}
+      </div>
+      {isLoading && !isInitialLoading && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+          <Loader2 size={11} className="animate-spin" /> Updating...
+        </p>
+      )}
+      {description && (
+        <p style={{ fontSize: "11px", color: "#9CA3AF", margin: 0, lineHeight: 1.5 }}>{description}</p>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMISSION
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -213,7 +383,7 @@ function CommissionModal({ item, onClose, onSave, saving }: {
   );
 
   // tasRegistrationBonus is inactive — not shown in form, sent as 0
-  const valid = model2Rate && model1Sub && tasModel1 && tasModel2 && effDate;
+  const valid = model2Rate !== "" && model1Sub && tasModel1 && tasModel2 !== "" && effDate;
 
   return (
     <Modal open onClose={onClose} title={item ? "Edit Commission Settings" : "Add Commission Settings"}
@@ -234,8 +404,13 @@ function CommissionModal({ item, onClose, onSave, saving }: {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           <div>
             <label style={LABEL_STYLE}>Model 2 Commission Rate (%)</label>
-            <input style={INP} type="number" placeholder="e.g. 10" value={model2Rate}
-              onChange={(e) => setModel2Rate(e.target.value)} />
+            <select style={SELECT} value={model2Rate}
+              onChange={(e) => setModel2Rate(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={LABEL_STYLE}>Model 1 Subscription</label>
@@ -265,8 +440,13 @@ function CommissionModal({ item, onClose, onSave, saving }: {
           </div>
           <div>
             <label style={LABEL_STYLE}>Model 2 Commission (%)</label>
-            <input style={INP} type="number" placeholder="e.g. 1" value={tasModel2}
-              onChange={(e) => setTasModel2(e.target.value)} />
+            <select style={SELECT} value={tasModel2}
+              onChange={(e) => setTasModel2(e.target.value)}>
+              <option value="">Select %</option>
+              {PERCENT_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}%</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -320,6 +500,8 @@ function CommissionCard() {
           <AddButton onClick={() => setShowAdd(true)} />
         </div>
 
+        <ActiveModelBar />
+
         {listStatus === "loading" && <CardLoader />}
 
         {(listStatus === "succeeded" || listStatus === "failed") && list.length === 0 && (
@@ -328,10 +510,7 @@ function CommissionCard() {
               <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Default Settings
               </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                <button disabled title="Enable" style={{ padding: "4px", background: "none", border: "none", cursor: "not-allowed", color: "#9CA3AF" }}>
-                  <ToggleLeft size={20} />
-                </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <button onClick={() => setShowAdd(true)} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
                   <Pencil size={14} strokeWidth={1.8} />
                 </button>
@@ -339,7 +518,7 @@ function CommissionCard() {
             </div>
             <SubLabel text="Expert" />
             <InfoRow label="Model 2 Commission Rate" value="10%" />
-            <InfoRow label="Model 1 Subscription Fee" value="₦50,000 / month" />
+            <InfoRow label="Model 1 Subscription Fee" value="₦3,000 / month" />
             <div style={{ borderTop: "1px solid #E5E7EB", margin: "10px 0" }} />
             <SubLabel text="TAS" />
             {/* Registration Bonus — rendered as inactive */}
@@ -355,16 +534,19 @@ function CommissionCard() {
               <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Effective {c.effectiveDate ? new Date(c.effectiveDate).toLocaleDateString("en-NG") : "—"}
               </span>
-              <RecordActions
-                isActive={c.status} isMutating={isMutating}
-                onToggle={() =>
-                  dispatch(toggleCommission(c.id)).unwrap()
-                    .then(() => toast.success(`Commission ${c.status ? "disabled" : "enabled"}`))
-                    .catch((e: string) => toast.error(e))
-                }
-                onEdit={() => setEditItem(c)}
-                onDelete={() => setDeleteItem(c)}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <RecordActions
+                  isActive={c.status} isMutating={isMutating}
+                  showToggle={false}
+                  onToggle={() =>
+                    dispatch(toggleCommission(c.id)).unwrap()
+                      .then((updated) => toast.success(`Commission ${updated.status ? "enabled" : "disabled"}`))
+                      .catch((e: string) => toast.error(e))
+                  }
+                  onEdit={() => setEditItem(c)}
+                  onDelete={() => setDeleteItem(c)}
+                />
+              </div>
             </div>
             <SubLabel text="Expert" />
             <InfoRow label="Model 2 Commission Rate" value={`${c.model2CommissionRate}%`} />
@@ -535,14 +717,19 @@ const TIER_LABELS: Record<TierKey, string> = {
   tier4: "Tier 4", tier5: "Tier 5", tier6: "Tier 6",
 };
 
+// CONFIRMED backend field names (from live console inspection):
+//   { name: "Bronze", benefits: [...], minReferrals: 0, commissionRate: 5 }
+// `maxReferrals` is CONFIRMED NOT PRESENT on the backend — it's a frontend-only
+// addition so the UI can capture/display a max value. It will NOT persist
+// across a refresh until the backend adds this field. Flag to backend dev.
 function emptyTiers(): Record<TierKey, TierConfig> {
   return {
-    tier1: { experts: 0,    bonus: 0  },
-    tier2: { experts: 50,   bonus: 5  },
-    tier3: { experts: 200,  bonus: 10 },
-    tier4: { experts: 500,  bonus: 12 },
-    tier5: { experts: 1000, bonus: 15 },
-    tier6: { experts: 2500, bonus: 20 },
+    tier1: { minReferrals: 0,    maxReferrals: 49,   commissionRate: 0  },
+    tier2: { minReferrals: 50,   maxReferrals: 199,  commissionRate: 5  },
+    tier3: { minReferrals: 200,  maxReferrals: 499,  commissionRate: 10 },
+    tier4: { minReferrals: 500,  maxReferrals: 999,  commissionRate: 12 },
+    tier5: { minReferrals: 1000, maxReferrals: 2499, commissionRate: 15 },
+    tier6: { minReferrals: 2500, maxReferrals: undefined, commissionRate: 20 },
   };
 }
 
@@ -560,7 +747,7 @@ function TasTierModal({ item, onClose, onSave, saving }: {
   });
 
   const setField = (key: TierKey, field: keyof TierConfig, val: string) =>
-    setTiers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: Number(val) } }));
+    setTiers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: val === "" ? undefined : Number(val) } }));
 
   return (
     <Modal open onClose={onClose} title={item ? "Edit TAS Tier Settings" : "Add TAS Tier Settings"}
@@ -575,16 +762,21 @@ function TasTierModal({ item, onClose, onSave, saving }: {
                   {TIER_LABELS[key]}
                 </span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
                 <div>
                   <label style={LABEL_STYLE}>Min Experts</label>
-                  <input style={INP} type="number" value={tiers[key].experts}
-                    onChange={(e) => setField(key, "experts", e.target.value)} />
+                  <input style={INP} type="number" value={tiers[key].minReferrals ?? ""}
+                    onChange={(e) => setField(key, "minReferrals", e.target.value)} />
                 </div>
                 <div>
-                  <label style={LABEL_STYLE}>Bonus (%)</label>
-                  <input style={INP} type="number" value={tiers[key].bonus}
-                    onChange={(e) => setField(key, "bonus", e.target.value)} />
+                  <label style={LABEL_STYLE}>Max Experts</label>
+                  <input style={INP} type="number" placeholder="No limit" value={tiers[key].maxReferrals ?? ""}
+                    onChange={(e) => setField(key, "maxReferrals", e.target.value)} />
+                </div>
+                <div>
+                  <label style={LABEL_STYLE}>Commission Rate (%)</label>
+                  <input style={INP} type="number" value={tiers[key].commissionRate ?? ""}
+                    onChange={(e) => setField(key, "commissionRate", e.target.value)} />
                 </div>
               </div>
             </div>
@@ -642,7 +834,13 @@ function TasTierCard() {
                 isActive={t.status} isMutating={loading}
                 onToggle={() =>
                   dispatch(toggleTasTierStatus(t.id)).unwrap()
-                    .then(() => toast.success(`TAS tier ${t.status ? "disabled" : "enabled"}`))
+                    .then(() => {
+                      toast.success(`TAS tier ${t.status ? "disabled" : "enabled"}`);
+                      // Re-fetch to guarantee the switch reflects the true server
+                      // state, in case the toggle endpoint's own response doesn't
+                      // include the full/updated tier record.
+                      dispatch(fetchTasTiers());
+                    })
                     .catch((e: string) => toast.error(e))
                 }
                 onEdit={() => setEditItem(t)}
@@ -652,16 +850,19 @@ function TasTierCard() {
             {TIER_KEYS.map((key) => {
               const color = TIER_COLORS[key];
               const tier  = t[key] as TierConfig;
+              const min   = tier?.minReferrals ?? 0;
+              const max   = tier?.maxReferrals;
+              const rangeLabel = max != null ? `${min.toLocaleString()}–${max.toLocaleString()}` : `${min.toLocaleString()}+`;
               return (
                 <div key={key} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "10px", border: "1px solid #E5E7EB", backgroundColor: "#fff", marginBottom: "6px" }}>
                   <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 9px", borderRadius: "999px", whiteSpace: "nowrap", flexShrink: 0, color, backgroundColor: `${color}14`, border: `1px solid ${color}30` }}>
                     {TIER_LABELS[key]}
                   </span>
                   <span style={{ fontSize: "13px", color: "#374151", flex: 1 }}>
-                    {(tier?.experts ?? 0).toLocaleString()}+ experts
+                    {rangeLabel} experts
                   </span>
                   <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                    {tier?.bonus ?? 0}% bonus
+                    {tier?.commissionRate ?? 0}%
                   </span>
                 </div>
               );

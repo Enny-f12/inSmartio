@@ -29,6 +29,9 @@ import appVersionReducer from "./appversionSlice";
 import clientRefundReducer from "./clientrefundSlice";
 import expertPayoutReducer from "./expertpayoutSlice";
 import cloudReducer from "./cloudSlice";
+import subscriptionReducer from "./subscriptionSlice";
+import waitlistReducer from "./waitlistSlice";
+import reportDetailReducer from "./reportDetailSlice";                // new — Reports feature (detailed report + download)
 
 
 
@@ -56,14 +59,17 @@ export const store = configureStore({
     dashboard:             dashboardReducer,
     scheduledReports:      scheduledReportsReducer,
     reportTemplates:       reportTemplatesReducer,
-    notificationSettings: notificationSettingsReducer,
+    notificationSettings:  notificationSettingsReducer,
     auditLogs:             auditLogsReducer,
     bids:                  bidReducer,                
     cancellationFees:      cancellationfeeReducer,
     appVersion:            appVersionReducer,
     clientRefund:          clientRefundReducer,
     expertPayout:          expertPayoutReducer,
-    cloud: cloudReducer,
+    cloud:                 cloudReducer,
+    subscription:          subscriptionReducer,
+    waitlist:               waitlistReducer,
+    reportDetail:           reportDetailReducer,
   },
 });
 
