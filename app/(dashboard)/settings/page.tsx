@@ -50,8 +50,7 @@ function SettingsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // ── Sub-page routing ──────────────────────────────────────────────────────
-  // Guard app-version behind the permission even if reached directly via URL param.
+  
   if (view === "app-version" && !perms.canManageAppVersion) {
     return (
       <div className="flex flex-col flex-1">

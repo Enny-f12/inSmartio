@@ -108,7 +108,7 @@ export interface Permissions {
   canManageWaitlist:        boolean;
 
   // App Version — Super Admin only
-  canManageAppVersion:      boolean;  // ← new
+  canManageAppVersion:      boolean;  
 }
 
 // ── Permission definitions per role ───────────────────────

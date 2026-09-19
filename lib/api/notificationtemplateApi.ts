@@ -36,7 +36,7 @@ export const getAllTemplates = async (): Promise<ApiNotificationTemplate[]> => {
 };
 
 // POST /api/notifications/templates/create
-// Sends exactly: { name, subject, body } — no extra nesting
+// Sends exactly: { name, subject, body }
 export const createTemplate = async (
   payload: CreateTemplatePayload,
 ): Promise<ApiNotificationTemplate> => {

@@ -4,26 +4,21 @@
 import Modal from "@/components/ui/Modal";
 import { pick, fmtNairaCell } from "./rowUtils";
 import { colors } from "./shared";
+import type { TasLocation, TasBankDetails } from "@/lib/api/detailedReportApi";
 
 type Row = Record<string, unknown>;
 
-interface Location {
-  area?: string;
-  city?: string;
-  state?: string;
-  address?: string;
-  country?: string;
-}
-
-function getLocation(row: Row): Location | undefined {
+function getLocation(row: Row): TasLocation | undefined {
   const raw = row["location"];
-  return raw && typeof raw === "object" ? (raw as Location) : undefined;
+  return raw && typeof raw === "object" ? (raw as TasLocation) : undefined;
 }
 
-// The API's `location` field is an object ({ area, city, state, address,
-// country }) — a generic row dump would render that as "[object Object]".
-// Prefer the pre-built `address` string; if it's missing, assemble one from
-// whichever parts are non-empty instead of showing raw keys.
+function getBankDetails(row: Row): TasBankDetails | undefined {
+  const raw = row["bankDetails"];
+  return raw && typeof raw === "object" ? (raw as TasBankDetails) : undefined;
+}
+
+
 function pickAddress(row: Row): string {
   const loc = getLocation(row);
   if (loc?.address && loc.address.trim()) return loc.address.trim();
@@ -72,6 +67,7 @@ interface Props {
 
 export default function TASDetailModal({ row, onClose }: Props) {
   const status = pick(row, ["status"], "—");
+  const bank = getBankDetails(row);
 
   return (
     <Modal open onClose={onClose} title="TAS Agent Detail" size="md">
@@ -110,6 +106,16 @@ export default function TASDetailModal({ row, onClose }: Props) {
           <SectionTitle title="Location" />
           <InfoRow label="Address:" value={pickAddress(row)} />
         </Card>
+
+        {bank && (
+          <Card>
+            <SectionTitle title="Bank Details" />
+            <InfoRow label="Bank:" value={bank.bankName || "—"} />
+            <InfoRow label="Account Name:" value={bank.accountName || "—"} />
+            <InfoRow label="Account Number:" value={bank.accountNumber || "—"} />
+            {bank.bvn ? <InfoRow label="BVN:" value={bank.bvn} /> : null}
+          </Card>
+        )}
       </div>
     </Modal>
   );

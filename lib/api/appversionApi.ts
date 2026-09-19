@@ -32,7 +32,7 @@ export interface UploadAppVersionPayload {
   status?:     boolean;
 }
 
-// Backend doesn't return fileName/fileSize — derive a display name from the Cloudinary URL
+
 export const fileNameFromUrl = (url: string): string => {
   try {
     const last = decodeURIComponent(url.split("/").pop() ?? "");

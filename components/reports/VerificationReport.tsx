@@ -20,7 +20,6 @@ const REPORT_TYPE: ReportType = "verification";
 
 type Row = Record<string, unknown>;
 
-const PERIOD_OPTIONS = ["July 2026", "June 2026", "May 2026"];
 const TIER_OPTIONS = ["All Tiers", "Tier 1", "Tier 2", "Tier 3"];
 const STATUS_OPTIONS = ["All Status", "Pending", "Approved", "Rejected"];
 const OFFICER_OPTIONS = ["All Officers", "Chioma", "Olu", "Unassigned"];
@@ -55,12 +54,7 @@ function computeYStep(values: number[]): number {
   return niceResidual * magnitude;
 }
 
-// Best-effort key match against data.summary — exact key names unconfirmed for this report type.
 
-// Each row's `document` field is a flat array of document objects
-// ({ url, type, verify, reject, reason, ... }) per the verification
-// detailed-report API — count it directly instead of trusting a "docs"
-// summary field that isn't part of the response.
 function docsCount(v: Row): number {
   const raw = v["document"];
   return Array.isArray(raw) ? raw.length : 0;
@@ -152,28 +146,40 @@ export default function VerificationReport() {
   const dispatch = useAppDispatch();
   const { summary, rows, listStatus, downloadStatus } = useAppSelector((s) => s.reportDetail);
 
+  // No more preset periods — just a from/to range. Empty means "all time".
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const rangeReady = (!fromDate && !toDate) || (fromDate && toDate);
+  const rangeLabel = fromDate && toDate ? `${fromDate} – ${toDate}` : "All Time";
+
   useEffect(() => {
     dispatch(setReportType(REPORT_TYPE));
-    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE }));
   }, [dispatch]);
 
+  // Table data, re-fetched whenever the range changes (fires once on mount
+  // for the full range, and again once both ends of a custom range are set).
+  useEffect(() => {
+    if (!rangeReady) return;
+    dispatch(fetchDetailedReport({ reportType: REPORT_TYPE, fromDate: fromDate || undefined, toDate: toDate || undefined }));
+  }, [dispatch, fromDate, toDate, rangeReady]);
+
   // Trend chart — real data from GET /reports/detailed/verification/trend,
-  // replacing the previous hardcoded illustrative series.
+  // re-fetched whenever the range changes.
   const [trend, setTrend] = useState<ReportTrendPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
 
   useEffect(() => {
+    if (!rangeReady) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrendLoading(true);
-    getReportTrend({ reportType: REPORT_TYPE, groupBy: "day" })
+    getReportTrend({ reportType: REPORT_TYPE, groupBy: "day", fromDate: fromDate || undefined, toDate: toDate || undefined })
       .then((res) => { if (!cancelled) setTrend(Array.isArray(res) ? res : []); })
       .catch(() => { if (!cancelled) setTrend([]); })
       .finally(() => { if (!cancelled) setTrendLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [fromDate, toDate, rangeReady]);
 
-  const [period, setPeriod] = useState("July 2026");
   const [tier, setTier] = useState("All Tiers");
   const [status, setStatus] = useState("All Status");
   const [officer, setOfficer] = useState("All Officers");
@@ -187,10 +193,10 @@ export default function VerificationReport() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [tier, status, officer, period]);
+  }, [tier, status, officer, fromDate, toDate]);
 
   const handleExport = async (format: ReportFormat) => {
-    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format }));
+    const action = await dispatch(downloadReport({ reportType: REPORT_TYPE, format, fromDate: fromDate || undefined, toDate: toDate || undefined }));
     if (downloadReport.fulfilled.match(action)) {
       const a = document.createElement("a");
       a.href = action.payload;
@@ -235,11 +241,46 @@ export default function VerificationReport() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {/* Local styles for smooth hover/focus transitions on the date inputs
+          and filters, without pulling in a full CSS-in-JS lib. */}
+      <style>{`
+        .rp-select, .rp-date-input {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        .rp-select:hover, .rp-date-input:hover {
+          border-color: ${colors.textFaint};
+        }
+        .rp-select:focus, .rp-date-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+      `}</style>
+
       {selected && <VerificationDetailModal row={selected} onClose={() => setSelected(null)} />}
 
-      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <select className="rp-select" value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIOD_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
+      <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="From date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+            <span style={{ fontSize: "12px", color: colors.textFaint }}>to</span>
+            <input
+              type="date"
+              className="rp-date-input"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="To date"
+              style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+            />
+          </div>
           <select className="rp-select" value={tier} onChange={(e) => setTier(e.target.value)}>{TIER_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
           <select className="rp-select" value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
           <select className="rp-select" value={officer} onChange={(e) => setOfficer(e.target.value)}>{OFFICER_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>
@@ -389,7 +430,7 @@ export default function VerificationReport() {
       <div className="rp-two-col" style={{ display: "grid", gap: "16px" }}>
         {loading ? <SkelChart height={110} /> : (
           <div style={card}>
-            <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Verification Summary by Tier ({period})</p>
+            <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Verification Summary by Tier ({rangeLabel})</p>
             <p style={{ fontSize: "11.5px", color: colors.textFaint, margin: "0 20px 10px" }}>Based on the currently loaded page — ask backend for a full aggregate to cover all pages.</p>
             <div style={{ padding: "0 20px 20px" }}>
               {tierBreakdown.length === 0
@@ -400,7 +441,7 @@ export default function VerificationReport() {
         )}
         {loading ? <SkelChart height={110} /> : (
           <div style={card}>
-            <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Verification Officer Workload ({period})</p>
+            <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Verification Officer Workload ({rangeLabel})</p>
             <div style={{ padding: "0 20px 20px" }}><HorizontalBarList data={officerWorkload} color="#10B981" /></div>
           </div>
         )}
@@ -408,7 +449,7 @@ export default function VerificationReport() {
 
       {loading ? <SkelChart height={110} /> : (
         <div style={card}>
-          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Rejection Reasons ({period})</p>
+          <p style={{ fontSize: "13.5px", fontWeight: 600, color: colors.textMain, margin: 0, padding: "18px 20px 14px" }}>Rejection Reasons ({rangeLabel})</p>
           <div style={{ padding: "0 20px 20px" }}><HorizontalBarList data={rejectionReasons} color={colors.red} /></div>
         </div>
       )}

@@ -11,37 +11,42 @@ import Topbar from "@/components/layout/Navbar";
 import { StatusBadge } from "@/components/ui/Badge";
 import { FilterDropdown } from "@/components/ui/FilterDropdown";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { fetchJobs, fetchJobById, clearSelectedJob } from "@/lib/redux/jobSlice";
+import { fetchJobs } from "@/lib/redux/jobSlice";
 import { downloadReport } from "@/lib/api/reportApi";
 import { toast } from "sonner";
 import type { ApiJob } from "@/lib/api/jobApi";
-import JobDetailView, { deriveStatus } from "@/components/jobs/Jobdetails";
+import JobDetailView from "@/components/jobs/Jobdetails";
 
-// ─────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────
 type StatusVariant = "green" | "yellow" | "purple" | "red" | "gray";
 
 // ─────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────
+// Backend status values confirmed from live payload: biding, inprogress,
+// complete, pending_payment. disputed/cancelled kept from prior code —
+// swap in the real strings if the backend uses different ones.
 const getStatusVariant = (status: string): StatusVariant => {
   const map: Record<string, StatusVariant> = {
-    completed:   "green",
-    inprogress:  "yellow",
-    in_progress: "yellow",
-    active:      "yellow",
-    biding:      "purple",
-    bidding:     "purple",
-    open:        "purple",
-    disputed:    "red",
-    cancelled:   "gray",
-    closed:      "gray",
+    complete:        "green",
+    inprogress:      "yellow",
+    active:          "yellow",
+    pending_payment: "yellow",
+    biding:          "purple",
+    bidding:         "purple",
+    open:            "purple",
+    disputed:        "red",
+    cancelled:       "gray",
+    closed:          "gray",
   };
   return map[status?.toLowerCase()] ?? "gray";
 };
 
-const STATUS_OPTIONS = ["All", "completed", "inprogress", "biding", "disputed", "cancelled"] as const;
+const getStatus = (job: ApiJob): string => {
+  const raw = job["status"];
+  return raw != null && raw !== "" ? String(raw) : "—";
+};
+
+const STATUS_OPTIONS = ["All", "biding", "inprogress", "pending_payment", "complete", "disputed", "cancelled"] as const;
 const MONTH_OPTIONS  = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 const MONTH_MAP: Record<string, number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
@@ -56,6 +61,19 @@ const val = (job: ApiJob, ...keys: string[]): string => {
 const fmtMoney = (amount?: number | null, fallback = "—") =>
   amount != null ? `₦${amount.toLocaleString()}` : fallback;
 
+// Windowed page-number list: 1 … 4 5 6 … 22, collapses to plain range when small
+function getPageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "…")[] = [1];
+  if (current > 3) pages.push("…");
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let p = start; p <= end; p++) pages.push(p);
+  if (current < total - 2) pages.push("…");
+  pages.push(total);
+  return pages;
+}
+
 // ─────────────────────────────────────────────────────────
 // Assign to Expert Modal
 // ─────────────────────────────────────────────────────────
@@ -65,9 +83,11 @@ function AssignModal({ count, onClose, onConfirm }: {
   const [expertId, setExpertId] = useState("");
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999,
+      animation: "fadeIn 0.15s ease-out" }}>
       <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "28px 32px",
-        width: "420px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+        width: "420px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+        animation: "popIn 0.18s cubic-bezier(0.16,1,0.3,1)" }}>
         <p style={{ fontSize: "16px", fontWeight: 700, color: "#111827", marginBottom: "6px" }}>
           Assign to Expert
         </p>
@@ -81,18 +101,20 @@ function AssignModal({ count, onClose, onConfirm }: {
           onChange={e => setExpertId(e.target.value)}
           style={{ width: "100%", padding: "10px 14px", borderRadius: "10px",
             border: "1px solid #E5E7EB", fontSize: "13px", outline: "none",
-            boxSizing: "border-box", marginBottom: "20px" }}
+            boxSizing: "border-box", marginBottom: "20px", transition: "border-color 0.15s" }}
         />
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
           <button onClick={onClose}
             style={{ padding: "9px 18px", borderRadius: "10px", border: "1px solid #E5E7EB",
-              fontSize: "13px", fontWeight: 500, color: "#6B7280", background: "none", cursor: "pointer" }}>
+              fontSize: "13px", fontWeight: 500, color: "#6B7280", background: "none", cursor: "pointer",
+              transition: "background-color 0.15s" }}>
             Cancel
           </button>
           <button onClick={() => onConfirm(expertId)} disabled={!expertId.trim()}
             style={{ padding: "9px 18px", borderRadius: "10px", border: "none",
               fontSize: "13px", fontWeight: 600, backgroundColor: "#2563EB", color: "#fff",
-              cursor: expertId.trim() ? "pointer" : "not-allowed", opacity: expertId.trim() ? 1 : 0.5 }}>
+              cursor: expertId.trim() ? "pointer" : "not-allowed", opacity: expertId.trim() ? 1 : 0.5,
+              transition: "opacity 0.15s" }}>
             Assign
           </button>
         </div>
@@ -106,7 +128,8 @@ function AssignModal({ count, onClose, onConfirm }: {
 // ─────────────────────────────────────────────────────────
 export default function JobsPage() {
   const dispatch = useAppDispatch();
-  const { list, listStatus, listError, selected, selectedStatus } =
+
+  const { list, listStatus, listError, page, pages, total } =
     useAppSelector((s) => s.jobs);
 
   // Basic filters
@@ -128,6 +151,9 @@ export default function JobsPage() {
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [showAssignModal, setShowAssignModal] = useState(false);
 
+  // Detail view (local — no fetch needed, the list already has the full job)
+  const [viewingJob, setViewingJob] = useState<ApiJob | null>(null);
+
   const categoryOptions = [
     "All Jobs",
     ...Array.from(new Set(list.map((j: ApiJob) => val(j, "category")).filter((c) => c !== "—"))),
@@ -144,17 +170,15 @@ export default function JobsPage() {
   ];
 
   useEffect(() => {
-    if (listStatus === "idle") dispatch(fetchJobs());
+    if (listStatus === "idle") dispatch(fetchJobs(undefined));
   }, [dispatch, listStatus]);
 
-  // ── Filtering ─────────────────────────────────────────
+  // ── Filtering (client-side; status is now backend-driven, see below) ──
   const filtered = list.filter((j: ApiJob) => {
-    const status   = deriveStatus(j);
     const category = val(j, "category");
     const title    = val(j, "title", "description").toLowerCase();
 
     const matchCategory = categoryFilter === "All Jobs" || category === categoryFilter;
-    const matchStatus   = statusFilter   === "All"      || status.toLowerCase() === statusFilter.toLowerCase();
     const matchSearch   = !search || title.includes(search.toLowerCase());
 
     const locObj = j["location"] as { city?: string; state?: string } | undefined;
@@ -188,7 +212,7 @@ export default function JobsPage() {
     if (amountMin && amt != null && amt < Number(amountMin)) matchAmount = false;
     if (amountMax && amt != null && amt > Number(amountMax)) matchAmount = false;
 
-    return matchCategory && matchStatus && matchSearch && matchLocation && matchMonth && matchDateRange && matchAmount;
+    return matchCategory && matchSearch && matchLocation && matchMonth && matchDateRange && matchAmount;
   });
 
   // ── Selection helpers ─────────────────────────────────
@@ -274,39 +298,50 @@ export default function JobsPage() {
     }
   };
 
-  // ── Detail view ───────────────────────────────────────
-  if (selectedStatus === "loading") {
+  // ── View job (local lookup — list already has the full record) ──
+  const handleViewJob = (jobId: string) => {
+    const job = list.find((j: ApiJob) => String(j.id) === jobId);
+    if (!job) {
+      toast.error("Couldn't find that job");
+      return;
+    }
+    setViewingJob(job);
+  };
+
+  // ── Status filter — sends to backend instead of filtering the current page ──
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    dispatch(fetchJobs({
+      status: value === "All" ? undefined : value,
+      page: 1,
+    }));
+  };
+
+  // ── Pagination (backend-driven; carries the active status filter) ──
+  const currentPage = page ?? 1;
+  const totalPages  = pages ?? 1;
+  const totalCount  = total ?? list.length;
+
+  const goToPage = (p: number) => {
+    if (p < 1 || p > totalPages || p === currentPage) return;
+    dispatch(fetchJobs({
+      page: p,
+      status: statusFilter === "All" ? undefined : statusFilter,
+    }));
+  };
+
+  // ── Detail view swap ───────────────────────────────────
+  if (viewingJob) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-        <Topbar title="Jobs Management" />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
-          flex: 1, gap: "10px", color: "#9CA3AF" }}>
-          <Loader2 size={18} className="animate-spin" />
-          <span style={{ fontSize: "13px" }}>Loading job...</span>
-        </div>
+      <div key="detail" style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+        <JobDetailView job={viewingJob} onBack={() => setViewingJob(null)} />
       </div>
     );
   }
 
-  if (selectedStatus === "succeeded" && selected) {
-    const raw    = selected as unknown as Record<string, unknown>;
-    const rawJob = (raw.id ? raw : (raw.data ?? raw)) as ApiJob;
-    const listJob = list.find((j: ApiJob) => String(j.id) === String(rawJob.id));
-
-    const enrichedJob: ApiJob = {
-      ...(listJob ?? {}),
-      ...rawJob,
-      client:      (listJob?.["client"]      ?? rawJob["client"])      as ApiJob[string],
-      expert:      (listJob?.["expert"]      ?? rawJob["expert"])      as ApiJob[string],
-      finalAmount: (listJob?.["finalAmount"] ?? rawJob["finalAmount"]) as ApiJob[string],
-    } as ApiJob;
-
-    return <JobDetailView job={enrichedJob} onBack={() => dispatch(clearSelectedJob())} />;
-  }
-
-  // ─────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col flex-1" style={{ backgroundColor: "#F4F5F7" }}>
+    <div key="list" className="flex flex-col flex-1" style={{ backgroundColor: "#F4F5F7", animation: "fadeIn 0.2s ease-out" }}>
       <Topbar title="Jobs Management" />
 
       {showAssignModal && (
@@ -318,6 +353,8 @@ export default function JobsPage() {
       )}
 
       <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn  { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .jobs-header { padding: 16px !important; }
         .jobs-main   { padding: 0 16px 24px !important; }
         .jobs-filter-row { flex-direction: column !important; gap: 10px !important; }
@@ -337,9 +374,10 @@ export default function JobsPage() {
           display: flex; align-items: center; gap: 6px;
           padding: 7px 14px; border-radius: 8px; font-size: 12.5px;
           font-weight: 600; cursor: pointer; border: 1px solid transparent;
-          transition: opacity 0.15s;
+          transition: opacity 0.15s, transform 0.1s;
         }
-        .bulk-btn:hover { opacity: 0.85; }
+        .bulk-btn:hover:not(:disabled) { opacity: 0.85; }
+        .bulk-btn:active:not(:disabled) { transform: scale(0.97); }
         .bulk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .row-cb { width: 16px; height: 16px; accent-color: #2563EB; cursor: pointer; }
         .adv-input {
@@ -348,6 +386,13 @@ export default function JobsPage() {
           transition: border-color 0.15s;
         }
         .adv-input:focus { border-color: #2563EB; }
+        .page-btn { transition: background-color 0.15s, color 0.15s, opacity 0.15s, transform 0.1s; }
+        .page-btn:hover:not(:disabled) { background-color: #F3F4F6; }
+        .page-btn:active:not(:disabled) { transform: scale(0.95); }
+        .view-btn { transition: background-color 0.15s, color 0.15s, transform 0.1s; }
+        .view-btn:hover { background-color: #F3F4F6 !important; color: #2563EB !important; }
+        .view-btn:active { transform: scale(0.92); }
+        tr { transition: background-color 0.15s; }
       `}</style>
 
       {/* ── Sub-header ── */}
@@ -356,7 +401,7 @@ export default function JobsPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginLeft: "auto" }}>
           {selectedCount > 0 && (
-            <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, marginRight: "4px" }}>
+            <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, marginRight: "4px", animation: "fadeIn 0.15s ease-out" }}>
               {selectedCount} selected
             </span>
           )}
@@ -414,7 +459,7 @@ export default function JobsPage() {
                 {hasActiveAdvancedFilters && (
                   <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                     width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#2563EB",
-                    color: "#fff", fontSize: "10px", fontWeight: 700 }}>
+                    color: "#fff", fontSize: "10px", fontWeight: 700, animation: "popIn 0.18s cubic-bezier(0.16,1,0.3,1)" }}>
                     ✓
                   </span>
                 )}
@@ -445,13 +490,14 @@ export default function JobsPage() {
                   style={{ width: "100%", paddingLeft: "40px", paddingRight: "16px",
                     paddingTop: "10px", paddingBottom: "10px", borderRadius: "10px",
                     fontSize: "13px", outline: "none", border: "1px solid #E5E7EB",
-                    backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box" }} />
+                    backgroundColor: "#F9FAFB", color: "#111827", boxSizing: "border-box",
+                    transition: "border-color 0.15s" }} />
               </div>
               <div className="jobs-filter-dropdowns" style={{ gap: "12px" }}>
                 <FilterDropdown value={categoryFilter} options={categoryOptions} onChange={setCategoryFilter} />
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Status:</span>
-                  <FilterDropdown value={statusFilter} options={STATUS_OPTIONS} onChange={setStatusFilter} />
+                  <FilterDropdown value={statusFilter} options={STATUS_OPTIONS} onChange={handleStatusFilterChange} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>Date:</span>
@@ -463,7 +509,7 @@ export default function JobsPage() {
             {/* Advanced filters panel */}
             {showAdvanced && (
               <div style={{ marginTop: "16px", padding: "20px", borderRadius: "12px",
-                backgroundColor: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+                backgroundColor: "#F9FAFB", border: "1px solid #E5E7EB", animation: "fadeIn 0.2s ease-out" }}>
                 <p style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase",
                   letterSpacing: "0.07em", color: "#9CA3AF", margin: "0 0 16px" }}>
                   Advanced Filters
@@ -479,14 +525,10 @@ export default function JobsPage() {
                     <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Date Range</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <input type="date" className="adv-input" value={dateFrom}
-                        onChange={e => setDateFrom(e.target.value)}
-                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
-                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
+                        onChange={e => setDateFrom(e.target.value)} />
                       <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
                       <input type="date" className="adv-input" value={dateTo}
-                        onChange={e => setDateTo(e.target.value)}
-                        style={{ padding: "7px 10px", borderRadius: "8px", border: "1px solid #E5E7EB",
-                          fontSize: "12px", outline: "none", color: "#111827", backgroundColor: "#ffffff" }} />
+                        onChange={e => setDateTo(e.target.value)} />
                     </div>
                   </div>
 
@@ -494,16 +536,10 @@ export default function JobsPage() {
                     <span style={{ fontSize: "11.5px", color: "#6B7280", fontWeight: 600 }}>Amount Range (₦)</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <input type="number" placeholder="Min" className="adv-input" value={amountMin}
-                        onChange={e => setAmountMin(e.target.value)}
-                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
-                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
-                          color: "#111827", backgroundColor: "#ffffff" }} />
+                        onChange={e => setAmountMin(e.target.value)} style={{ width: "100px" }} />
                       <span style={{ fontSize: "12px", color: "#9CA3AF", flexShrink: 0 }}>to</span>
                       <input type="number" placeholder="Max" className="adv-input" value={amountMax}
-                        onChange={e => setAmountMax(e.target.value)}
-                        style={{ width: "100px", padding: "7px 10px", borderRadius: "8px",
-                          border: "1px solid #E5E7EB", fontSize: "12px", outline: "none",
-                          color: "#111827", backgroundColor: "#ffffff" }} />
+                        onChange={e => setAmountMax(e.target.value)} style={{ width: "100px" }} />
                     </div>
                   </div>
 
@@ -575,7 +611,7 @@ export default function JobsPage() {
                       const expertObj          = job["expert"] as { name?: string } | undefined;
                       const clientName         = clientObj?.name ?? val(job, "postedBy");
                       const expertName         = expertObj?.name ?? "—";
-                      const status             = deriveStatus(job);
+                      const status             = getStatus(job);
                       const isChecked          = selectedIds.has(jobId);
 
                       return (
@@ -583,7 +619,6 @@ export default function JobsPage() {
                           style={{
                             borderBottom: "1px solid #F3F4F6",
                             backgroundColor: isChecked ? "#EFF6FF" : "transparent",
-                            transition: "background 0.1s",
                           }}
                           onMouseEnter={e => { if (!isChecked) e.currentTarget.style.backgroundColor = "#F9FAFB"; }}
                           onMouseLeave={e => { e.currentTarget.style.backgroundColor = isChecked ? "#EFF6FF" : "transparent"; }}>
@@ -609,7 +644,8 @@ export default function JobsPage() {
                             <StatusBadge label={status} variant={getStatusVariant(status)} />
                           </td>
                           <td style={{ padding: "14px 20px 14px 0" }}>
-                            <button onClick={() => dispatch(fetchJobById(jobId))}
+                            <button onClick={() => handleViewJob(jobId)}
+                              className="view-btn"
                               style={{ padding: "6px", borderRadius: "8px", border: "none",
                                 background: "none", cursor: "pointer", color: "#9CA3AF",
                                 display: "flex", alignItems: "center" }}
@@ -637,7 +673,7 @@ export default function JobsPage() {
                   const finalAmt   = fmtMoney(job["finalAmount"] as number | undefined);
                   const clientName = clientObj?.name ?? val(job, "postedBy");
                   const expertName = expertObj?.name ?? "—";
-                  const status     = deriveStatus(job);
+                  const status     = getStatus(job);
                   const isChecked  = selectedIds.has(jobId);
 
                   return (
@@ -645,7 +681,8 @@ export default function JobsPage() {
                       style={{ padding: "14px 16px", borderRadius: "12px",
                         border: `1px solid ${isChecked ? "#BFDBFE" : "#E5E7EB"}`,
                         backgroundColor: isChecked ? "#EFF6FF" : "#ffffff",
-                        display: "flex", alignItems: "center", gap: "12px" }}>
+                        display: "flex", alignItems: "center", gap: "12px",
+                        transition: "background-color 0.15s, border-color 0.15s" }}>
                       <input type="checkbox" className="row-cb"
                         checked={isChecked} onChange={() => toggleOne(jobId)} />
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -661,7 +698,8 @@ export default function JobsPage() {
                           <span style={{ fontSize: "12px", fontWeight: 600, color: "#111827" }}>{finalAmt}</span>
                         </div>
                       </div>
-                      <button onClick={() => dispatch(fetchJobById(jobId))}
+                      <button onClick={() => handleViewJob(jobId)}
+                        className="view-btn"
                         style={{ padding: "8px", borderRadius: "8px", border: "1px solid #E5E7EB",
                           background: "none", cursor: "pointer", color: "#9CA3AF",
                           flexShrink: 0, display: "flex", alignItems: "center" }}>
@@ -674,24 +712,56 @@ export default function JobsPage() {
             </>
           )}
 
-          {/* ── Pagination ── */}
+          {/* ── Pagination (driven by backend page/pages/total) ── */}
           {listStatus === "succeeded" && (
             <div className="jobs-pagination"
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "14px 20px", borderTop: "1px solid #E5E7EB", backgroundColor: "#F9FAFB" }}>
               <p style={{ fontSize: "12px", color: "#9CA3AF", margin: 0 }}>
-                Showing 1 to {filtered.length} of {list.length} results
+                Showing {list.length === 0 ? 0 : filtered.length} of {totalCount} results
+                {totalPages > 1 && <> · Page {currentPage} of {totalPages}</>}
               </p>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
-                  fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
-                  color: "#6B7280", cursor: "not-allowed", opacity: 0.4 }}>Previous</button>
-                <button style={{ width: "32px", height: "32px", borderRadius: "8px",
-                  fontSize: "12px", fontWeight: 600, border: "none",
-                  backgroundColor: "#2563EB", color: "#ffffff", cursor: "pointer" }}>1</button>
-                <button style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
-                  fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
-                  color: "#6B7280", cursor: "pointer" }}>Next</button>
+                <button
+                  className="page-btn"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                    fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                    color: "#6B7280", cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+                    opacity: currentPage <= 1 ? 0.4 : 1 }}>
+                  Previous
+                </button>
+
+                {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                  p === "…" ? (
+                    <span key={`ellipsis-${i}`} style={{ padding: "0 4px", color: "#9CA3AF", fontSize: "12px" }}>…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      className="page-btn"
+                      onClick={() => goToPage(p)}
+                      disabled={p === currentPage}
+                      style={{ width: "32px", height: "32px", borderRadius: "8px", fontSize: "12px",
+                        fontWeight: 600, border: p === currentPage ? "none" : "1px solid #E5E7EB",
+                        backgroundColor: p === currentPage ? "#2563EB" : "#ffffff",
+                        color: p === currentPage ? "#ffffff" : "#6B7280",
+                        cursor: p === currentPage ? "default" : "pointer" }}>
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  className="page-btn"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+                    fontWeight: 500, border: "1px solid #E5E7EB", backgroundColor: "#ffffff",
+                    color: "#6B7280", cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
+                    opacity: currentPage >= totalPages ? 0.4 : 1 }}>
+                  Next
+                </button>
               </div>
             </div>
           )}

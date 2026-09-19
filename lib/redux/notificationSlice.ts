@@ -6,7 +6,7 @@ import {
   markAllNotificationsRead,
   deleteNotification,
   type ApiNotification,
-} from "@/lib/api/notificationApi"; // adjust path as needed
+} from "@/lib/api/notificationApi"; 
 
 /* ── Helper ──────────────────────────────────────────────── */
 const isRead = (n: ApiNotification) => n.read === true || n.isRead === true;

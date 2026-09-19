@@ -24,10 +24,9 @@ const normalizeStatus = (s?: string): "Open" | "In Progress" | "Resolved" => {
 const toDispute = (d: ApiDispute): Dispute => ({
   id:              d.id,
   jobId:           d.jobId ?? "—",
-  /* TODO-BACKEND: parties should be client name vs expert name.
-     Currently only IDs are returned — needs client.name and expert.name */
+ 
   parties:         `${d.client?.name ?? d.client?.id ?? "Client"} vs ${d.expert?.name ?? d.expert?.id ?? "Expert"}`,
-  /* TODO-BACKEND: issue/category field missing — e.g. "Quality", "No-show", "Payment", "Scope" */
+  
   issue:           (d as unknown as Record<string, unknown>).issue as string ?? d.client?.statement?.slice(0, 30) ?? "—",
   priority:        d.priority ?? "MEDIUM",
   status:          normalizeStatus(d.status),

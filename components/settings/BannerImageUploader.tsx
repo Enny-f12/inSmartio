@@ -1,6 +1,5 @@
 // components/settings/ImageUploader.tsx
-// Drop-in replacement for the ImageUploader in BannerManagement.tsx
-// Requires: npm install react-image-crop
+
 
 "use client";
 
@@ -13,7 +12,7 @@ import Modal from "@/components/ui/Modal";
 
 // ── Config ────────────────────────────────────────────────
 const CLOUDINARY_CLOUD_NAME   = "prolomon";
-const CLOUDINARY_UPLOAD_PRESET = "banners_unsigned"; // your unsigned preset name
+const CLOUDINARY_UPLOAD_PRESET = "banners_unsigned"; 
 const TARGET_W = 1200;
 const TARGET_H = 600;
 const ASPECT   = TARGET_W / TARGET_H; // 2

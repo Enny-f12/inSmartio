@@ -8,16 +8,16 @@ import adminReducer               from "./adminSlice";
 import disputeReducer             from "./disputeSlice";
 import bannerReducer              from "./bannerSlice";
 import announcementReducer        from "./announcementSlice";
-import verificationReducer        from "./verificationSlice";         // old — keep for other pages
-import tasReducer                 from "./tasSlice";                  // old — keep for other pages
+import verificationReducer        from "./verificationSlice";         
+import tasReducer                 from "./tasSlice";                  
 import paymentReducer             from "./paymentSlice";
 import reportReducer              from "./reportSlice";
 import faqReducer                 from "./faqSlice";
 import notificationReducer        from "./notificationtemplateSlice";
 import commissionReducer          from "./commissionSlice";
 import notificationsReducer       from "./notificationSlice";
-import tastierReducer             from "./tastierSlice";              // new TAS tier settings
-import verificationsettingsReducer from "./verificationSettingsSlice"; // new verification settings
+import tastierReducer             from "./tastierSlice";              
+import verificationsettingsReducer from "./verificationSettingsSlice"; 
 import dashboardReducer           from "./dashboardSlice";
 import scheduledReportsReducer    from "./schedduleReportSlice";
 import reportTemplatesReducer     from "./reportTemplatesSlice";
@@ -31,7 +31,7 @@ import expertPayoutReducer from "./expertpayoutSlice";
 import cloudReducer from "./cloudSlice";
 import subscriptionReducer from "./subscriptionSlice";
 import waitlistReducer from "./waitlistSlice";
-import reportDetailReducer from "./reportDetailSlice";                // new — Reports feature (detailed report + download)
+import reportDetailReducer from "./reportDetailSlice";                
 
 
 

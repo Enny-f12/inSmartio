@@ -240,7 +240,7 @@ const verificationSlice = createSlice({
           // Keep item.status as-is (it's the account status, not verify status)
         }
 
-        // ── Do NOT clear selected/selectedSummary/selectedStatus here ──
+        //  Do NOT clear selected/selectedSummary/selectedStatus here 
         // The modal stays open so the admin can see the approved/rejected state.
         // clearSelectedVerification() is called explicitly when they close.
       })

@@ -38,7 +38,7 @@ interface PaymentState {
   selectedEscrowError:  string | null;
   // payouts
   payouts:        ApiPayout[];
-  payoutSummary:  PayoutSummary | null;   // ← added
+  payoutSummary:  PayoutSummary | null;   
   payoutsStatus:  Status;
   payoutsError:   string | null;
   retryStatus:    Status;
@@ -65,7 +65,7 @@ const initialState: PaymentState = {
   selectedEscrowStatus: "idle",
   selectedEscrowError:  null,
   payouts:        [],
-  payoutSummary:  null,                   // ← added
+  payoutSummary:  null,                   
   payoutsStatus:  "idle",
   payoutsError:   null,
   retryStatus:    "idle",

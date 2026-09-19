@@ -216,9 +216,13 @@ export default function DashboardLineChart({
           );
         })}
 
-        {/* X axis labels */}
+        {/* X axis labels — keyed by index, not label text: most labels are
+            empty strings (only every Nth point is labeled, see
+            buildIndexLabels in the report components), so keying by the
+            label itself produced dozens of duplicate key="" siblings and
+            React's "two children with the same key" warning. */}
         {labels.map((lbl, i) => (
-          <text key={lbl} x={xOf(i)} y={H - 8}
+          <text key={i} x={xOf(i)} y={H - 8}
             textAnchor={i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"}
             fontSize={9} fill={tooltip?.idx === i ? color : "#94A3B8"}
             fontWeight={tooltip?.idx === i ? 600 : 400}>

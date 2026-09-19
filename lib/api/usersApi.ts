@@ -333,12 +333,7 @@ function buildExpertFormData(p: RegisterExpertPayload): FormData {
     });
   }
 
-  // Documents: same shape as TAS — "documents" carries { type, idNumber, url },
-  // files go in a separate index-aligned "files" array. `url` is a placeholder
-  // (the backend's DTO requires the field to be a string) — the real file
-  // bytes/URL come from the matching entry in "files", not from this value.
-  // (Assuming this matches TAS since the 409 we hit explicitly said "Expert
-  // must upload..." — flag this to the backend dev if Expert actually differs.)
+  
   if (p.documentFiles?.length) {
     const docMeta = p.documentFiles.map((doc) => ({
       type:     doc.type,
@@ -395,11 +390,7 @@ function buildTasFormData(p: RegisterTasPayload): FormData {
     fd.append("recruitExpectations", JSON.stringify(p.recruitExpectations));
   }
 
-  // Documents: the "documents" field carries { type, idNumber, url } per entry.
-  // `url` is a placeholder (the backend's DTO requires it as a string) — the
-  // real file bytes come from the matching entry in the separate "files"
-  // array, index-aligned with "documents" (documents[0]'s type corresponds
-  // to files[0], and so on).
+  
   if (p.documentFiles?.length) {
     const docMeta = p.documentFiles.map((doc) => ({
       type:     doc.type,
@@ -436,8 +427,7 @@ export const registerUser = async (payload: RegisterUserPayload): Promise<ApiUse
     return data.data;
   }
 
-  // client — multipart/form-data (needed so `avatar` actually reaches the backend;
-  // it was previously sent as plain JSON, which silently drops File/Blob values)
+ 
   const { role: _, ...clientPayload } = payload as RegisterClientPayload & { role: "client" };
   const fd = buildClientFormData(clientPayload);
   const { data } = await axiosInstance.post<RegisterUserResponse>("/clients/register", fd, {
@@ -476,10 +466,7 @@ export const getAdminStats = async (): Promise<AdminStats> => {
   return data.data;
 };
 
-// ── Bank list + account resolution ────────────────────────
-// Backs the "Verify Account Details" flow in the admin's Bank Details step,
-// matching the mobile app (select bank → enter account number → resolve
-// name from the backend, rather than typing it manually).
+
 
 export interface BankListItem {
   name: string;

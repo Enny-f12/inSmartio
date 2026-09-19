@@ -95,8 +95,7 @@ export default function VerificationsPage() {
   const [search,       setSearch]       = useState("");
   const [page,         setPage]         = useState(1);
 
-  // Local overrides give instant feedback while the modal is open, on top of
-  // whatever the server returned for the current filter.
+  
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ComputedStatus>>({});
 
   // ── Data loading ───────────────────────────────────────────────────────────
@@ -110,11 +109,10 @@ export default function VerificationsPage() {
   const getStatus = (e: ApiVerificationSummary): ComputedStatus => {
     const override = statusOverrides[e.id];
     if (override) return override;
-    // Tier 3 / TAS rows carry full per-document data — compute from that.
+    // Tier 3 / TAS rows carry full per-document data, compute from that.
     const flags = getDocFlags(e);
     if (flags.length > 0) return computeStatus(flags);
-    // Everything else: trust the backend's own field (same one the server
-    // uses for the `verify` filter param, so this stays consistent with it).
+    
     return normaliseVerificationStatus(e.status, e.verify) as ComputedStatus;
   };
 
@@ -171,7 +169,7 @@ export default function VerificationsPage() {
     dispatch(fetchVerificationById({ id: e.id, summary: e }));
   // The local override below is just for instant feedback while the modal is
   // open. The real fix: refetch the list (with the current filter) so Redux
-  // itself has the correct data — otherwise switching tiers/pages or
+  // itself has the correct data, otherwise switching tiers/pages or
   // navigating elsewhere and back shows stale data until a hard refresh.
   const handleCloseModal  = () => {
     dispatch(clearSelectedVerification());

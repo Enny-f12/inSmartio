@@ -21,7 +21,7 @@ export function DisputeStatusBadge({ status }: { status: DisputeStatus }) {
     "Open":        { bg: "#eff6ff", color: "#2563eb", border: "#bfdbfe", label: "Open"        },
     "In Progress": { bg: "#fffbeb", color: "#d97706", border: "#fde68a", label: "In Progress" },
     "Resolved":    { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0", label: "Resolved"    },
-    // Raw backend values — handled in case normalizeStatus isn't applied
+    // Raw backend values ,handled in case normalizeStatus isn't applied
     "OPEN":        { bg: "#eff6ff", color: "#2563eb", border: "#bfdbfe", label: "Open"        },
     "IN_PROGRESS": { bg: "#fffbeb", color: "#d97706", border: "#fde68a", label: "In Progress" },
     "RESOLVED":    { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0", label: "Resolved"    },

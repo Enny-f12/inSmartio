@@ -121,6 +121,7 @@ function ExportDropdownButton({
       </button>
       {open && (
         <div
+          className="rp-export-menu"
           style={{
             position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20,
             backgroundColor: "#fff", border: `1px solid ${colors.border}`, borderRadius: "8px",
@@ -135,6 +136,7 @@ function ExportDropdownButton({
                 display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
                 fontSize: "12.5px", fontWeight: 500, color: colors.textMain,
                 background: "none", border: "none", cursor: "pointer",
+                transition: "background-color 0.15s ease",
               }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
@@ -215,9 +217,35 @@ export default function ReportDashboard({ onNavigate }: { onNavigate: (key: Repo
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* Local styles: smooth hover/focus transitions on the range dropdown
+          and date inputs, plus a gentle entrance for the custom-range fields
+          when "Custom" is picked from the dropdown. */}
+      <style>{`
+        .rp-select, .rp-date-input {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        .rp-select:hover, .rp-date-input:hover {
+          border-color: ${colors.textFaint};
+        }
+        .rp-select:focus, .rp-date-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .rp-custom-range {
+          animation: rpFadeSlideIn 0.22s ease;
+        }
+        .rp-export-menu {
+          animation: rpFadeSlideIn 0.15s ease;
+        }
+        @keyframes rpFadeSlideIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       {/* Range + actions */}
       <div className="rp-toolbar-row" style={{ display: "flex", gap: "10px", justifyContent: "space-between", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
           <select
             className="rp-select"
             value={range}
@@ -226,10 +254,27 @@ export default function ReportDashboard({ onNavigate }: { onNavigate: (key: Repo
             {RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           {range === "custom" && (
-            <>
-              <input type="date" className="rp-select" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-              <input type="date" className="rp-select" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            </>
+            <div className="rp-custom-range" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                type="date"
+                className="rp-date-input"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+                aria-label="From date"
+                style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+              />
+              <span style={{ fontSize: "12px", color: colors.textFaint }}>to</span>
+              <input
+                type="date"
+                className="rp-date-input"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+                aria-label="To date"
+                style={{ padding: "6px 10px", borderRadius: "8px", border: `1px solid ${colors.border}`, fontSize: "13px" }}
+              />
+            </div>
           )}
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -301,6 +346,7 @@ export default function ReportDashboard({ onNavigate }: { onNavigate: (key: Repo
                     padding: "10px 12px", borderRadius: "8px", border: "none",
                     background: "none", cursor: "pointer", fontSize: "13px",
                     color: colors.textMain, fontWeight: 500, textAlign: "left",
+                    transition: "background-color 0.15s ease, transform 0.15s ease",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
